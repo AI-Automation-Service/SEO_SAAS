@@ -3,7 +3,8 @@ from pydantic_settings import BaseSettings
 
 
 class AppConfig(BaseSettings):
-    anthropic_api_key: str
+    openai_api_key: str
+    openai_model: str = "gpt-4o"
     log_level: str = "INFO"
     projects_dir: Path = Path("projects")
 
