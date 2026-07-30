@@ -1,0 +1,45 @@
+# ── Project Configuration ─────────────────────────────────────────────────────
+# Copy this file to projects/<your-client>/config/project.yaml and fill it in.
+# Never store actual API keys here — use secret references (see integrations).
+
+name: client-example
+website: https://example.com
+business_name: Example Business
+business_type: E-commerce  # e.g. E-commerce, Local Service, SaaS, Publisher, Agency
+country: US
+language: en
+cms: wordpress  # wordpress | shopify | nextjs | static
+publishing_method: api  # api | git | manual
+
+tone_of_voice: >
+  Professional, helpful, and authoritative.
+  Avoid jargon. Write for a general audience.
+
+seo_goals:
+  - Increase organic traffic by 50% in 12 months
+  - Rank top 3 for 20 primary target keywords
+  - Improve Core Web Vitals to pass all thresholds
+
+business_goals:
+  - Increase online revenue
+  - Expand into new product categories
+  - Build brand authority in the niche
+
+competitors:
+  - https://competitor1.com
+  - https://competitor2.com
+  - https://competitor3.com
+
+target_audience: >
+  Adults aged 25–45 interested in home improvement.
+  They are price-conscious but value quality and trust.
+
+# ── Integrations ──────────────────────────────────────────────────────────────
+# Values here are environment variable KEY NAMES, not actual credentials.
+# Set the real values in your .env file on the VPS.
+integrations:
+  wordpress_secret: WORDPRESS_CLIENT_EXAMPLE_KEY
+  google_search_console_secret: GSC_CLIENT_EXAMPLE_KEY
+  google_analytics_secret: GA4_CLIENT_EXAMPLE_KEY
+
+active: true

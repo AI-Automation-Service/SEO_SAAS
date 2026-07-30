@@ -1,0 +1,48 @@
+# Environment — never commit real secrets
+.env
+.env.local
+
+# Client project data — lives on VPS only
+projects/*/data/
+projects/*/cache/
+projects/*/logs/
+projects/*/reports/
+projects/*/audits/
+projects/*/content/
+
+# Keep the example project structure but ignore its generated data
+!projects/client-example/
+!projects/client-example/config/
+!projects/client-example/knowledge/
+projects/client-example/data/
+projects/client-example/cache/
+projects/client-example/logs/
+projects/client-example/reports/
+projects/client-example/audits/
+projects/client-example/content/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
