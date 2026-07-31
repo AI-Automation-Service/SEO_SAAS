@@ -5,11 +5,13 @@
 SEO OS uses a Clean Architecture layered approach. Each layer has a single responsibility and only depends on layers below it.
 
 ```
-CLI (entry point)
-    └── Agents (orchestrators)
-            ├── Skills (stateless capabilities)
-            ├── Integrations (external APIs)
-            └── Core (config, project loader, secrets)
+Web Frontend (future SaaS)
+    └── FastAPI (api/)          ← Phase 2+
+CLI / Typer (cli/)              ← Phase 1+
+    └── Agents (agents/)        ← orchestrators
+            ├── Skills (skills/)            stateless capabilities
+            ├── Integrations (integrations/) external API clients
+            └── Core (core/)               config, loaders, models
 ```
 
 ## Technology Stack
@@ -17,10 +19,11 @@ CLI (entry point)
 | Layer | Choice | Reason |
 |---|---|---|
 | Language | Python 3.12+ | Native ecosystem for AI, crawling, SEO tooling |
-| Interface | Typer (CLI) | Simple, no web server needed |
+| CLI | Typer | Terminal interface for operator use |
+| Web API | FastAPI + uvicorn | REST API for future SaaS frontend (added Phase 2) |
 | Storage | YAML + JSON files | Matches project-as-directory model |
 | Scheduling | Ubuntu cron | Simple, no queue infrastructure |
-| AI | Anthropic Claude API | Powers all agents and skills |
+| AI | OpenAI API (GPT-4o) | Powers all agents and skills |
 | Logging | Loguru | Simple file + console structured logging |
 | Testing | pytest | Standard Python testing |
 | Deployment | git pull on Ubuntu VPS | Simple, no Docker needed |
@@ -59,8 +62,8 @@ Operator runs CLI command
     → CLI parses args
     → Agent loads project config + knowledge
     → Agent loads skill (SKILL.md prompt)
-    → Agent calls Claude API with skill prompt + project context
-    → Claude returns structured analysis
+    → Agent calls OpenAI API with skill prompt + project context
+    → GPT-4o returns structured analysis
     → Agent saves output to projects/<client>/reports/ or data/
     → Agent prints summary to terminal
 ```

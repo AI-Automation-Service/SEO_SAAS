@@ -25,5 +25,7 @@ class ProjectConfig(BaseModel):
     business_goals: list[str]
     competitors: list[str]
     target_audience: str
+    seo_plugin: Optional[str] = None   # rankmath | yoast | aioseo | none
+    image_source: str = "client"        # client | dalle
     integrations: ProjectIntegrations = ProjectIntegrations()
     active: bool = True

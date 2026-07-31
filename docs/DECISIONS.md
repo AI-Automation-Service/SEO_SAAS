@@ -70,6 +70,28 @@
 
 ---
 
+## ADR-008 — FastAPI web API added alongside CLI (supersedes ADR-002)
+
+**Problem:** The platform needs to eventually support a web dashboard (SaaS) for managing multiple clients without requiring terminal access.  
+**Supersedes:** ADR-002 (CLI-only interface)  
+**Decision:** Add a FastAPI layer alongside the existing Typer CLI. Both interfaces use the same core loaders and models. Neither replaces the other.  
+**Reasoning:** Clean Architecture means the interface layer is independent of the core. Adding FastAPI costs one new `api/` package and does not modify existing CLI or core code. Deferring this decision would require a large refactor later. CORS is included from day one to allow a future web frontend.  
+**Consequences:** The API runs as a separate process (`uvicorn api.main:app`). No authentication yet — internal network only in Phase 2. Auth will be added in the SaaS phase.  
+**Status:** Approved  
+**Date:** 2026-07-31  
+
+---
+
+## ADR-009 — OpenAI API as the AI provider (corrects ARCHITECTURE.md error)
+
+**Problem:** ARCHITECTURE.md incorrectly stated "Anthropic Claude API" as the AI provider.  
+**Decision:** All agents call the OpenAI API (GPT-4o by default). The `OPENAI_API_KEY` env var is used. No Anthropic SDK dependency.  
+**Reasoning:** User requirement confirmed at project start.  
+**Status:** Approved  
+**Date:** 2026-07-31  
+
+---
+
 ## ADR-007 — Deployment via git pull, no Docker
 
 **Problem:** How to deploy the platform to the Ubuntu VPS.  

@@ -1,17 +1,27 @@
 # Roadmap
 
-## Phase 1 — Project Architecture ✅ IN PROGRESS
+## Phase 1 — Project Architecture ✅ COMPLETE
 - Folder structure
 - Core config system (project.yaml loader, secret manager)
 - Skill loading system
 - Example project template
 - Documentation set
 
-## Phase 2 — Project Management
+## Phase 2 — Project Management ✅ COMPLETE
 - Full project loader with validation
-- Knowledge loader
-- Data file management
+- Knowledge loader (reads knowledge/*.md per project)
+- ProjectContext model (bundles config + knowledge for agents)
+- ProjectScaffolder (creates full project structure in one command)
 - CLI: add-project, validate-project commands
+- FastAPI layer: /health, /api/projects, /api/skills endpoints (ADR-008)
+- Unit + integration tests
+
+## Phase 2b — SaaS Foundation (future)
+- JWT authentication for API
+- User management and multi-tenancy
+- React/Next.js web dashboard
+- Project management UI
+- Skill browser UI
 
 ## Phase 3 — Integration Layer
 - WordPress REST API client
