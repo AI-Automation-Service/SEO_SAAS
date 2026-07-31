@@ -1,8 +1,11 @@
 from contextlib import asynccontextmanager
 
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
+
+load_dotenv(override=False)  # load .env into os.environ so SecretManager can find dynamic secrets
 
 from api.models.responses import HealthResponse
 from api.routers import integrations, projects, skills
