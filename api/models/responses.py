@@ -32,7 +32,7 @@ class ValidationResult(BaseModel):
 
 
 class ProjectCreated(BaseModel):
-    project: str
+    name: str
     path: str
     message: str
 

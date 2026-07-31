@@ -32,7 +32,7 @@ function CreateProjectModal({ onClose }: { onClose: () => void }) {
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['projects'] })
       toast.success(`Project "${data.name}" created`)
-      navigate(`/projects/${data.name}`)
+      navigate(`/projects/${data.name}`)  // backend now returns { name, path, message }
     },
     onError: (err) => toast.error(getErrorMessage(err)),
   })

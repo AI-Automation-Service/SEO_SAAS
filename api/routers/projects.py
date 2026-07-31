@@ -19,6 +19,7 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 
 class CreateProjectRequest(BaseModel):
     name: str
+    cms: str = "wordpress"
 
 
 @router.get("", response_model=list[ProjectSummary])
@@ -55,14 +56,11 @@ def create_project(
     scaffolder: ProjectScaffolder = Depends(get_scaffolder),
 ):
     try:
-        project_dir = scaffolder.scaffold(body.name)
+        project_dir = scaffolder.scaffold(body.name, cms=body.cms)
         return ProjectCreated(
-            project=body.name,
+            name=body.name,
             path=str(project_dir),
-            message=(
-                f"Project '{body.name}' created. "
-                f"Fill in config/project.yaml and knowledge/ before running agents."
-            ),
+            message=f"Project '{body.name}' created.",
         )
     except SEOOSError as e:
         raise HTTPException(status_code=409, detail=str(e))

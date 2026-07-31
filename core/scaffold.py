@@ -49,7 +49,7 @@ class ProjectScaffolder:
     def __init__(self, projects_dir: Path):
         self.projects_dir = projects_dir
 
-    def scaffold(self, project_name: str) -> Path:
+    def scaffold(self, project_name: str, cms: str = "wordpress") -> Path:
         project_dir = self.projects_dir / project_name
 
         if project_dir.exists():
@@ -60,7 +60,7 @@ class ProjectScaffolder:
         for dir_name in PROJECT_DIRS:
             (project_dir / dir_name).mkdir(parents=True, exist_ok=True)
 
-        self._write_project_yaml(project_dir / "config" / "project.yaml", project_name)
+        self._write_project_yaml(project_dir / "config" / "project.yaml", project_name, cms)
         self._write_links_yaml(project_dir / "config" / "links.yaml")
         self._write_knowledge_templates(project_dir / "knowledge")
         self._write_data_files(project_dir / "data")
@@ -68,7 +68,7 @@ class ProjectScaffolder:
         logger.info(f"Scaffolded new project '{project_name}' at {project_dir}")
         return project_dir
 
-    def _write_project_yaml(self, path: Path, project_name: str) -> None:
+    def _write_project_yaml(self, path: Path, project_name: str, cms: str = "wordpress") -> None:
         env_key = project_name.upper().replace("-", "_")
         template = {
             "name": project_name,
@@ -77,7 +77,7 @@ class ProjectScaffolder:
             "business_type": "your business type",
             "country": "UK",
             "language": "en",
-            "cms": "wordpress",
+            "cms": cms,
             "seo_plugin": "rankmath",
             "image_source": "client",
             "publishing_method": "api",
