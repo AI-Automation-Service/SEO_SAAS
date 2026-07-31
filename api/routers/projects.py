@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, HttpUrl
 
-from api.dependencies import get_knowledge_loader, get_project_loader, get_scaffolder
+from api.dependencies import get_knowledge_loader, get_project_loader, get_project_context, get_scaffolder
 from api.models.responses import (
     ProjectCreated,
     ProjectDetail,
@@ -9,7 +9,9 @@ from api.models.responses import (
     ValidationResult,
 )
 from core.knowledge import KnowledgeLoader
+from core.models.context import ProjectContext
 from core.project import ProjectLoader
+from core.project_writer import update_project_yaml
 from core.scaffold import ProjectScaffolder
 from core.validation import validate_config
 from shared.exceptions import ProjectConfigError, ProjectNotFoundError, SEOOSError
@@ -94,6 +96,20 @@ def get_project(
         active=config.active,
         knowledge_files=sorted(knowledge.keys()),
     )
+
+
+class UpdateProjectRequest(BaseModel):
+    website: HttpUrl
+
+
+@router.patch("/{name}", status_code=200)
+def update_project(
+    body: UpdateProjectRequest,
+    context: ProjectContext = Depends(get_project_context),
+):
+    config_file = context.project_dir / "config" / "project.yaml"
+    update_project_yaml(config_file, {"website": str(body.website)})
+    return {"name": context.name, "website": str(body.website)}
 
 
 @router.get("/{name}/validate", response_model=ValidationResult)

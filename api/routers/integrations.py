@@ -161,6 +161,11 @@ def update_integrations_config(
         raise HTTPException(status_code=400, detail="No integration config provided.")
 
     config_file = context.project_dir / "config" / "project.yaml"
+
+    # Sync root `website` field from WordPress URL so Overview shows the real site
+    if body.wordpress and body.wordpress.get("url"):
+        updates["website"] = body.wordpress["url"]
+
     update_project_yaml(config_file, updates)
     return {"project": context.name, "updated": list(updates["integrations"].keys())}
 
