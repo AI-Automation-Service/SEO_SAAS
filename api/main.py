@@ -10,14 +10,18 @@ from loguru import logger
 
 FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"
 
-load_dotenv(override=False)  # load .env into os.environ so SecretManager can find dynamic secrets
+load_dotenv(override=False)  # load .env before any module reads os.environ
 
 from api.models.responses import HealthResponse
 from api.routers import integrations, projects, skills
+from api.routers.auth import router as auth_router
+from api.routers.api_keys import router as api_keys_router
+from core.db.base import create_tables
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    create_tables()  # idempotent — creates tables that don't exist yet
     logger.info("SEO OS API starting")
     yield
     logger.info("SEO OS API stopped")
@@ -25,19 +29,21 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="SEO OS API",
-    description="Internal SEO Operating System — manage client SEO at scale.",
-    version="0.1.0",
+    description="Multi-tenant SEO Operating System.",
+    version="0.2.0",
     lifespan=lifespan,
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # tighten to specific frontend origin when UI is deployed
+    allow_origins=["*"],  # tighten to specific origin when domain is configured
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+app.include_router(auth_router, prefix="/api")
+app.include_router(api_keys_router, prefix="/api")
 app.include_router(projects.router, prefix="/api")
 app.include_router(skills.router, prefix="/api")
 app.include_router(integrations.router, prefix="/api")
