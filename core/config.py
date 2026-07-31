@@ -8,7 +8,7 @@ class AppConfig(BaseSettings):
     log_level: str = "INFO"
     projects_dir: Path = Path("projects")
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
 def load_config() -> AppConfig:
