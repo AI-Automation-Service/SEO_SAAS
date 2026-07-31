@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
@@ -52,31 +54,48 @@ def get_current_user(
     return user
 
 
-# ── Existing single-tenant dependencies (unchanged) ──────────────────────────
-
 def get_config() -> AppConfig:
     return load_config()
-
-
-def get_project_loader(config: AppConfig = Depends(get_config)) -> ProjectLoader:
-    return ProjectLoader(config.projects_dir)
-
-
-def get_knowledge_loader(config: AppConfig = Depends(get_config)) -> KnowledgeLoader:
-    return KnowledgeLoader(config.projects_dir)
-
-
-def get_scaffolder(config: AppConfig = Depends(get_config)) -> ProjectScaffolder:
-    return ProjectScaffolder(config.projects_dir)
 
 
 def get_secret_manager() -> SecretManager:
     return SecretManager()
 
 
+# ── Per-user project isolation ───────────────────────────────────────────────
+# Projects live at  projects/{user_id}/{project_name}/
+# so each user only ever sees their own data.
+
+def get_user_projects_dir(
+    current_user: User = Depends(get_current_user),
+    config: AppConfig = Depends(get_config),
+) -> Path:
+    d = config.projects_dir / str(current_user.id)
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def get_project_loader(
+    user_dir: Path = Depends(get_user_projects_dir),
+) -> ProjectLoader:
+    return ProjectLoader(user_dir)
+
+
+def get_knowledge_loader(
+    user_dir: Path = Depends(get_user_projects_dir),
+) -> KnowledgeLoader:
+    return KnowledgeLoader(user_dir)
+
+
+def get_scaffolder(
+    user_dir: Path = Depends(get_user_projects_dir),
+) -> ProjectScaffolder:
+    return ProjectScaffolder(user_dir)
+
+
 def get_project_context(
     name: str,
-    config: AppConfig = Depends(get_config),
+    user_dir: Path = Depends(get_user_projects_dir),
     loader: ProjectLoader = Depends(get_project_loader),
     kl: KnowledgeLoader = Depends(get_knowledge_loader),
 ) -> ProjectContext:
@@ -91,5 +110,5 @@ def get_project_context(
         name=name,
         config=project_config,
         knowledge=kl.load(name),
-        project_dir=config.projects_dir / name,
+        project_dir=user_dir / name,
     )

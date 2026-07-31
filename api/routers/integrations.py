@@ -4,8 +4,7 @@ import re
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from api.dependencies import get_config, get_project_context, get_secret_manager
-from core.config import AppConfig
+from api.dependencies import get_project_context, get_secret_manager
 from core.models.context import ProjectContext
 from core.project_writer import update_project_yaml
 from core.secrets import SecretManager, write_secret
@@ -148,7 +147,6 @@ class UploadGoogleCredentialsRequest(BaseModel):
 def update_integrations_config(
     body: UpdateIntegrationsConfigRequest,
     context: ProjectContext = Depends(get_project_context),
-    app_config: AppConfig = Depends(get_config),
 ):
     """Update integration config (URLs, env var names, site URLs) in project.yaml."""
     updates: dict = {"integrations": {}}
@@ -162,7 +160,7 @@ def update_integrations_config(
     if not updates["integrations"]:
         raise HTTPException(status_code=400, detail="No integration config provided.")
 
-    config_file = app_config.projects_dir / context.name / "config" / "project.yaml"
+    config_file = context.project_dir / "config" / "project.yaml"
     update_project_yaml(config_file, updates)
     return {"project": context.name, "updated": list(updates["integrations"].keys())}
 
@@ -189,14 +187,12 @@ def set_secret(
 def upload_google_credentials(
     body: UploadGoogleCredentialsRequest,
     context: ProjectContext = Depends(get_project_context),
-    app_config: AppConfig = Depends(get_config),
 ):
     """
     Upload Google service account JSON. Writes the file to
-    projects/{name}/config/google-credentials.json and sets the
+    projects/{user_id}/{name}/config/google-credentials.json and sets the
     credentials_env var automatically in .env.
     """
-    # Validate JSON
     try:
         parsed = json.loads(body.credentials_json)
     except json.JSONDecodeError as e:
@@ -208,20 +204,16 @@ def upload_google_credentials(
             detail="Expected a Google service account JSON (type: service_account).",
         )
 
-    # Write credentials file (gitignored)
-    creds_file = app_config.projects_dir / context.name / "config" / "google-credentials.json"
+    creds_file = context.project_dir / "config" / "google-credentials.json"
     creds_file.write_text(body.credentials_json, encoding="utf-8")
 
-    # Determine or generate the env var name
     env_key = context.config.integrations.google.credentials_env
     if not env_key:
         project_key = context.name.upper().replace("-", "_")
         env_key = f"GOOGLE_{project_key}_CREDENTIALS_FILE"
-        # Write it into project.yaml so the config knows which env var to look up
-        config_file = app_config.projects_dir / context.name / "config" / "project.yaml"
+        config_file = context.project_dir / "config" / "project.yaml"
         update_project_yaml(config_file, {"integrations": {"google": {"credentials_env": env_key}}})
 
-    # Store the file path as the secret value
     write_secret(env_key, str(creds_file.resolve()))
 
     return {
