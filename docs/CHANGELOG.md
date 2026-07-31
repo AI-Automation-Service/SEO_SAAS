@@ -1,5 +1,31 @@
 # Changelog
 
+## [Unreleased] — Phase 3
+
+### Added
+- `integrations/base.py` — `IntegrationAuthError`, `IntegrationConnectionError`, `IntegrationRateLimitError`, `IntegrationConfigError`, `ConnectionStatus`
+- `integrations/cms/base.py` — `CMSAdapter` ABC, `PostDraft`, `PublishedPost` dataclasses
+- `integrations/cms/wordpress.py` — WordPress REST API adapter (httpx); supports `test_connection`, `create_post`, `get_posts`, `get_sitemap_urls` (with pagination)
+- `integrations/cms/shopify.py` — Shopify stub (raises `NotImplementedError` with clear message)
+- `integrations/google/search_console.py` — GSC adapter; `test_connection`, `get_top_queries`, `get_page_performance`
+- `integrations/google/analytics.py` — GA4 adapter; `test_connection`, `get_top_pages`
+- `integrations/registry.py` — `get_cms_adapter(context, secrets)` factory; `enabled` guard enforced for all CMS types
+- `api/routers/integrations.py` — `GET /api/projects/{name}/integrations/status`, `POST /api/projects/{name}/integrations/test/{integration}`
+- `api/dependencies.py` — `get_secret_manager()`, `get_project_context()` shared dependencies
+- `tests/unit/test_integrations.py` — 15 unit tests; WordPress adapter, Shopify stub, registry
+
+### Changed
+- `core/models/project.py` — `ProjectIntegrations` redesigned with nested `WordPressConfig`, `GoogleConfig`, `ShopifyConfig`
+- `core/scaffold.py` — `project.yaml` template updated to match new integrations structure
+- `api/main.py` — integrations router registered
+- `pyproject.toml` — added `google-api-python-client`, `google-auth`, `google-analytics-data`
+
+### Deferred (LESSONS_LEARNED)
+- `WordPressAdapter` uses `httpx.request()` per call (no connection pooling) — acceptable for current volume; upgrade to `httpx.Client` instance when throughput is a concern
+- `/integrations/status` runs all 3 checks sequentially — upgrade to `concurrent.futures.ThreadPoolExecutor` when latency matters
+
+---
+
 ## [Unreleased] — Phase 2
 
 ### Added

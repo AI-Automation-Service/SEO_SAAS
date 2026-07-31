@@ -87,9 +87,23 @@ class ProjectScaffolder:
             "competitors": ["competitor1.com", "competitor2.com"],
             "target_audience": "describe your target audience here",
             "integrations": {
-                "wordpress_secret": f"WORDPRESS_{env_key}_KEY",
-                "google_search_console_secret": f"GSC_{env_key}_KEY",
-                "google_analytics_secret": f"GA4_{env_key}_KEY",
+                "wordpress": {
+                    "enabled": False,
+                    "url": "https://example.com",
+                    "username_env": f"WP_{env_key}_USERNAME",
+                    "password_env": f"WP_{env_key}_APP_PASSWORD",
+                },
+                "google": {
+                    "enabled": False,
+                    "credentials_env": f"GOOGLE_{env_key}_CREDENTIALS_FILE",
+                    "gsc_site_url": "https://example.com/",
+                    "ga4_property_id": "",
+                },
+                "shopify": {
+                    "enabled": False,
+                    "store_url": "",
+                    "token_env": f"SHOPIFY_{env_key}_TOKEN",
+                },
             },
             "active": True,
         }

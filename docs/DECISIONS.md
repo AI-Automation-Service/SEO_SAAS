@@ -92,6 +92,28 @@
 
 ---
 
+## ADR-010 — Adapter registry pattern for CMS integrations
+
+**Problem:** The platform supports multiple CMSs (WordPress, Shopify, future). Callers should not need to know which adapter to construct.  
+**Decision:** `get_cms_adapter(context, secrets)` factory reads `project.yaml cms:` field and returns the correct adapter instance. Adapters implement `CMSAdapter` ABC. All receive resolved credentials (not raw env var names) — credential resolution stays in the factory.  
+**Reasoning:** Keeps agents and routers CMS-agnostic. Adding a new CMS means adding one adapter class and one branch in the registry — nothing else changes.  
+**Consequences:** The factory is the single place where `enabled` guards and credential resolution happen. Adapters are pure HTTP clients.  
+**Status:** Approved  
+**Date:** 2026-07-31  
+
+---
+
+## ADR-011 — Lazy imports for optional Google libraries
+
+**Problem:** `google-api-python-client` and `google-analytics-data` are large optional dependencies. If they are not installed, the entire app should still start.  
+**Decision:** Google adapter classes import their libraries inside `__init__`, not at module level. Exception types and GA4 type objects are stored as instance attributes at construction time to avoid re-importing on every method call.  
+**Reasoning:** Prevents import-time failures if Google libraries are not installed. The adapter raises a clear `ImportError` with install instructions at construction time instead.  
+**Consequences:** The `__init__` method is more complex. Requires discipline to not add new lazy imports in methods.  
+**Status:** Approved  
+**Date:** 2026-07-31  
+
+---
+
 ## ADR-007 — Deployment via git pull, no Docker
 
 **Problem:** How to deploy the platform to the Ubuntu VPS.  

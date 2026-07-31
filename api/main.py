@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
 from api.models.responses import HealthResponse
-from api.routers import projects, skills
+from api.routers import integrations, projects, skills
 
 
 @asynccontextmanager
@@ -32,6 +32,7 @@ app.add_middleware(
 
 app.include_router(projects.router, prefix="/api")
 app.include_router(skills.router, prefix="/api")
+app.include_router(integrations.router, prefix="/api")
 
 
 @app.get("/health", response_model=HealthResponse, tags=["health"])

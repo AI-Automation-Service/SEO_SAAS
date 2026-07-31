@@ -2,13 +2,30 @@ from pydantic import BaseModel, HttpUrl
 from typing import Optional
 
 
+class WordPressConfig(BaseModel):
+    enabled: bool = False
+    url: str = ""
+    username_env: Optional[str] = None   # env var name for WP username
+    password_env: Optional[str] = None   # env var name for WP application password
+
+
+class GoogleConfig(BaseModel):
+    enabled: bool = False
+    credentials_env: Optional[str] = None  # env var name: path to service account JSON file
+    gsc_site_url: Optional[str] = None     # property URL as verified in GSC
+    ga4_property_id: Optional[str] = None
+
+
+class ShopifyConfig(BaseModel):
+    enabled: bool = False
+    store_url: str = ""
+    token_env: Optional[str] = None   # env var name for Shopify Admin API token
+
+
 class ProjectIntegrations(BaseModel):
-    wordpress_secret: Optional[str] = None
-    shopify_secret: Optional[str] = None
-    google_search_console_secret: Optional[str] = None
-    google_analytics_secret: Optional[str] = None
-    cloudflare_secret: Optional[str] = None
-    github_secret: Optional[str] = None
+    wordpress: WordPressConfig = WordPressConfig()
+    google: GoogleConfig = GoogleConfig()
+    shopify: ShopifyConfig = ShopifyConfig()
 
 
 class ProjectConfig(BaseModel):
