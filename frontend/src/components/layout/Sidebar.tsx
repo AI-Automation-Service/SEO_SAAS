@@ -1,6 +1,7 @@
-import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, FolderOpen, Settings } from 'lucide-react'
+import { NavLink, useNavigate } from 'react-router-dom'
+import { LayoutDashboard, FolderOpen, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/context/AuthContext'
 
 const nav = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -8,6 +9,14 @@ const nav = [
 ]
 
 export function Sidebar() {
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
+
+  function handleLogout() {
+    logout()
+    navigate('/login')
+  }
+
   return (
     <aside className="fixed inset-y-0 left-0 z-50 w-60 bg-slate-900 flex flex-col">
       {/* Logo */}
@@ -39,12 +48,21 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* Bottom */}
+      {/* User + Logout */}
       <div className="p-3 border-t border-slate-800">
-        <div className="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-500 text-xs">
-          <Settings size={14} />
-          <span>v0.1.0</span>
-        </div>
+        {user && (
+          <div className="px-3 py-1.5 mb-1">
+            <p className="text-xs text-slate-400 truncate">{user.full_name}</p>
+            <p className="text-xs text-slate-600 truncate">{user.email}</p>
+          </div>
+        )}
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 text-sm transition-colors cursor-pointer"
+        >
+          <LogOut size={15} />
+          Sign out
+        </button>
       </div>
     </aside>
   )
