@@ -40,18 +40,18 @@ export function OverviewTab({ project }: { project: Project }) {
               {project.cms}
             </dd>
           </div>
-          {project.url && (
+          {project.website && (
             <div>
               <dt className="text-slate-500 mb-0.5">Website</dt>
               <dd className="font-medium text-slate-900">
                 <a
-                  href={project.url}
+                  href={project.website}
                   target="_blank"
                   rel="noreferrer"
                   className="text-emerald-600 hover:underline flex items-center gap-1"
                 >
                   <Globe size={12} />
-                  {project.url}
+                  {project.website}
                 </a>
               </dd>
             </div>
