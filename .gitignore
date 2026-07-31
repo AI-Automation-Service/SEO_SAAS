@@ -10,6 +10,9 @@ projects/*/reports/
 projects/*/audits/
 projects/*/content/
 
+# Google service account credentials — never commit
+projects/*/config/google-credentials.json
+
 # Keep the example project structure but ignore its generated data
 !projects/client-example/
 !projects/client-example/config/
