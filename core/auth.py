@@ -2,11 +2,9 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import bcrypt as _bcrypt
 from cryptography.fernet import Fernet, InvalidToken
 from jose import jwt
-from passlib.context import CryptContext
-
-_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 15
@@ -16,11 +14,14 @@ REFRESH_TOKEN_EXPIRE_DAYS = 7
 # ── Passwords ────────────────────────────────────────────────────────────────
 
 def hash_password(plain: str) -> str:
-    return _pwd_context.hash(plain)
+    return _bcrypt.hashpw(plain.encode("utf-8"), _bcrypt.gensalt()).decode()
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return _pwd_context.verify(plain, hashed)
+    try:
+        return _bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+    except Exception:
+        return False
 
 
 # ── JWT ──────────────────────────────────────────────────────────────────────
