@@ -2,7 +2,7 @@
 export interface Project {
   name: string
   cms: string
-  url?: string
+  website?: string
   business_name?: string
   country?: string
   language?: string
@@ -100,4 +100,25 @@ export interface RegisterRequest {
   email: string
   password: string
   full_name: string
+}
+
+// Speed types
+export interface SpeedMetric {
+  display: string
+  value: number | null
+  score: number | null
+}
+
+export interface SpeedResult {
+  url: string
+  strategy: 'mobile' | 'desktop'
+  performance_score: number
+  metrics: {
+    fcp: SpeedMetric
+    lcp: SpeedMetric
+    tbt: SpeedMetric
+    cls: SpeedMetric
+    si: SpeedMetric
+    tti: SpeedMetric
+  }
 }

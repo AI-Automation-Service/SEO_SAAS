@@ -8,6 +8,7 @@ import { IntegrationsTab } from './tabs/IntegrationsTab'
 import { KnowledgeTab } from './tabs/KnowledgeTab'
 import { KeywordsTab } from './tabs/KeywordsTab'
 import { ContentTab } from './tabs/ContentTab'
+import { SpeedTab } from './tabs/SpeedTab'
 import { projectsApi } from '@/api/client'
 import { cn } from '@/lib/utils'
 
@@ -17,6 +18,7 @@ const TABS = [
   { id: 'knowledge', label: 'Knowledge' },
   { id: 'keywords', label: 'Keywords' },
   { id: 'content', label: 'Content' },
+  { id: 'speed', label: 'Speed' },
 ] as const
 
 type TabId = (typeof TABS)[number]['id']
@@ -94,6 +96,9 @@ export function ProjectDetailPage() {
         {activeTab === 'knowledge' && <KnowledgeTab />}
         {activeTab === 'keywords' && <KeywordsTab />}
         {activeTab === 'content' && <ContentTab />}
+        {activeTab === 'speed' && (
+          <SpeedTab projectName={name!} websiteUrl={project.website ?? ''} />
+        )}
       </div>
     </div>
   )

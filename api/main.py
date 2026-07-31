@@ -16,6 +16,7 @@ from api.models.responses import HealthResponse
 from api.routers import integrations, projects, skills
 from api.routers.auth import router as auth_router
 from api.routers.api_keys import router as api_keys_router
+from api.routers.speed import router as speed_router
 from core.db.base import create_tables
 
 
@@ -47,6 +48,7 @@ app.include_router(api_keys_router, prefix="/api")
 app.include_router(projects.router, prefix="/api")
 app.include_router(skills.router, prefix="/api")
 app.include_router(integrations.router, prefix="/api")
+app.include_router(speed_router, prefix="/api")
 
 
 @app.get("/health", response_model=HealthResponse, tags=["health"])

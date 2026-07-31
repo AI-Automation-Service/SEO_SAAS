@@ -9,7 +9,7 @@ from core.db.models import User, UserApiKey
 
 router = APIRouter(prefix="/keys", tags=["api-keys"])
 
-ALLOWED_SERVICES = {"openai", "wp_url", "wp_app_password", "gsc_credentials", "ga4_credentials"}
+ALLOWED_SERVICES = {"openai", "google_api_key", "wp_url", "wp_app_password", "gsc_credentials", "ga4_credentials"}
 
 
 class StoreKeyRequest(BaseModel):

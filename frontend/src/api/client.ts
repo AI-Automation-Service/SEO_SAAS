@@ -13,6 +13,7 @@ import type {
   TokenResponse,
   LoginRequest,
   RegisterRequest,
+  SpeedResult,
 } from '@/types/api'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? ''
@@ -143,6 +144,14 @@ export const integrationsApi = {
 // ── Skills ────────────────────────────────────────────────────────────────────
 export const skillsApi = {
   list: () => api.get<Skill[]>('/api/skills').then((r) => r.data),
+}
+
+// ── Speed ─────────────────────────────────────────────────────────────────────
+export const speedApi = {
+  get: (name: string, strategy: 'mobile' | 'desktop' = 'mobile') =>
+    api
+      .get<SpeedResult>(`/api/projects/${name}/speed`, { params: { strategy } })
+      .then((r) => r.data),
 }
 
 // ── Health ────────────────────────────────────────────────────────────────────
