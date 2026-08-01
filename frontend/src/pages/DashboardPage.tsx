@@ -71,11 +71,25 @@ function ProjectCard({ project }: { project: Project }) {
   )
 }
 
+function useAllIntegrationStatuses(projects: Project[] | undefined) {
+  return useQuery({
+    queryKey: ['all-integrations-status', projects?.map((p) => p.name)],
+    queryFn: async () => {
+      if (!projects?.length) return []
+      return Promise.all(projects.map((p) => integrationsApi.status(p.name)))
+    },
+    enabled: !!projects?.length,
+    staleTime: 60_000,
+  })
+}
+
 export function DashboardPage() {
   const { data: projects, isLoading, error } = useQuery({
     queryKey: ['projects'],
     queryFn: projectsApi.list,
   })
+
+  const { data: allStatuses } = useAllIntegrationStatuses(projects)
 
   if (isLoading) {
     return (
@@ -105,6 +119,24 @@ export function DashboardPage() {
 
   const total = projects?.length ?? 0
 
+  const activeIntegrations = allStatuses
+    ? allStatuses.reduce(
+        (sum, s) => sum + s.integrations.filter((i) => i.connected).length,
+        0
+      )
+    : 0
+
+  const needsAttention = allStatuses
+    ? allStatuses.reduce(
+        (sum, s) =>
+          sum +
+          s.integrations.filter(
+            (i) => !i.connected && i.error && i.error !== 'Not enabled in project.yaml'
+          ).length,
+        0
+      )
+    : 0
+
   return (
     <div>
       <TopBar title="Dashboard" subtitle="SEO OS overview" />
@@ -119,13 +151,13 @@ export function DashboardPage() {
           />
           <MetricCard
             label="Active Integrations"
-            value={0}
+            value={activeIntegrations}
             icon={CheckCircle2}
             color="bg-emerald-50 text-emerald-600"
           />
           <MetricCard
             label="Needs Attention"
-            value={0}
+            value={needsAttention}
             icon={AlertCircle}
             color="bg-amber-50 text-amber-600"
           />
