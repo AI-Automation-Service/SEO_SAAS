@@ -174,7 +174,7 @@ export function ProjectDetailPage() {
         {activeTab === 'overview' && <OverviewTab project={project} />}
         {activeTab === 'integrations' && <IntegrationsTab projectName={name!} />}
         {activeTab === 'knowledge' && <KnowledgeTab />}
-        {activeTab === 'keywords' && <KeywordsTab />}
+        {activeTab === 'keywords' && <KeywordsTab projectName={name!} />}
         {activeTab === 'content' && <ContentTab />}
         {activeTab === 'speed' && (
           <SpeedTab projectName={name!} websiteUrl={project.website ?? ''} />

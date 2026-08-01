@@ -103,6 +103,47 @@ export interface RegisterRequest {
   full_name: string
 }
 
+// Keyword types
+export type KeywordType = 'standard' | 'question' | 'branded' | 'competitor'
+export type KeywordIntent = 'informational' | 'commercial' | 'navigational' | 'transactional'
+export type FunnelStage = 'tofu' | 'mofu' | 'bofu'
+export type KeywordStatus = 'covered' | 'quick_win' | 'opportunity' | 'gap' | 'watch'
+export type KeywordSource = 'gsc' | 'planner' | 'both' | 'manual'
+
+export interface Keyword {
+  id: number
+  keyword: string
+  keyword_type: KeywordType
+  cluster: string | null
+  is_hub: boolean
+  intent: KeywordIntent | null
+  funnel_stage: FunnelStage | null
+  status: KeywordStatus
+  action: string
+  volume: number | null
+  competition: number | null
+  clicks: number | null
+  impressions: number | null
+  position: number | null
+  ctr: number | null
+  existing_url: string | null
+  suggested_url: string | null
+  snippet_opportunity: boolean
+  competitor_gap: boolean
+  source: KeywordSource
+  updated_at: string
+}
+
+export interface KeywordSummary {
+  total: number
+  covered: number
+  quick_wins: number
+  gaps: number
+  opportunities: number
+  clusters: number
+  unclustered: number
+}
+
 // Speed types
 export interface SpeedMetric {
   display: string

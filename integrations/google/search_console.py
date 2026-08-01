@@ -126,6 +126,37 @@ class SearchConsoleAdapter:
             for row in self._fetch_rows("query", days, row_limit)
         ]
 
+    def get_keyword_pages(self, days: int = 90, row_limit: int = 500) -> list[dict]:
+        """Return rows with {query, page, clicks, impressions, ctr, position}."""
+        end_date = date.today()
+        start_date = end_date - timedelta(days=days)
+        request_body = {
+            "startDate": start_date.isoformat(),
+            "endDate": end_date.isoformat(),
+            "dimensions": ["query", "page"],
+            "rowLimit": row_limit,
+            "orderBy": [{"fieldName": "clicks", "sortOrder": "DESCENDING"}],
+        }
+        try:
+            response = (
+                self._service.searchanalytics()
+                .query(siteUrl=self._site_url, body=request_body)
+                .execute()
+            )
+        except Exception as e:
+            self._handle_http_error(e)
+        return [
+            {
+                "query": row["keys"][0],
+                "page": row["keys"][1],
+                "clicks": int(row.get("clicks", 0)),
+                "impressions": int(row.get("impressions", 0)),
+                "ctr": round(float(row.get("ctr", 0.0)), 4),
+                "position": round(float(row.get("position", 0.0)), 1),
+            }
+            for row in response.get("rows", [])
+        ]
+
     def get_page_performance(self, days: int = 28, row_limit: int = 100) -> list[PagePerformance]:
         return [
             PagePerformance(

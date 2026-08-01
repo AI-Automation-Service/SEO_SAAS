@@ -13,6 +13,8 @@ import type {
   TokenResponse,
   LoginRequest,
   RegisterRequest,
+  Keyword,
+  KeywordSummary,
   SpeedResult,
 } from '@/types/api'
 
@@ -157,6 +159,39 @@ export const integrationsApi = {
 // ── Skills ────────────────────────────────────────────────────────────────────
 export const skillsApi = {
   list: () => api.get<Skill[]>('/api/skills').then((r) => r.data),
+}
+
+// ── Keywords ──────────────────────────────────────────────────────────────────
+export const keywordsApi = {
+  summary: (name: string) =>
+    api.get<KeywordSummary>(`/api/projects/${name}/keywords/summary`).then((r) => r.data),
+
+  list: (name: string, params?: Record<string, string>) =>
+    api.get<Keyword[]>(`/api/projects/${name}/keywords`, { params }).then((r) => r.data),
+
+  sync: (name: string) =>
+    api.post<{ synced: number; message: string }>(`/api/projects/${name}/keywords/sync`).then((r) => r.data),
+
+  upload: (name: string, file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    // Do NOT set Content-Type — browser must set it with the multipart boundary
+    return api.post<{ imported: number; message: string }>(
+      `/api/projects/${name}/keywords/upload`,
+      form,
+    ).then((r) => r.data)
+  },
+
+  cluster: (name: string) =>
+    api.post<{ clustered: number; clusters: number; message: string }>(
+      `/api/projects/${name}/keywords/cluster`,
+    ).then((r) => r.data),
+
+  update: (name: string, id: number, body: Partial<Keyword>) =>
+    api.patch<Keyword>(`/api/projects/${name}/keywords/${id}`, body).then((r) => r.data),
+
+  remove: (name: string, id: number) =>
+    api.delete(`/api/projects/${name}/keywords/${id}`).then((r) => r.data),
 }
 
 // ── Speed ─────────────────────────────────────────────────────────────────────

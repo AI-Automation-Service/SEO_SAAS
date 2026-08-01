@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint, text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.db.base import Base
@@ -26,7 +26,64 @@ class UserApiKey(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
-    # service names: "openai" | "wp_url" | "wp_app_password" | "gsc_credentials" | "ga4_credentials"
     service: Mapped[str] = mapped_column(String, nullable=False)
     encrypted_value: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class Keyword(Base):
+    """Per-project keyword with GSC metrics, planner data, and cluster assignments."""
+
+    __tablename__ = "keywords"
+    __table_args__ = (
+        UniqueConstraint("user_id", "project_name", "keyword", name="uq_user_project_keyword"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    project_name: Mapped[str] = mapped_column(String, nullable=False, index=True)
+
+    # Core
+    keyword: Mapped[str] = mapped_column(String, nullable=False)
+    # standard / question / branded / competitor
+    keyword_type: Mapped[str] = mapped_column(String, default="standard")
+
+    # Cluster assignment (set by AI agent)
+    cluster: Mapped[str | None] = mapped_column(String, nullable=True)
+    is_hub: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Intent & funnel
+    # informational / commercial / navigational / transactional
+    intent: Mapped[str | None] = mapped_column(String, nullable=True)
+    # tofu / mofu / bofu
+    funnel_stage: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # Status & action (computed + overridable)
+    # covered / quick_win / opportunity / gap / watch
+    status: Mapped[str] = mapped_column(String, default="gap")
+    # new_pillar / optimize_pillar / add_spoke / rewrite / watch / none
+    action: Mapped[str] = mapped_column(String, default="none")
+
+    # Keyword Planner data
+    volume: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    competition: Mapped[float | None] = mapped_column(Float, nullable=True)  # 0.0–1.0
+
+    # GSC data
+    clicks: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    impressions: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    position: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ctr: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Page data
+    existing_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    suggested_url: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # Flags
+    snippet_opportunity: Mapped[bool] = mapped_column(Boolean, default=False)
+    competitor_gap: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # gsc / planner / both / manual
+    source: Mapped[str] = mapped_column(String, default="manual")
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
