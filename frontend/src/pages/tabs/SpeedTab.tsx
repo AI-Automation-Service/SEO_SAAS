@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { RefreshCw, ExternalLink, Monitor, Smartphone, Key, Check } from 'lucide-react'
-import { speedApi, getErrorMessage } from '@/api/client'
-import axios from 'axios'
+import { api, speedApi, getErrorMessage } from '@/api/client'
 import { cn } from '@/lib/utils'
 
 type Strategy = 'mobile' | 'desktop'
@@ -51,7 +50,7 @@ function SpeedError({ error, onRetry }: { error: unknown; onRetry: () => void })
 
   const { mutate: saveKey, isPending } = useMutation({
     mutationFn: () =>
-      axios.put('/api/keys/google_api_key', { value: apiKey }),
+      api.put('/api/keys/google_api_key', { value: apiKey }),
     onSuccess: () => {
       setSaved(true)
       qc.invalidateQueries({ queryKey: ['speed'] })
