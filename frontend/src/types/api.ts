@@ -83,6 +83,7 @@ export interface AuthUser {
   id: number
   email: string
   full_name: string
+  onboarding_complete: boolean
 }
 
 export interface TokenResponse {

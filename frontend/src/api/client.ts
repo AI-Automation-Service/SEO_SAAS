@@ -107,6 +107,15 @@ export const authApi = {
   register: (body: RegisterRequest) =>
     api.post<TokenResponse>('/api/auth/register', body).then((r) => r.data),
   me: () => api.get<AuthUser>('/api/auth/me').then((r) => r.data),
+  completeOnboarding: () => api.post('/api/auth/complete-onboarding').then((r) => r.data),
+}
+
+// ── API Key management ────────────────────────────────────────────────────────
+export const keysApi = {
+  save: (service: string, value: string) =>
+    api.put(`/api/keys/${service}`, { value }).then((r) => r.data),
+  test: (service: string, value: string) =>
+    api.post('/api/keys/test', { service, value }).then((r) => r.data),
 }
 
 // ── Projects ─────────────────────────────────────────────────────────────────

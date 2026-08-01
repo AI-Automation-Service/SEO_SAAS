@@ -41,6 +41,7 @@ class MeResponse(BaseModel):
     id: int
     email: str
     full_name: str
+    onboarding_complete: bool
 
 
 @router.post("/register", response_model=TokenResponse, status_code=201)
@@ -114,4 +115,15 @@ def me(current_user: User = Depends(get_current_user)):
         id=current_user.id,
         email=current_user.email,
         full_name=current_user.full_name,
+        onboarding_complete=current_user.onboarding_complete,
     )
+
+
+@router.post("/complete-onboarding", status_code=200)
+def complete_onboarding(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    current_user.onboarding_complete = True
+    db.commit()
+    return {"ok": True}

@@ -21,3 +21,18 @@ class Base(DeclarativeBase):
 def create_tables() -> None:
     from core.db import models  # noqa: F401 — import triggers model registration
     Base.metadata.create_all(bind=engine)
+    _migrate_columns()
+
+
+def _migrate_columns() -> None:
+    """Add columns that don't exist yet without dropping the table."""
+    from sqlalchemy import text as sql_text
+    with engine.connect() as conn:
+        # onboarding_complete: existing users default TRUE (already set up), new users FALSE via ORM
+        try:
+            conn.execute(sql_text(
+                "ALTER TABLE users ADD COLUMN onboarding_complete BOOLEAN DEFAULT TRUE"
+            ))
+            conn.commit()
+        except Exception:
+            pass  # column already exists

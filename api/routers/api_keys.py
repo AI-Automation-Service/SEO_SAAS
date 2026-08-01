@@ -1,3 +1,4 @@
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
@@ -83,6 +84,50 @@ def delete_key(
 
     if not deleted:
         raise HTTPException(404, f"No stored key for service '{service}'")
+
+
+class TestKeyRequest(BaseModel):
+    service: str
+    value: str
+
+
+@router.post("/test", status_code=200)
+def test_key(body: TestKeyRequest, _: User = Depends(get_current_user)):
+    """Test a key before saving it. Does NOT persist."""
+    if body.service == "openai":
+        try:
+            with httpx.Client(timeout=10) as client:
+                r = client.get(
+                    "https://api.openai.com/v1/models",
+                    headers={"Authorization": f"Bearer {body.value.strip()}"},
+                )
+            if r.status_code == 401:
+                raise HTTPException(400, "Invalid OpenAI API key — check and try again")
+            if r.status_code != 200:
+                raise HTTPException(400, f"OpenAI returned {r.status_code}")
+        except httpx.RequestError as e:
+            raise HTTPException(502, f"Could not reach OpenAI: {e}")
+
+    elif body.service == "google_api_key":
+        try:
+            with httpx.Client(timeout=10) as client:
+                r = client.get(
+                    "https://www.googleapis.com/pagespeedonline/v5/runPagespeed",
+                    params={"url": "https://www.google.com", "strategy": "mobile", "key": body.value.strip()},
+                )
+            if r.status_code == 400:
+                raise HTTPException(400, "Invalid Google API key")
+            if r.status_code == 403:
+                raise HTTPException(400, "Google API key rejected — check API restrictions are set to None")
+            if r.status_code not in (200, 429):
+                raise HTTPException(400, f"Google API returned {r.status_code}")
+        except httpx.RequestError as e:
+            raise HTTPException(502, f"Could not reach Google API: {e}")
+
+    else:
+        raise HTTPException(400, f"No test available for service '{body.service}'")
+
+    return {"ok": True, "service": body.service}
 
 
 def get_user_secret(service: str, user_id: int, db: Session) -> str:
