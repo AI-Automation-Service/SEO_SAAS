@@ -356,35 +356,41 @@ function Step4({ projectName, onComplete }: { projectName: string; onComplete: (
   return (
     <div>
       <Guide title="How to set up Google Search Console access?">
-        <p className="font-semibold text-blue-800 text-xs uppercase tracking-wide mb-2">Part 1 — Create a Service Account</p>
+        <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-emerald-800 text-xs mb-3">
+          <strong>100% FREE</strong> — Google Cloud will ask for a payment method when you first sign up, but the APIs we use (Search Console, Analytics &amp; PageSpeed) are completely free. You will not be charged. New accounts also receive $300 in free credits.
+        </div>
+        <p className="font-semibold text-blue-800 text-xs uppercase tracking-wide mb-2">Part 1 — Create a Google Cloud account &amp; project</p>
         <GuideStep n={1}>
-          Go to <ExternalA href="https://console.cloud.google.com">Google Cloud Console</ExternalA> and create a new project (or select an existing one).
+          Go to <ExternalA href="https://console.cloud.google.com">console.cloud.google.com</ExternalA>. If this is your first time, click <strong>"Get started for free"</strong>, sign in with your Google account, and follow the steps to activate your account — you'll need to add a payment method, but you won't be charged for these APIs.
         </GuideStep>
         <GuideStep n={2}>
-          In the left menu go to <strong>APIs &amp; Services → Library</strong>. Search for <strong>"Google Search Console API"</strong> and enable it.
+          Once inside, click the project dropdown at the top → <strong>"New Project"</strong>. Give it a name (e.g. "SEO OS") and click <strong>Create</strong>.
         </GuideStep>
         <GuideStep n={3}>
-          Go to <strong>IAM &amp; Admin → Service Accounts</strong>.
+          In the left menu go to <strong>APIs &amp; Services → Library</strong>. Search for <strong>"Google Search Console API"</strong> and click <strong>Enable</strong>.
         </GuideStep>
         <GuideStep n={4}>
-          Click <strong>"Create Service Account"</strong>. Give it a name (e.g. "seo-os") and click <strong>Done</strong> (no roles needed).
+          Go to <strong>IAM &amp; Admin → Service Accounts</strong>.
         </GuideStep>
         <GuideStep n={5}>
+          Click <strong>"Create Service Account"</strong>. Give it a name (e.g. "seo-os") and click <strong>Done</strong> (no roles needed).
+        </GuideStep>
+        <GuideStep n={6}>
           Click on the service account → <strong>Keys</strong> tab → <strong>Add Key → Create new key → JSON</strong>. A JSON file will download automatically.
         </GuideStep>
 
         <p className="font-semibold text-blue-800 text-xs uppercase tracking-wide mb-2 mt-4">Part 2 — Add service account to GSC property</p>
-        <GuideStep n={6}>
+        <GuideStep n={7}>
           Open the downloaded JSON and copy the value of <strong>"client_email"</strong> (looks like seo-os@project-id.iam.gserviceaccount.com).
         </GuideStep>
-        <GuideStep n={7}>
+        <GuideStep n={8}>
           Go to <ExternalA href="https://search.google.com/search-console">Google Search Console</ExternalA> and select your property.
         </GuideStep>
-        <GuideStep n={8}>
+        <GuideStep n={9}>
           Go to <strong>Settings → Users and permissions → Add user</strong>. Paste the service account email and set permission to <strong>Full</strong>.
         </GuideStep>
-        <GuideStep n={9}>
-          Your GSC site URL is the property URL — it must exactly match what's in GSC (e.g. <code className="bg-blue-100 px-1 rounded">https://example.com/</code> or <code className="bg-blue-100 px-1 rounded">sc-domain:example.com</code>).
+        <GuideStep n={10}>
+          Your GSC site URL must exactly match what's in GSC (e.g. <code className="bg-blue-100 px-1 rounded">https://example.com/</code> or <code className="bg-blue-100 px-1 rounded">sc-domain:example.com</code>).
         </GuideStep>
       </Guide>
 
