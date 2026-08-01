@@ -436,7 +436,7 @@ export function KeywordsTab({ projectName }: { projectName: string }) {
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-100">
                   <th className="px-4 py-2.5 text-left font-medium text-slate-500 uppercase tracking-wide">Status</th>
-                  <th className="px-4 py-2.5 text-left font-medium text-slate-500 uppercase tracking-wide">Signal</th>
+                  <th className="px-4 py-2.5 text-left font-medium text-slate-500 uppercase tracking-wide">How it's detected</th>
                   <th className="px-4 py-2.5 text-left font-medium text-slate-500 uppercase tracking-wide">What it means</th>
                   <th className="px-4 py-2.5 text-left font-medium text-slate-500 uppercase tracking-wide">Recommended action</th>
                 </tr>
@@ -445,32 +445,32 @@ export function KeywordsTab({ projectName }: { projectName: string }) {
                 {[
                   {
                     badge: 'Covered', cls: 'bg-emerald-100 text-emerald-700',
-                    signal: 'Position ≤ 3 + clicks',
-                    meaning: 'You rank in the top 3 and users are clicking your page.',
-                    action: 'Maintain — do not rewrite. Add internal links from new articles to reinforce it.',
+                    signal: 'Your page ranks in the top 3 on Google and people are clicking it.',
+                    meaning: 'This keyword is working. Your page already dominates this topic.',
+                    action: 'Maintain — do not rewrite this page. Add internal links from new articles to keep it strong.',
                   },
                   {
                     badge: 'Quick Win', cls: 'bg-amber-100 text-amber-700',
-                    signal: 'Position 4–10 + clicks',
-                    meaning: 'You\'re on page 1 but not in the top 3. A small improvement can push you up.',
+                    signal: 'Your page appears on page 1 of Google (positions 4–10) and is getting some clicks.',
+                    meaning: 'You\'re close to the top — a small improvement is enough to reach position 1–3.',
                     action: 'Optimize — improve the title tag, add 2–3 internal links, and refresh the intro paragraph.',
                   },
                   {
                     badge: 'Opportunity', cls: 'bg-blue-100 text-blue-700',
-                    signal: 'Impressions > 0, position > 10',
-                    meaning: 'Google is showing your page for this keyword but it\'s buried on page 2 or lower.',
+                    signal: 'Google is showing your page in results but it\'s on page 2 or lower (position 11+).',
+                    meaning: 'Google knows your page exists and is relevant, but the content isn\'t strong enough to reach page 1 yet.',
                     action: 'Rewrite — expand the content depth, add an FAQ section, and strengthen on-page SEO.',
                   },
                   {
                     badge: 'Gap', cls: 'bg-red-100 text-red-600',
-                    signal: 'No impressions in GSC',
-                    meaning: 'Google does not rank your site for this keyword at all — no page covers it.',
+                    signal: 'Google Search Console shows zero impressions — your site never appeared for this keyword.',
+                    meaning: 'You have no page targeting this keyword. Google has nothing to rank.',
                     action: 'Create — write new content (pillar page or spoke article) targeting this keyword.',
                   },
                   {
                     badge: 'Watch', cls: 'bg-slate-100 text-slate-500',
-                    signal: 'Manually set',
-                    meaning: 'Flagged for monitoring — ranking is unstable or the keyword is in review.',
+                    signal: 'Manually flagged.',
+                    meaning: 'Ranking is unstable or the keyword is under review.',
                     action: 'Monitor — check again in 2–4 weeks before deciding on an action.',
                   },
                 ].map(({ badge, cls, signal, meaning, action }) => (
