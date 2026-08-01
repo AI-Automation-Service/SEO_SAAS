@@ -96,7 +96,7 @@ def test_key(body: TestKeyRequest, _: User = Depends(get_current_user)):
     """Test a key before saving it. Does NOT persist."""
     if body.service == "openai":
         try:
-            with httpx.Client(timeout=10) as client:
+            with httpx.Client(timeout=30) as client:
                 r = client.get(
                     "https://api.openai.com/v1/models",
                     headers={"Authorization": f"Bearer {body.value.strip()}"},
