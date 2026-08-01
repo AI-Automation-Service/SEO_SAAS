@@ -175,7 +175,7 @@ export function ProjectDetailPage() {
       <div className="p-6">
         {activeTab === 'overview' && <OverviewTab project={project} />}
         {activeTab === 'integrations' && <IntegrationsTab projectName={name!} />}
-        {activeTab === 'knowledge' && <KnowledgeTab />}
+        {activeTab === 'knowledge' && <KnowledgeTab projectName={name!} />}
         {activeTab === 'keywords' && <KeywordsTab projectName={name!} />}
         {activeTab === 'strategy' && <StrategyTab projectName={name!} project={project} />}
         {activeTab === 'content' && <ContentTab />}

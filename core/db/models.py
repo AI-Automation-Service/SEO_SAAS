@@ -91,6 +91,28 @@ class Keyword(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class ProjectKnowledge(Base):
+    """Per-project knowledge base — injected as context into every AI agent prompt."""
+
+    __tablename__ = "project_knowledge"
+    __table_args__ = (
+        UniqueConstraint("user_id", "project_name", name="uq_project_knowledge"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    project_name: Mapped[str] = mapped_column(String, nullable=False)
+
+    about: Mapped[str | None] = mapped_column(String, nullable=True)
+    products_services: Mapped[str | None] = mapped_column(String, nullable=True)
+    target_audience: Mapped[str | None] = mapped_column(String, nullable=True)
+    brand_voice: Mapped[str | None] = mapped_column(String, nullable=True)
+    competitors_notes: Mapped[str | None] = mapped_column(String, nullable=True)
+    seo_context: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class SitePage(Base):
     """URLs extracted from the site's XML sitemap."""
 

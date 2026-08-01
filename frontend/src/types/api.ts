@@ -146,6 +146,17 @@ export interface KeywordSummary {
   unclustered: number
 }
 
+// Knowledge Base types
+export interface ProjectKnowledge {
+  about: string | null
+  products_services: string | null
+  target_audience: string | null
+  brand_voice: string | null
+  competitors_notes: string | null
+  seo_context: string | null
+  updated_at: string | null
+}
+
 // Sitemap types
 export interface SitemapSummary {
   total: number

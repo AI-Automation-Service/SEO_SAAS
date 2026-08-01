@@ -15,6 +15,7 @@ import type {
   RegisterRequest,
   Keyword,
   KeywordSummary,
+  ProjectKnowledge,
   SitemapSummary,
   StrategyResult,
   SpeedResult,
@@ -240,6 +241,14 @@ export const speedApi = {
     api
       .get<SpeedResult>(`/api/projects/${name}/speed`, { params: { strategy } })
       .then((r) => r.data),
+}
+
+// ── Knowledge Base ────────────────────────────────────────────────────────────
+export const knowledgeApi = {
+  get: (name: string) =>
+    api.get<ProjectKnowledge>(`/api/projects/${name}/knowledge`).then((r) => r.data),
+  save: (name: string, body: Omit<ProjectKnowledge, 'updated_at'>) =>
+    api.put<ProjectKnowledge>(`/api/projects/${name}/knowledge`, body).then((r) => r.data),
 }
 
 // ── Health ────────────────────────────────────────────────────────────────────

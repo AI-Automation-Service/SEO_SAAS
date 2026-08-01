@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from agents.base import SkillAgent
 from api.dependencies import get_current_user, get_db, get_project_context, get_secret_manager
 from api.routers.api_keys import get_user_secret
-from core.db.models import Keyword, SitePage, User
+from core.db.models import Keyword, ProjectKnowledge, SitePage, User
 from core.models.context import ProjectContext
 from core.secrets import SecretManager
 from integrations.base import IntegrationError
@@ -448,12 +448,26 @@ def run_cluster_agent(
     except FileNotFoundError as e:
         raise HTTPException(500, str(e))
 
+    # Build knowledge context once for all batches
+    kb = db.query(ProjectKnowledge).filter(
+        ProjectKnowledge.user_id == current_user.id,
+        ProjectKnowledge.project_name == context.name,
+    ).first()
+    kb_prefix = ""
+    if kb:
+        parts = []
+        if kb.about: parts.append(f"Business: {kb.about.strip()[:300]}")
+        if kb.products_services: parts.append(f"Products/Services: {kb.products_services.strip()[:200]}")
+        if kb.target_audience: parts.append(f"Target audience: {kb.target_audience.strip()[:200]}")
+        if parts:
+            kb_prefix = "Context:\n" + "\n".join(parts) + "\n\n"
+
     keywords = [r.keyword for r in rows]
     all_results: list[dict] = []
 
     for i in range(0, len(keywords), _BATCH_SIZE):
         batch = keywords[i : i + _BATCH_SIZE]
-        user_msg = _CLUSTER_USER_MSG.format(keywords="\n".join(f"- {kw}" for kw in batch))
+        user_msg = kb_prefix + _CLUSTER_USER_MSG.format(keywords="\n".join(f"- {kw}" for kw in batch))
 
         try:
             raw = agent.run(user_msg, timeout=90, json_mode=True)

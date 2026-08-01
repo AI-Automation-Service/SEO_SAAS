@@ -20,6 +20,7 @@ from api.routers.keywords import router as keywords_router
 from api.routers.speed import router as speed_router
 from api.routers.strategy import router as strategy_router
 from api.routers.sitemap import router as sitemap_router
+from api.routers.knowledge import router as knowledge_router
 from core.db.base import create_tables
 
 
@@ -55,6 +56,7 @@ app.include_router(keywords_router, prefix="/api")
 app.include_router(speed_router, prefix="/api")
 app.include_router(strategy_router, prefix="/api")
 app.include_router(sitemap_router, prefix="/api")
+app.include_router(knowledge_router, prefix="/api")
 
 
 @app.get("/health", response_model=HealthResponse, tags=["health"])

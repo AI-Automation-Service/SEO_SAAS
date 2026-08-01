@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from agents.base import SkillAgent
 from api.dependencies import get_current_user, get_db, get_project_context
 from api.routers.api_keys import get_user_secret
-from core.db.models import Keyword, SitePage, User
+from core.db.models import Keyword, ProjectKnowledge, SitePage, User
 from core.models.context import ProjectContext
 
 router = APIRouter(prefix="/projects/{name}/strategy", tags=["strategy"])
@@ -81,6 +81,35 @@ def _sitemap_block(db: Session, user_id: int, project_name: str) -> str:
     )
 
 
+def _knowledge_block(db: Session, user_id: int, project_name: str) -> str:
+    kb = (
+        db.query(ProjectKnowledge)
+        .filter(
+            ProjectKnowledge.user_id == user_id,
+            ProjectKnowledge.project_name == project_name,
+        )
+        .first()
+    )
+    if not kb:
+        return ""
+    parts = []
+    if kb.about:
+        parts.append(f"About the Business:\n{kb.about.strip()}")
+    if kb.products_services:
+        parts.append(f"Products & Services:\n{kb.products_services.strip()}")
+    if kb.target_audience:
+        parts.append(f"Target Audience:\n{kb.target_audience.strip()}")
+    if kb.brand_voice:
+        parts.append(f"Brand Voice & Tone:\n{kb.brand_voice.strip()}")
+    if kb.competitors_notes:
+        parts.append(f"Competitor Notes:\n{kb.competitors_notes.strip()}")
+    if kb.seo_context:
+        parts.append(f"SEO Context:\n{kb.seo_context.strip()}")
+    if not parts:
+        return ""
+    return "\n\n=== KNOWLEDGE BASE ===\n" + "\n\n".join(parts) + "\n=== END KNOWLEDGE BASE ==="
+
+
 def _get_keywords(db: Session, user_id: int, project_name: str) -> list:
     return (
         db.query(Keyword)
@@ -114,8 +143,10 @@ def run_seo_plan(
 
     cluster_count = len({r.cluster for r in rows if r.cluster})
     sitemap = _sitemap_block(db, current_user.id, context.name)
+    knowledge = _knowledge_block(db, current_user.id, context.name)
     msg = (
-        f"{_project_block(context)}\n\n"
+        f"{_project_block(context)}"
+        f"{knowledge}\n\n"
         f"Keyword data: {len(rows)} keywords across {cluster_count} clusters.\n\n"
         f"Cluster summary:\n{_cluster_summary(rows)}"
         f"{sitemap}\n\n"
@@ -142,8 +173,10 @@ def run_content_strategy(
     bofu = sum(1 for r in rows if r.funnel_stage == "bofu")
 
     sitemap = _sitemap_block(db, current_user.id, context.name)
+    knowledge = _knowledge_block(db, current_user.id, context.name)
     msg = (
-        f"{_project_block(context)}\n\n"
+        f"{_project_block(context)}"
+        f"{knowledge}\n\n"
         f"Funnel breakdown: TOFU={tofu}, MOFU={mofu}, BOFU={bofu}\n\n"
         f"Cluster summary:\n{_cluster_summary(rows)}"
         f"{sitemap}\n\n"
@@ -173,8 +206,10 @@ def run_site_architecture(
     )[:2000]
 
     sitemap = _sitemap_block(db, current_user.id, context.name)
+    knowledge = _knowledge_block(db, current_user.id, context.name)
     msg = (
-        f"{_project_block(context)}\n\n"
+        f"{_project_block(context)}"
+        f"{knowledge}\n\n"
         f"Cluster summary:\n{_cluster_summary(rows)}"
         f"{sitemap}\n\n"
         f"Sample keyword → suggested URL mappings:\n{url_sample}\n\n"
@@ -208,9 +243,11 @@ def run_seo_flow(
     if not kw:
         raise HTTPException(404, "Keyword not found.")
 
+    knowledge = _knowledge_block(db, current_user.id, context.name)
     msg = (
         f"Business: {context.config.business_name} ({context.config.business_type})\n"
-        f"Website: {context.config.website}\n\n"
+        f"Website: {context.config.website}"
+        f"{knowledge}\n\n"
         f"Keyword: {kw.keyword}\n"
         f"Status: {kw.status}\n"
         f"Position: {kw.position or 'not ranking'}\n"
@@ -260,10 +297,12 @@ def run_improve_page(
             f"  CTR: {f'{kw.ctr:.1%}' if kw.ctr else 'N/A'}\n"
         )
 
+    knowledge = _knowledge_block(db, current_user.id, context.name)
     msg = (
         f"Business: {context.config.business_name} ({context.config.business_type})\n"
         f"Website: {context.config.website}\n"
-        f"Country: {context.config.country}, Language: {context.config.language}\n\n"
+        f"Country: {context.config.country}, Language: {context.config.language}"
+        f"{knowledge}\n\n"
         f"Existing page to improve:\n"
         f"  URL: {kw.existing_url}\n"
         f"  Primary keyword: {kw.keyword}\n"
@@ -300,12 +339,14 @@ def run_competitor_page(
             "Competitor URL not found in project config. Add it in your project settings first.",
         )
 
+    knowledge = _knowledge_block(db, current_user.id, context.name)
     msg = (
         f"Our product: {context.config.business_name} ({context.config.business_type})\n"
         f"Our website: {context.config.website}\n"
         f"Target audience: {context.config.target_audience}\n"
         f"Tone of voice: {context.config.tone_of_voice}\n"
-        f"Our SEO goals: {', '.join(context.config.seo_goals)}\n\n"
+        f"Our SEO goals: {', '.join(context.config.seo_goals)}"
+        f"{knowledge}\n\n"
         f"Competitor: {body.competitor_url}\n\n"
         "Generate a full SEO-optimized comparison page. Include:\n"
         "1. Meta title + meta description (target keyword: '[our brand] vs [competitor name]')\n"
