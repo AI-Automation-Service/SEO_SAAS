@@ -52,11 +52,21 @@ def list_projects(loader: ProjectLoader = Depends(get_project_loader)):
     return results
 
 
+PROJECT_LIMIT = 1  # free plan; raise per subscription tier later
+
 @router.post("", response_model=ProjectCreated, status_code=201)
 def create_project(
     body: CreateProjectRequest,
+    loader: ProjectLoader = Depends(get_project_loader),
     scaffolder: ProjectScaffolder = Depends(get_scaffolder),
 ):
+    existing = loader.list_projects()
+    if len(existing) >= PROJECT_LIMIT:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Plan limit reached — your current plan allows {PROJECT_LIMIT} project. "
+                   "Upgrade your subscription to add more.",
+        )
     try:
         project_dir = scaffolder.scaffold(body.name, cms=body.cms)
         return ProjectCreated(
