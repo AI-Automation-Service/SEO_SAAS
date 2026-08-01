@@ -14,11 +14,13 @@ import { cn } from '@/lib/utils'
 function Tip({ text }: { text: string }) {
   return (
     <span className="relative group/tip inline-flex items-center ml-0.5">
-      <HelpCircle size={10} className="text-slate-300 hover:text-slate-500 cursor-help transition-colors" />
+      <HelpCircle size={10} className="text-slate-300 hover:text-slate-500 cursor-help transition-colors shrink-0" />
       <span
         className={cn(
-          'pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 z-50',
-          'w-52 bg-slate-800 text-slate-100 text-xs rounded-lg px-3 py-2 leading-relaxed shadow-xl',
+          'pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 z-[100]',
+          // whitespace-normal overrides the parent <th> whitespace-nowrap
+          'w-56 whitespace-normal break-words',
+          'bg-slate-800 text-slate-100 text-[11px] leading-[1.5] rounded-lg px-2.5 py-2 shadow-xl',
           'opacity-0 group-hover/tip:opacity-100 transition-opacity duration-150',
         )}
       >
@@ -134,9 +136,49 @@ function CompBar({ val }: { val: number | null }) {
 
 type SortField = 'keyword' | 'clicks' | 'impressions' | 'position' | 'volume' | 'ctr' | 'cluster'
 
+const DEFAULT_COL_WIDTHS: Record<string, number> = {
+  keyword:     280,
+  cluster:     140,
+  type:         90,
+  funnel:       80,
+  status:      110,
+  volume:       70,
+  clicks:       70,
+  impressions:  80,
+  position:     60,
+  ctr:          60,
+  competition:  90,
+  gap:          55,
+  url:         180,
+}
+
 export function KeywordsTab({ projectName }: { projectName: string }) {
   const qc = useQueryClient()
   const fileRef = useRef<HTMLInputElement>(null)
+
+  // Column resize state
+  const [colWidths, setColWidths] = useState<Record<string, number>>(DEFAULT_COL_WIDTHS)
+
+  const tableWidth = useMemo(
+    () => Object.values(colWidths).reduce((a, b) => a + b, 0) + 32,
+    [colWidths],
+  )
+
+  function startResize(col: string, e: React.MouseEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    const startX = e.clientX
+    const startW = colWidths[col]
+    const onMove = (me: MouseEvent) => {
+      setColWidths((prev) => ({ ...prev, [col]: Math.max(50, startW + me.clientX - startX) }))
+    }
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }
 
   // Filters
   const [statusFilter, setStatusFilter] = useState<string>('')
@@ -400,56 +442,68 @@ export function KeywordsTab({ projectName }: { projectName: string }) {
       {/* Table */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[900px]">
+          <table className="text-sm" style={{ tableLayout: 'fixed', width: `${tableWidth}px` }}>
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50">
-                <Th field="keyword" sort={sort} dir={sortDir} onClick={toggleSort} className="min-w-[280px] sticky left-0 bg-slate-50 z-10">Keyword</Th>
-                <Th field="cluster" sort={sort} dir={sortDir} onClick={toggleSort}>
+                <Th field="keyword" col="keyword" sort={sort} dir={sortDir} onClick={toggleSort}
+                    onResize={startResize} style={{ width: colWidths.keyword }}
+                    className="sticky left-0 bg-slate-50 z-10">
+                  Keyword
+                </Th>
+                <Th field="cluster" col="cluster" sort={sort} dir={sortDir} onClick={toggleSort}
+                    onResize={startResize} style={{ width: colWidths.cluster }}>
                   Cluster
                   <Tip text="Keywords grouped into a topic by the Cluster Agent. Each cluster has one Hub (pillar page) and multiple Spokes (supporting articles)." />
                 </Th>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-slate-500 uppercase tracking-wide whitespace-nowrap">
+                <STh col="type" onResize={startResize} style={{ width: colWidths.type }}>
                   Type
                   <Tip text="Standard: regular keyword. Question: starts with how/what/why/etc. Branded: includes your brand name. Competitor: includes a competitor name." />
-                </th>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-slate-500 uppercase tracking-wide whitespace-nowrap">
+                </STh>
+                <STh col="funnel" onResize={startResize} style={{ width: colWidths.funnel }}>
                   Funnel
                   <Tip text="ToFu (Top of Funnel): user is learning — write educational content. MoFu (Middle): user is comparing options — write reviews/comparisons. BoFu (Bottom): user is ready to buy — write sales/service pages." />
-                </th>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-slate-500 uppercase tracking-wide whitespace-nowrap">
+                </STh>
+                <STh col="status" onResize={startResize} style={{ width: colWidths.status }}>
                   Status
                   <Tip text="Covered: ranking top 3 — maintain it. Quick Win: ranking 4–10 — small push gets you to top 3. Opportunity: showing in results but below pos 10 — needs stronger content. Gap: not ranking at all — create new content." />
-                </th>
-                <Th field="volume" sort={sort} dir={sortDir} onClick={toggleSort} className="text-right whitespace-nowrap">
+                </STh>
+                <Th field="volume" col="volume" sort={sort} dir={sortDir} onClick={toggleSort}
+                    onResize={startResize} style={{ width: colWidths.volume }} className="text-right">
                   Vol.
                   <Tip text="Average monthly searches from Google Keyword Planner. Shows how popular this keyword is." />
                 </Th>
-                <Th field="clicks" sort={sort} dir={sortDir} onClick={toggleSort} className="text-right whitespace-nowrap">
+                <Th field="clicks" col="clicks" sort={sort} dir={sortDir} onClick={toggleSort}
+                    onResize={startResize} style={{ width: colWidths.clicks }} className="text-right">
                   Clicks
                   <Tip text="Actual clicks your site received from Google Search for this keyword in the last 90 days (from Google Search Console)." />
                 </Th>
-                <Th field="impressions" sort={sort} dir={sortDir} onClick={toggleSort} className="text-right whitespace-nowrap">
+                <Th field="impressions" col="impressions" sort={sort} dir={sortDir} onClick={toggleSort}
+                    onResize={startResize} style={{ width: colWidths.impressions }} className="text-right">
                   Impr.
                   <Tip text="Impressions: how many times your page appeared in Google search results for this keyword in the last 90 days. High impressions + low clicks = bad title/description." />
                 </Th>
-                <Th field="position" sort={sort} dir={sortDir} onClick={toggleSort} className="text-right whitespace-nowrap">
+                <Th field="position" col="position" sort={sort} dir={sortDir} onClick={toggleSort}
+                    onResize={startResize} style={{ width: colWidths.position }} className="text-right">
                   Pos.
                   <Tip text="Average position in Google search results. Position 1 = top of page 1. Below 10 = page 2 or lower." />
                 </Th>
-                <Th field="ctr" sort={sort} dir={sortDir} onClick={toggleSort} className="text-right whitespace-nowrap">
+                <Th field="ctr" col="ctr" sort={sort} dir={sortDir} onClick={toggleSort}
+                    onResize={startResize} style={{ width: colWidths.ctr }} className="text-right">
                   CTR
                   <Tip text="Click-through rate: percentage of people who clicked your result after seeing it. Low CTR means your title or meta description needs improvement." />
                 </Th>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-slate-500 uppercase tracking-wide whitespace-nowrap">
+                <STh col="competition" onResize={startResize} style={{ width: colWidths.competition }}>
                   Comp.
                   <Tip text="Competition score (0–100) from Google Keyword Planner. Higher = more advertisers bidding = harder to rank organically. Low competition + decent volume = best opportunity." />
-                </th>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-slate-500 uppercase tracking-wide w-8 whitespace-nowrap">
+                </STh>
+                <STh col="gap" onResize={startResize} style={{ width: colWidths.gap }}>
                   Gap
                   <Tip text="Competitor gap: this keyword drives traffic to competitor sites but not to yours. High-priority target." />
-                </th>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-slate-500 uppercase tracking-wide whitespace-nowrap">Current URL</th>
-                <th className="px-3 py-2.5" />
+                </STh>
+                <STh col="url" onResize={startResize} style={{ width: colWidths.url }}>
+                  Current URL
+                </STh>
+                <th className="px-3 py-2.5 w-8" />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -515,20 +569,39 @@ function Select({
   )
 }
 
+// ── Resize handle ─────────────────────────────────────────────────────────────
+
+function RHandle({ col, onStart }: { col: string; onStart: (col: string, e: React.MouseEvent) => void }) {
+  return (
+    <span
+      className="absolute right-0 inset-y-0 w-2 cursor-col-resize group/rh z-10"
+      onMouseDown={(e) => onStart(col, e)}
+    >
+      <span className="absolute right-0 top-2 bottom-2 w-px bg-slate-200 group-hover/rh:bg-emerald-400 transition-colors" />
+    </span>
+  )
+}
+
+// ── Sortable column header ─────────────────────────────────────────────────────
+
 function Th({
-  field, sort, dir, onClick, children, className,
+  field, col, sort, dir, onClick, onResize, children, className, style,
 }: {
   field: SortField
+  col?: string
   sort: string
   dir: 'asc' | 'desc'
   onClick: (f: SortField) => void
+  onResize?: (col: string, e: React.MouseEvent) => void
   children: React.ReactNode
   className?: string
+  style?: React.CSSProperties
 }) {
   return (
     <th
+      style={style}
       className={cn(
-        'px-3 py-2.5 text-left text-xs font-medium text-slate-500 uppercase tracking-wide cursor-pointer select-none hover:text-slate-700',
+        'relative px-3 py-2.5 text-left text-xs font-medium text-slate-500 uppercase tracking-wide cursor-pointer select-none hover:text-slate-700',
         className,
       )}
       onClick={() => onClick(field)}
@@ -537,6 +610,32 @@ function Th({
         {children}
         <SortIcon field={field} sort={sort} dir={dir} />
       </span>
+      {onResize && col && <RHandle col={col} onStart={onResize} />}
+    </th>
+  )
+}
+
+// ── Static (non-sortable) column header ───────────────────────────────────────
+
+function STh({
+  col, onResize, children, className, style,
+}: {
+  col: string
+  onResize: (col: string, e: React.MouseEvent) => void
+  children: React.ReactNode
+  className?: string
+  style?: React.CSSProperties
+}) {
+  return (
+    <th
+      style={style}
+      className={cn(
+        'relative px-3 py-2.5 text-left text-xs font-medium text-slate-500 uppercase tracking-wide whitespace-nowrap',
+        className,
+      )}
+    >
+      {children}
+      <RHandle col={col} onStart={onResize} />
     </th>
   )
 }
@@ -553,12 +652,12 @@ function KeywordRow({ kw, onDelete }: { kw: Keyword; onDelete: () => void }) {
           {kw.snippet_opportunity && (
             <span title="Featured snippet opportunity"><Zap size={11} className="text-violet-500 shrink-0" /></span>
           )}
-          <span className="font-medium text-slate-800 truncate max-w-[280px]">{kw.keyword}</span>
+          <span className="font-medium text-slate-800 truncate">{kw.keyword}</span>
         </div>
       </td>
 
       {/* Cluster */}
-      <td className="px-3 py-2.5 max-w-[140px]">
+      <td className="px-3 py-2.5 overflow-hidden">
         <span className="text-xs text-slate-500 truncate block">
           {kw.cluster ?? <span className="text-slate-300">—</span>}
         </span>
@@ -622,13 +721,13 @@ function KeywordRow({ kw, onDelete }: { kw: Keyword; onDelete: () => void }) {
       </td>
 
       {/* Current URL */}
-      <td className="px-3 py-2.5 max-w-[160px]">
+      <td className="px-3 py-2.5 overflow-hidden">
         {kw.existing_url ? (
           <a
             href={kw.existing_url}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline truncate max-w-[150px]"
+            className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline truncate"
           >
             <ExternalLink size={10} className="shrink-0" />
             <span className="truncate">{kw.existing_url.replace(/^https?:\/\/[^/]+/, '')}</span>
