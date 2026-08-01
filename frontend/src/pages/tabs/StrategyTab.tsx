@@ -10,6 +10,7 @@ import {
   Copy,
   Check,
   Lock,
+  RotateCcw,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { strategyApi, keywordsApi, getErrorMessage } from '@/api/client'
@@ -80,12 +81,13 @@ interface SkillCardProps {
   output: SkillOutput | null
   isLoading: boolean
   onGenerate: () => void
+  onReset: () => void
   onToggleExpand: () => void
   disabled?: boolean
 }
 
 function SkillCard({
-  icon, title, description, output, isLoading, onGenerate, onToggleExpand, disabled,
+  icon, title, description, output, isLoading, onGenerate, onReset, onToggleExpand, disabled,
 }: SkillCardProps) {
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-5">
@@ -99,23 +101,35 @@ function SkillCard({
             <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{description}</p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onGenerate}
-          disabled={isLoading || disabled}
-          className={cn(
-            'shrink-0 px-4 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer',
-            isLoading
-              ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-              : disabled
-              ? 'bg-slate-100 text-slate-300 cursor-not-allowed'
-              : output
-              ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              : 'bg-emerald-500 text-white hover:bg-emerald-600',
+        <div className="flex items-center gap-2 shrink-0">
+          {output && !isLoading && (
+            <button
+              type="button"
+              onClick={onReset}
+              title="Clear output"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+            >
+              <RotateCcw size={13} />
+            </button>
           )}
-        >
-          {isLoading ? 'Generating...' : output ? 'Regenerate' : 'Generate'}
-        </button>
+          <button
+            type="button"
+            onClick={onGenerate}
+            disabled={isLoading || disabled}
+            className={cn(
+              'px-4 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer',
+              isLoading
+                ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                : disabled
+                ? 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                : output
+                ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                : 'bg-emerald-500 text-white hover:bg-emerald-600',
+            )}
+          >
+            {isLoading ? 'Generating...' : output ? 'Regenerate' : 'Generate'}
+          </button>
+        </div>
       </div>
 
       {isLoading && (
@@ -150,6 +164,14 @@ export function StrategyTab({ projectName, project }: StrategyTabProps) {
 
   function setOutput(key: SkillKey, text: string) {
     setOutputs((prev) => ({ ...prev, [key]: { text, expanded: true } }))
+  }
+
+  function resetOutput(key: SkillKey) {
+    setOutputs((prev) => {
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
   }
 
   function toggleExpand(key: SkillKey) {
@@ -235,6 +257,7 @@ export function StrategyTab({ projectName, project }: StrategyTabProps) {
         output={outputs.plan ?? null}
         isLoading={planMut.isPending}
         onGenerate={() => planMut.mutate()}
+        onReset={() => resetOutput('plan')}
         onToggleExpand={() => toggleExpand('plan')}
       />
 
@@ -245,6 +268,7 @@ export function StrategyTab({ projectName, project }: StrategyTabProps) {
         output={outputs.content ?? null}
         isLoading={contentMut.isPending}
         onGenerate={() => contentMut.mutate()}
+        onReset={() => resetOutput('content')}
         onToggleExpand={() => toggleExpand('content')}
       />
 
@@ -255,6 +279,7 @@ export function StrategyTab({ projectName, project }: StrategyTabProps) {
         output={outputs.architecture ?? null}
         isLoading={archMut.isPending}
         onGenerate={() => archMut.mutate()}
+        onReset={() => resetOutput('architecture')}
         onToggleExpand={() => toggleExpand('architecture')}
       />
 
@@ -296,25 +321,37 @@ export function StrategyTab({ projectName, project }: StrategyTabProps) {
               ))}
             </div>
 
-            <button
-              type="button"
-              onClick={() => competitorMut.mutate()}
-              disabled={!selectedCompetitor || competitorMut.isPending}
-              className={cn(
-                'px-4 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer',
-                !selectedCompetitor || competitorMut.isPending
-                  ? 'bg-slate-100 text-slate-300 cursor-not-allowed'
-                  : outputs.competitorPage
-                  ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  : 'bg-emerald-500 text-white hover:bg-emerald-600',
+            <div className="flex items-center gap-2">
+              {outputs.competitorPage && !competitorMut.isPending && (
+                <button
+                  type="button"
+                  onClick={() => resetOutput('competitorPage')}
+                  title="Clear output"
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  <RotateCcw size={13} />
+                </button>
               )}
-            >
-              {competitorMut.isPending
-                ? 'Generating...'
-                : outputs.competitorPage
-                ? 'Regenerate'
-                : 'Generate Comparison Page'}
-            </button>
+              <button
+                type="button"
+                onClick={() => competitorMut.mutate()}
+                disabled={!selectedCompetitor || competitorMut.isPending}
+                className={cn(
+                  'px-4 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer',
+                  !selectedCompetitor || competitorMut.isPending
+                    ? 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                    : outputs.competitorPage
+                    ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    : 'bg-emerald-500 text-white hover:bg-emerald-600',
+                )}
+              >
+                {competitorMut.isPending
+                  ? 'Generating...'
+                  : outputs.competitorPage
+                  ? 'Regenerate'
+                  : 'Generate Comparison Page'}
+              </button>
+            </div>
 
             {competitorMut.isPending && (
               <div className="flex items-center gap-2 text-xs text-slate-400">

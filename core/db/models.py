@@ -82,8 +82,10 @@ class Keyword(Base):
     snippet_opportunity: Mapped[bool] = mapped_column(Boolean, default=False)
     competitor_gap: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    # gsc / planner / both / manual
+    # gsc / planner / both / manual / sitemap
     source: Mapped[str] = mapped_column(String, default="manual")
+    # page / post / unknown — set for sitemap-derived keywords
+    page_type: Mapped[str | None] = mapped_column(String, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -102,4 +104,5 @@ class SitePage(Base):
     project_name: Mapped[str] = mapped_column(String, nullable=False, index=True)
     url: Mapped[str] = mapped_column(String, nullable=False)
     slug: Mapped[str] = mapped_column(String, nullable=False)
+    page_type: Mapped[str] = mapped_column(String, default="unknown")  # page / post / unknown
     synced_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

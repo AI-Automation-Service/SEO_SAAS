@@ -14,7 +14,10 @@ class SkillAgent:
         self.client = OpenAI(api_key=openai_key)
         self.model = model
 
-    def run(self, user_message: str, timeout: int = 180) -> str:
+    def run(self, user_message: str, timeout: int = 180, json_mode: bool = False) -> str:
+        kwargs: dict = {}
+        if json_mode:
+            kwargs["response_format"] = {"type": "json_object"}
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[
@@ -22,5 +25,6 @@ class SkillAgent:
                 {"role": "user", "content": user_message},
             ],
             timeout=timeout,
+            **kwargs,
         )
         return response.choices[0].message.content or ""

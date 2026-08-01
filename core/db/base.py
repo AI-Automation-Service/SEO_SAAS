@@ -36,3 +36,13 @@ def _migrate_columns() -> None:
             conn.commit()
         except Exception:
             pass  # column already exists
+        try:
+            conn.execute(sql_text("ALTER TABLE keywords ADD COLUMN page_type TEXT"))
+            conn.commit()
+        except Exception:
+            pass
+        try:
+            conn.execute(sql_text("ALTER TABLE site_pages ADD COLUMN page_type TEXT DEFAULT 'unknown'"))
+            conn.commit()
+        except Exception:
+            pass

@@ -228,6 +228,64 @@ def run_seo_flow(
     return StrategyResult(skill="seo-flow", output=_run_skill("seo-flow", openai_key, msg, timeout=120))
 
 
+@router.post("/improve-page/{keyword_id}", response_model=StrategyResult)
+def run_improve_page(
+    keyword_id: int,
+    context: ProjectContext = Depends(get_project_context),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    openai_key = get_user_secret("openai", current_user.id, db)
+    kw = (
+        db.query(Keyword)
+        .filter(
+            Keyword.id == keyword_id,
+            Keyword.user_id == current_user.id,
+            Keyword.project_name == context.name,
+        )
+        .first()
+    )
+    if not kw:
+        raise HTTPException(404, "Keyword not found.")
+    if not kw.existing_url:
+        raise HTTPException(400, "No existing page URL for this keyword.")
+
+    gsc_section = ""
+    if kw.position or kw.impressions:
+        gsc_section = (
+            f"\nGSC Performance:\n"
+            f"  Position: {kw.position or 'N/A'}\n"
+            f"  Impressions: {kw.impressions or 0}\n"
+            f"  Clicks: {kw.clicks or 0}\n"
+            f"  CTR: {f'{kw.ctr:.1%}' if kw.ctr else 'N/A'}\n"
+        )
+
+    msg = (
+        f"Business: {context.config.business_name} ({context.config.business_type})\n"
+        f"Website: {context.config.website}\n"
+        f"Country: {context.config.country}, Language: {context.config.language}\n\n"
+        f"Existing page to improve:\n"
+        f"  URL: {kw.existing_url}\n"
+        f"  Primary keyword: {kw.keyword}\n"
+        f"  Page type: {kw.page_type or 'unknown'} (WordPress {kw.page_type or 'page/post'})\n"
+        f"  Cluster: {kw.cluster or 'unclustered'} ({'hub page' if kw.is_hub else 'supporting page'})\n"
+        f"  Intent: {kw.intent or 'N/A'}, Funnel: {kw.funnel_stage or 'N/A'}\n"
+        f"  Status: {kw.status}"
+        f"{gsc_section}\n"
+        "This page already exists on the site. Do NOT suggest creating a new page.\n\n"
+        "Provide a detailed improvement plan covering:\n"
+        "1. On-page SEO: title tag, meta description, H1, heading structure — write the exact improved versions\n"
+        "2. Content gaps: what sections, topics, or depth is missing based on the keyword and funnel stage\n"
+        "3. FAQ block: write 3-5 FAQ questions + answers optimized for People Also Ask (use QAPage schema, not FAQPage)\n"
+        "4. Internal links: suggest 3-5 specific pages on the site to link FROM this page (with suggested anchor text)\n"
+        "5. External links: suggest 1-2 authoritative external sources to cite\n"
+        "6. Schema markup: identify the best schema type for this page and provide the JSON-LD snippet\n"
+        "7. Quick wins: if GSC data shows high impressions but low CTR, address title/description first\n\n"
+        "Output in Markdown with clear headings. Be specific and actionable."
+    )
+    return StrategyResult(skill="seo-page", output=_run_skill("seo-page", openai_key, msg, timeout=120))
+
+
 @router.post("/competitor-page", response_model=StrategyResult)
 def run_competitor_page(
     body: CompetitorPageRequest,

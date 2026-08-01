@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 from typing import Optional
 
@@ -6,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from api.dependencies import get_current_user, get_db, get_project_context
-from core.db.models import SitePage, User
+from core.db.models import Keyword, SitePage, User
 from core.models.context import ProjectContext
 from core.sitemap import fetch_sitemap_urls
 
@@ -18,10 +19,66 @@ class SitemapSummary(BaseModel):
     last_synced: Optional[datetime] = None
 
 
+def _slug_to_keyword(slug: str) -> str:
+    """Convert URL slug to keyword text: blog/hotel-booking-cairo → hotel booking cairo"""
+    last_part = slug.split("/")[-1]
+    last_part = re.sub(r"\.\w+$", "", last_part)  # strip file extensions
+    return re.sub(r"[-_]+", " ", last_part).strip()
+
+
+def _upsert_keyword_from_page(
+    db: Session,
+    user_id: int,
+    project_name: str,
+    url: str,
+    slug: str,
+    page_type: str,
+) -> None:
+    """Create or update a Keyword row derived from a sitemap URL."""
+    kw_text = _slug_to_keyword(slug)
+    if not kw_text or len(kw_text) < 3:
+        return
+
+    existing = (
+        db.query(Keyword)
+        .filter(
+            Keyword.user_id == user_id,
+            Keyword.project_name == project_name,
+            Keyword.keyword == kw_text,
+        )
+        .first()
+    )
+
+    if existing:
+        if not existing.existing_url:
+            existing.existing_url = url
+        if not existing.page_type:
+            existing.page_type = page_type
+    else:
+        intent = "informational"
+        db.add(Keyword(
+            user_id=user_id,
+            project_name=project_name,
+            keyword=kw_text,
+            keyword_type="question" if kw_text.split()[0].lower() in {
+                "how", "what", "why", "when", "where", "who", "which",
+                "can", "does", "is", "are", "will", "should", "do",
+            } else "standard",
+            intent=intent,
+            funnel_stage="tofu",
+            status="covered",
+            action="none",
+            source="sitemap",
+            existing_url=url,
+            page_type=page_type,
+        ))
+
+
 def sync_sitemap_pages(website: str, user_id: int, project_name: str, db: Session) -> int:
-    """Fetch sitemap and upsert pages. Returns count of pages found."""
+    """Fetch sitemap, upsert SitePages, and reverse-extract keywords. Returns page count."""
     pages = fetch_sitemap_urls(website)
     now = datetime.utcnow()
+
     for page in pages:
         existing = (
             db.query(SitePage)
@@ -34,6 +91,7 @@ def sync_sitemap_pages(website: str, user_id: int, project_name: str, db: Sessio
         )
         if existing:
             existing.slug = page["slug"]
+            existing.page_type = page["page_type"]
             existing.synced_at = now
         else:
             db.add(SitePage(
@@ -41,8 +99,12 @@ def sync_sitemap_pages(website: str, user_id: int, project_name: str, db: Sessio
                 project_name=project_name,
                 url=page["url"],
                 slug=page["slug"],
+                page_type=page["page_type"],
                 synced_at=now,
             ))
+
+        _upsert_keyword_from_page(db, user_id, project_name, page["url"], page["slug"], page["page_type"])
+
     db.commit()
     return len(pages)
 

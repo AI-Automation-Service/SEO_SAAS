@@ -8,6 +8,15 @@ import httpx
 
 _TIMEOUT = 15
 
+# Sub-sitemap name patterns → page_type
+_PAGE_PATTERNS = re.compile(r"page[s]?[-_]sitemap|sitemap[-_]page[s]?", re.IGNORECASE)
+_POST_PATTERNS = re.compile(r"post[s]?[-_]sitemap|sitemap[-_]post[s]?", re.IGNORECASE)
+# Skip non-content sub-sitemaps
+_SKIP_PATTERNS = re.compile(
+    r"category|categories|tag[s]?|author[s]?|product[s]?|attachment|taxonomy",
+    re.IGNORECASE,
+)
+
 
 def _normalize_slug(url: str) -> str:
     return urlparse(url).path.strip("/").lower()
@@ -17,10 +26,19 @@ def _parse_locs(xml: str) -> list[str]:
     return re.findall(r"<loc>\s*(https?://[^\s<]+)\s*</loc>", xml, re.IGNORECASE)
 
 
+def _page_type_from_sitemap_url(sitemap_url: str) -> str:
+    """Infer page_type from sub-sitemap URL name."""
+    if _PAGE_PATTERNS.search(sitemap_url):
+        return "page"
+    if _POST_PATTERNS.search(sitemap_url):
+        return "post"
+    return "unknown"
+
+
 def fetch_sitemap_urls(website: str) -> list[dict]:
     """
     Try sitemap_index.xml → sitemap.xml → robots.txt Sitemap: directive.
-    Returns list of {url, slug} dicts, filtered to same domain, deduplicated.
+    Returns list of {url, slug, page_type} dicts for pages/posts only.
     """
     base = website.rstrip("/")
     candidates = [
@@ -30,11 +48,13 @@ def fetch_sitemap_urls(website: str) -> list[dict]:
     ]
 
     raw_xml: str | None = None
+    source_url: str = ""
     for candidate in candidates:
         try:
             r = httpx.get(candidate, timeout=_TIMEOUT, follow_redirects=True)
             if r.status_code == 200 and "<loc>" in r.text:
                 raw_xml = r.text
+                source_url = candidate
                 break
         except Exception:
             continue
@@ -49,6 +69,7 @@ def fetch_sitemap_urls(website: str) -> list[dict]:
                         r2 = httpx.get(sitemap_url, timeout=_TIMEOUT, follow_redirects=True)
                         if r2.status_code == 200 and "<loc>" in r2.text:
                             raw_xml = r2.text
+                            source_url = sitemap_url
                             break
         except Exception:
             pass
@@ -56,33 +77,39 @@ def fetch_sitemap_urls(website: str) -> list[dict]:
     if not raw_xml:
         return []
 
-    # Handle sitemap index → fetch sub-sitemaps
-    all_locs: list[str] = []
-    if "<sitemapindex" in raw_xml:
-        sub_urls = _parse_locs(raw_xml)
-        for sub_url in sub_urls[:10]:
-            try:
-                r = httpx.get(sub_url, timeout=_TIMEOUT, follow_redirects=True)
-                if r.status_code == 200:
-                    all_locs.extend(_parse_locs(r.text))
-            except Exception:
-                continue
-    else:
-        all_locs = _parse_locs(raw_xml)
-
     domain = urlparse(base).netloc
     seen: set[str] = set()
     results: list[dict] = []
-    for url in all_locs:
-        url = url.strip()
-        if url in seen:
-            continue
-        if urlparse(url).netloc != domain:
-            continue
-        slug = _normalize_slug(url)
-        if not slug:
-            continue
-        seen.add(url)
-        results.append({"url": url, "slug": slug})
+
+    def _add_locs(locs: list[str], page_type: str) -> None:
+        for url in locs:
+            url = url.strip()
+            if url in seen:
+                continue
+            if urlparse(url).netloc != domain:
+                continue
+            slug = _normalize_slug(url)
+            if not slug:
+                continue
+            seen.add(url)
+            results.append({"url": url, "slug": slug, "page_type": page_type})
+
+    if "<sitemapindex" in raw_xml:
+        sub_urls = _parse_locs(raw_xml)
+        for sub_url in sub_urls[:15]:
+            # Skip non-content sitemaps (categories, tags, authors, products)
+            if _SKIP_PATTERNS.search(sub_url):
+                continue
+            pt = _page_type_from_sitemap_url(sub_url)
+            try:
+                r = httpx.get(sub_url, timeout=_TIMEOUT, follow_redirects=True)
+                if r.status_code == 200:
+                    _add_locs(_parse_locs(r.text), pt)
+            except Exception:
+                continue
+    else:
+        # Single sitemap — can't determine type from URL, use "unknown"
+        pt = _page_type_from_sitemap_url(source_url)
+        _add_locs(_parse_locs(raw_xml), pt)
 
     return results

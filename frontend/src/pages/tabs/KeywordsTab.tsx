@@ -3,9 +3,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Tags, RefreshCw, Upload, Sparkles, Search, X, ExternalLink,
   ChevronUp, ChevronDown, Trash2, Crown, Zap, HelpCircle, RotateCcw, Info,
+  Wand2, Copy, Check, ChevronRight,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { keywordsApi, getErrorMessage } from '@/api/client'
+import { keywordsApi, strategyApi, getErrorMessage } from '@/api/client'
 import type { Keyword, KeywordStatus, KeywordType, FunnelStage } from '@/types/api'
 import { cn } from '@/lib/utils'
 
@@ -630,6 +631,7 @@ export function KeywordsTab({ projectName }: { projectName: string }) {
                   <KeywordRow
                     key={kw.id}
                     kw={kw}
+                    projectName={projectName}
                     onDelete={() => {
                       if (confirm(`Remove "${kw.keyword}" from this project?`)) {
                         deleteMut.mutate(kw.id)
@@ -742,113 +744,221 @@ function STh({
   )
 }
 
-function KeywordRow({ kw, onDelete }: { kw: Keyword; onDelete: () => void }) {
+function CopyBtn({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
   return (
-    <tr className="hover:bg-slate-50/50 transition-colors group">
-      {/* Keyword */}
-      <td className="px-3 py-2.5 sticky left-0 bg-white group-hover:bg-slate-50/50 transition-colors z-10">
-        <div className="flex items-center gap-1.5">
-          {kw.is_hub && (
-            <span title="Hub / Pillar page"><Crown size={11} className="text-amber-500 shrink-0" /></span>
-          )}
-          {kw.snippet_opportunity && (
-            <span title="Featured snippet opportunity"><Zap size={11} className="text-violet-500 shrink-0" /></span>
-          )}
-          <span className="font-medium text-slate-800 truncate">{kw.keyword}</span>
-        </div>
-      </td>
+    <button
+      type="button"
+      onClick={() => {
+        navigator.clipboard.writeText(text).then(() => {
+          setCopied(true)
+          setTimeout(() => setCopied(false), 2000)
+        })
+      }}
+      className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+    >
+      {copied ? <Check size={11} className="text-emerald-500" /> : <Copy size={11} />}
+      {copied ? 'Copied' : 'Copy'}
+    </button>
+  )
+}
 
-      {/* Cluster */}
-      <td className="px-3 py-2.5 overflow-hidden">
-        <span className="text-xs text-slate-500 truncate block">
-          {kw.cluster ?? <span className="text-slate-300">—</span>}
-        </span>
-      </td>
+function KeywordRow({
+  kw,
+  projectName,
+  onDelete,
+}: {
+  kw: Keyword
+  projectName: string
+  onDelete: () => void
+}) {
+  const [output, setOutput] = useState<{ text: string; expanded: boolean } | null>(null)
 
-      {/* Type */}
-      <td className="px-3 py-2.5">
-        <Badge label={kw.keyword_type} className={TYPE_STYLES[kw.keyword_type] ?? 'bg-slate-100 text-slate-600'} />
-      </td>
+  const improveMut = useMutation({
+    mutationFn: () => strategyApi.improvePage(projectName, kw.id),
+    onSuccess: (data) => setOutput({ text: data.output, expanded: true }),
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
 
-      {/* Funnel */}
-      <td className="px-3 py-2.5">
-        {kw.funnel_stage ? (
-          <Badge label={kw.funnel_stage.toUpperCase()} className={FUNNEL_STYLES[kw.funnel_stage] ?? 'bg-slate-100 text-slate-600'} />
-        ) : <span className="text-slate-300">—</span>}
-      </td>
+  const pageTypeBadge = kw.page_type && kw.page_type !== 'unknown'
+    ? kw.page_type
+    : null
 
-      {/* Status */}
-      <td className="px-3 py-2.5">
-        <Badge
-          label={STATUS_LABELS[kw.status as KeywordStatus] ?? kw.status}
-          className={STATUS_STYLES[kw.status as KeywordStatus] ?? 'bg-slate-100 text-slate-600'}
-        />
-      </td>
+  return (
+    <>
+      <tr className="hover:bg-slate-50/50 transition-colors group">
+        {/* Keyword */}
+        <td className="px-3 py-2.5 sticky left-0 bg-white group-hover:bg-slate-50/50 transition-colors z-10">
+          <div className="flex items-center gap-1.5">
+            {kw.is_hub && (
+              <span title="Hub / Pillar page"><Crown size={11} className="text-amber-500 shrink-0" /></span>
+            )}
+            {kw.snippet_opportunity && (
+              <span title="Featured snippet opportunity"><Zap size={11} className="text-violet-500 shrink-0" /></span>
+            )}
+            <span className="font-medium text-slate-800 truncate">{kw.keyword}</span>
+            {pageTypeBadge && (
+              <span className={cn(
+                'shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium',
+                pageTypeBadge === 'page'
+                  ? 'bg-sky-100 text-sky-600'
+                  : 'bg-violet-100 text-violet-600',
+              )}>
+                {pageTypeBadge}
+              </span>
+            )}
+          </div>
+        </td>
 
-      {/* Volume */}
-      <td className="px-3 py-2.5 text-right text-xs text-slate-600">
-        {kw.volume != null ? kw.volume.toLocaleString() : <span className="text-slate-300">—</span>}
-      </td>
+        {/* Cluster */}
+        <td className="px-3 py-2.5 overflow-hidden">
+          <span className="text-xs text-slate-500 truncate block">
+            {kw.cluster ?? <span className="text-slate-300">—</span>}
+          </span>
+        </td>
 
-      {/* Clicks */}
-      <td className="px-3 py-2.5 text-right text-xs text-slate-600">
-        {kw.clicks != null ? kw.clicks.toLocaleString() : <span className="text-slate-300">—</span>}
-      </td>
+        {/* Type */}
+        <td className="px-3 py-2.5">
+          <Badge label={kw.keyword_type} className={TYPE_STYLES[kw.keyword_type] ?? 'bg-slate-100 text-slate-600'} />
+        </td>
 
-      {/* Impressions */}
-      <td className="px-3 py-2.5 text-right text-xs text-slate-600">
-        {kw.impressions != null ? kw.impressions.toLocaleString() : <span className="text-slate-300">—</span>}
-      </td>
+        {/* Funnel */}
+        <td className="px-3 py-2.5">
+          {kw.funnel_stage ? (
+            <Badge label={kw.funnel_stage.toUpperCase()} className={FUNNEL_STYLES[kw.funnel_stage] ?? 'bg-slate-100 text-slate-600'} />
+          ) : <span className="text-slate-300">—</span>}
+        </td>
 
-      {/* Position */}
-      <td className="px-3 py-2.5 text-right text-xs">
-        <PosBadge pos={kw.position} />
-      </td>
+        {/* Status */}
+        <td className="px-3 py-2.5">
+          <Badge
+            label={STATUS_LABELS[kw.status as KeywordStatus] ?? kw.status}
+            className={STATUS_STYLES[kw.status as KeywordStatus] ?? 'bg-slate-100 text-slate-600'}
+          />
+        </td>
 
-      {/* CTR */}
-      <td className="px-3 py-2.5 text-right text-xs text-slate-600">
-        {kw.ctr != null ? `${(kw.ctr * 100).toFixed(1)}%` : <span className="text-slate-300">—</span>}
-      </td>
+        {/* Volume */}
+        <td className="px-3 py-2.5 text-right text-xs text-slate-600">
+          {kw.volume != null ? kw.volume.toLocaleString() : <span className="text-slate-300">—</span>}
+        </td>
 
-      {/* Competition */}
-      <td className="px-3 py-2.5">
-        <CompBar val={kw.competition} />
-      </td>
+        {/* Clicks */}
+        <td className="px-3 py-2.5 text-right text-xs text-slate-600">
+          {kw.clicks != null ? kw.clicks.toLocaleString() : <span className="text-slate-300">—</span>}
+        </td>
 
-      {/* Competitor gap flag */}
-      <td className="px-3 py-2.5 text-center text-xs">
-        {kw.competitor_gap ? (
-          <span className="text-orange-500" title="Competitor gap">●</span>
-        ) : <span className="text-slate-200">●</span>}
-      </td>
+        {/* Impressions */}
+        <td className="px-3 py-2.5 text-right text-xs text-slate-600">
+          {kw.impressions != null ? kw.impressions.toLocaleString() : <span className="text-slate-300">—</span>}
+        </td>
 
-      {/* Current URL */}
-      <td className="px-3 py-2.5 overflow-hidden">
-        {kw.existing_url ? (
-          <a
-            href={kw.existing_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline truncate"
-          >
-            <ExternalLink size={10} className="shrink-0" />
-            <span className="truncate">{kw.existing_url.replace(/^https?:\/\/[^/]+/, '')}</span>
-          </a>
-        ) : <span className="text-slate-300 text-xs">—</span>}
-      </td>
+        {/* Position */}
+        <td className="px-3 py-2.5 text-right text-xs">
+          <PosBadge pos={kw.position} />
+        </td>
 
-      {/* Delete */}
-      <td className="px-3 py-2.5">
-        <button
-          type="button"
-          onClick={onDelete}
-          className="opacity-0 group-hover:opacity-100 p-1 rounded text-slate-300 hover:text-red-500 transition-all cursor-pointer"
-          title="Remove keyword"
-        >
-          <Trash2 size={13} />
-        </button>
-      </td>
-    </tr>
+        {/* CTR */}
+        <td className="px-3 py-2.5 text-right text-xs text-slate-600">
+          {kw.ctr != null ? `${(kw.ctr * 100).toFixed(1)}%` : <span className="text-slate-300">—</span>}
+        </td>
+
+        {/* Competition */}
+        <td className="px-3 py-2.5">
+          <CompBar val={kw.competition} />
+        </td>
+
+        {/* Competitor gap flag */}
+        <td className="px-3 py-2.5 text-center text-xs">
+          {kw.competitor_gap ? (
+            <span className="text-orange-500" title="Competitor gap">●</span>
+          ) : <span className="text-slate-200">●</span>}
+        </td>
+
+        {/* Current URL */}
+        <td className="px-3 py-2.5 overflow-hidden">
+          {kw.existing_url ? (
+            <a
+              href={kw.existing_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline truncate"
+            >
+              <ExternalLink size={10} className="shrink-0" />
+              <span className="truncate">{kw.existing_url.replace(/^https?:\/\/[^/]+/, '')}</span>
+            </a>
+          ) : <span className="text-slate-300 text-xs">—</span>}
+        </td>
+
+        {/* Actions */}
+        <td className="px-3 py-2.5">
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            {kw.existing_url && (
+              <button
+                type="button"
+                onClick={() => improveMut.mutate()}
+                disabled={improveMut.isPending}
+                title="Improve this page with AI"
+                className={cn(
+                  'p-1 rounded text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all cursor-pointer',
+                  improveMut.isPending && 'text-emerald-500 animate-pulse',
+                )}
+              >
+                <Wand2 size={13} />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onDelete}
+              className="p-1 rounded text-slate-300 hover:text-red-500 transition-all cursor-pointer"
+              title="Remove keyword"
+            >
+              <Trash2 size={13} />
+            </button>
+          </div>
+        </td>
+      </tr>
+
+      {/* Improvement output row */}
+      {output && (
+        <tr className="bg-emerald-50/40 border-b border-emerald-100">
+          <td colSpan={14} className="px-4 py-3">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Wand2 size={13} className="text-emerald-600" />
+                <span className="text-xs font-semibold text-emerald-800">
+                  Page Improvement Plan — {kw.keyword}
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                <CopyBtn text={output.text} />
+                <button
+                  type="button"
+                  onClick={() => setOutput((o) => o ? { ...o, expanded: !o.expanded } : null)}
+                  className="text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                >
+                  {output.expanded
+                    ? <ChevronUp size={13} />
+                    : <ChevronRight size={13} />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOutput(null)}
+                  className="text-slate-300 hover:text-slate-500 transition-colors cursor-pointer"
+                  title="Close"
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            </div>
+            {output.expanded && (
+              <pre className="text-xs text-slate-700 whitespace-pre-wrap font-mono leading-relaxed max-h-[400px] overflow-y-auto bg-white border border-emerald-100 rounded-lg p-3">
+                {output.text}
+              </pre>
+            )}
+          </td>
+        </tr>
+      )}
+    </>
   )
 }
 

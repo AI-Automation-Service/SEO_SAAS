@@ -109,7 +109,7 @@ export type KeywordType = 'standard' | 'question' | 'branded' | 'competitor'
 export type KeywordIntent = 'informational' | 'commercial' | 'navigational' | 'transactional'
 export type FunnelStage = 'tofu' | 'mofu' | 'bofu'
 export type KeywordStatus = 'covered' | 'quick_win' | 'opportunity' | 'gap' | 'watch'
-export type KeywordSource = 'gsc' | 'planner' | 'both' | 'manual'
+export type KeywordSource = 'gsc' | 'planner' | 'both' | 'manual' | 'sitemap'
 
 export interface Keyword {
   id: number
@@ -132,6 +132,7 @@ export interface Keyword {
   snippet_opportunity: boolean
   competitor_gap: boolean
   source: KeywordSource
+  page_type: string | null
   updated_at: string
 }
 

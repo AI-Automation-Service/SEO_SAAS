@@ -227,6 +227,11 @@ export const strategyApi = {
         competitor_url: competitorUrl,
       })
       .then((r) => r.data),
+
+  improvePage: (name: string, keywordId: number) =>
+    api
+      .post<StrategyResult>(`/api/projects/${name}/strategy/improve-page/${keywordId}`)
+      .then((r) => r.data),
 }
 
 // ── Speed ─────────────────────────────────────────────────────────────────────

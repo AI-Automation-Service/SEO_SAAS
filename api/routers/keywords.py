@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from agents.base import SkillAgent
 from api.dependencies import get_current_user, get_db, get_project_context, get_secret_manager
 from api.routers.api_keys import get_user_secret
 from core.db.models import Keyword, SitePage, User
@@ -95,6 +96,7 @@ class KeywordOut(BaseModel):
     snippet_opportunity: bool
     competitor_gap: bool
     source: str
+    page_type: Optional[str] = None
     updated_at: datetime
 
     class Config:
@@ -402,26 +404,28 @@ def _match_sitemap(rows: list, db: Session, user_id: int, project_name: str) -> 
                 break
 
 
-_CLUSTER_PROMPT = """\
-You are an SEO keyword clustering expert. Group these keywords into semantic clusters for content planning.
+_CLUSTER_USER_MSG = """\
+Cluster the following keywords for this project into semantic topic groups for content planning.
 
 Keywords:
 {keywords}
 
-For each keyword return a JSON object in the "keywords" array with:
-- "keyword": exact string from the input list
-- "cluster": short cluster name (2-4 words, e.g. "Hotel Booking", "Travel Tips")
-- "is_hub": true only for the single best pillar page keyword per cluster
-- "intent": one of informational/commercial/navigational/transactional
-- "funnel_stage": one of tofu/mofu/bofu
-- "suggested_url": clean URL slug (e.g. /blog/keyword-topic or /services/topic)
+Return ONLY a valid JSON object in this exact format — no extra text, no markdown:
+{{"keywords": [
+  {{
+    "keyword": "<exact string from input>",
+    "cluster": "<short cluster name 2-4 words, e.g. Hotel Booking>",
+    "is_hub": <true for the single best pillar keyword per cluster, false otherwise>,
+    "intent": "<informational|commercial|navigational|transactional>",
+    "funnel_stage": "<tofu|mofu|bofu>",
+    "suggested_url": "<clean URL slug e.g. /blog/hotel-booking-cairo>"
+  }}
+]}}
 
 Rules:
-- Every cluster must have exactly one hub keyword
+- Every cluster must have exactly one hub keyword (is_hub: true)
 - Spokes link back to the hub
-- Return only valid JSON, no extra text
-
-Return format: {{"keywords": [...]}}"""
+- Return every keyword from the input — do not skip any"""
 
 _BATCH_SIZE = 150
 
@@ -432,51 +436,39 @@ def run_cluster_agent(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Send all keywords to GPT-4o-mini for cluster/hub/spoke/intent assignment."""
+    """Cluster keywords using the seo-cluster skill agent (GPT-4o-mini, JSON mode)."""
     openai_key = get_user_secret("openai", current_user.id, db)
 
     rows = _project_keywords(db, current_user.id, context.name).all()
     if not rows:
         raise HTTPException(400, "No keywords found. Sync from GSC or upload a CSV first.")
 
+    try:
+        agent = SkillAgent("seo-cluster", openai_key, model="gpt-4o-mini")
+    except FileNotFoundError as e:
+        raise HTTPException(500, str(e))
+
     keywords = [r.keyword for r in rows]
     all_results: list[dict] = []
 
     for i in range(0, len(keywords), _BATCH_SIZE):
         batch = keywords[i : i + _BATCH_SIZE]
-        prompt = _CLUSTER_PROMPT.format(keywords="\n".join(f"- {kw}" for kw in batch))
+        user_msg = _CLUSTER_USER_MSG.format(keywords="\n".join(f"- {kw}" for kw in batch))
 
         try:
-            with httpx.Client(timeout=90) as client:
-                resp = client.post(
-                    "https://api.openai.com/v1/chat/completions",
-                    headers={"Authorization": f"Bearer {openai_key}"},
-                    json={
-                        "model": "gpt-4o-mini",
-                        "messages": [{"role": "user", "content": prompt}],
-                        "temperature": 0.2,
-                        "response_format": {"type": "json_object"},
-                    },
-                )
-        except httpx.RequestError as e:
-            raise HTTPException(502, f"Could not reach OpenAI: {e}")
+            raw = agent.run(user_msg, timeout=90, json_mode=True)
+        except Exception as e:
+            raise HTTPException(502, f"OpenAI error: {e}")
 
-        if resp.status_code != 200:
-            raise HTTPException(502, f"OpenAI error {resp.status_code}: {resp.text[:300]}")
-
-        raw = resp.json()["choices"][0]["message"]["content"]
         try:
             parsed = json.loads(raw)
         except json.JSONDecodeError as e:
             raise HTTPException(502, f"OpenAI returned invalid JSON: {e}. Response: {raw[:300]}")
 
-        # Support {"keywords": [...]} or any top-level array value
         if isinstance(parsed, list):
             items = parsed
         elif isinstance(parsed, dict):
-            items = next(
-                (v for v in parsed.values() if isinstance(v, list)), []
-            )
+            items = next((v for v in parsed.values() if isinstance(v, list)), [])
         else:
             items = []
 
