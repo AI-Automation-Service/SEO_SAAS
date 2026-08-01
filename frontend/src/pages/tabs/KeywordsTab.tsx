@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Tags, RefreshCw, Upload, Sparkles, Search, X, ExternalLink,
-  ChevronUp, ChevronDown, Trash2, Crown, Zap, HelpCircle, RotateCcw,
+  ChevronUp, ChevronDown, Trash2, Crown, Zap, HelpCircle, RotateCcw, Info,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { keywordsApi, getErrorMessage } from '@/api/client'
@@ -155,6 +155,8 @@ const DEFAULT_COL_WIDTHS: Record<string, number> = {
 export function KeywordsTab({ projectName }: { projectName: string }) {
   const qc = useQueryClient()
   const fileRef = useRef<HTMLInputElement>(null)
+
+  const [showGuide, setShowGuide] = useState(false)
 
   // Column resize state
   const [colWidths, setColWidths] = useState<Record<string, number>>(DEFAULT_COL_WIDTHS)
@@ -415,6 +417,77 @@ export function KeywordsTab({ projectName }: { projectName: string }) {
             active={false} onClick={() => {}} />
         </div>
       )}
+
+      {/* Status guide */}
+      <div>
+        <button
+          type="button"
+          onClick={() => setShowGuide((v) => !v)}
+          className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 cursor-pointer transition-colors"
+        >
+          <Info size={12} />
+          {showGuide ? 'Hide status guide' : 'What do these statuses mean?'}
+          <ChevronDown size={11} className={cn('transition-transform', showGuide && 'rotate-180')} />
+        </button>
+
+        {showGuide && (
+          <div className="mt-2 bg-white border border-slate-200 rounded-xl overflow-hidden">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-100">
+                  <th className="px-4 py-2.5 text-left font-medium text-slate-500 uppercase tracking-wide">Status</th>
+                  <th className="px-4 py-2.5 text-left font-medium text-slate-500 uppercase tracking-wide">Signal</th>
+                  <th className="px-4 py-2.5 text-left font-medium text-slate-500 uppercase tracking-wide">What it means</th>
+                  <th className="px-4 py-2.5 text-left font-medium text-slate-500 uppercase tracking-wide">Recommended action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {[
+                  {
+                    badge: 'Covered', cls: 'bg-emerald-100 text-emerald-700',
+                    signal: 'Position ≤ 3 + clicks',
+                    meaning: 'You rank in the top 3 and users are clicking your page.',
+                    action: 'Maintain — do not rewrite. Add internal links from new articles to reinforce it.',
+                  },
+                  {
+                    badge: 'Quick Win', cls: 'bg-amber-100 text-amber-700',
+                    signal: 'Position 4–10 + clicks',
+                    meaning: 'You\'re on page 1 but not in the top 3. A small improvement can push you up.',
+                    action: 'Optimize — improve the title tag, add 2–3 internal links, and refresh the intro paragraph.',
+                  },
+                  {
+                    badge: 'Opportunity', cls: 'bg-blue-100 text-blue-700',
+                    signal: 'Impressions > 0, position > 10',
+                    meaning: 'Google is showing your page for this keyword but it\'s buried on page 2 or lower.',
+                    action: 'Rewrite — expand the content depth, add an FAQ section, and strengthen on-page SEO.',
+                  },
+                  {
+                    badge: 'Gap', cls: 'bg-red-100 text-red-600',
+                    signal: 'No impressions in GSC',
+                    meaning: 'Google does not rank your site for this keyword at all — no page covers it.',
+                    action: 'Create — write new content (pillar page or spoke article) targeting this keyword.',
+                  },
+                  {
+                    badge: 'Watch', cls: 'bg-slate-100 text-slate-500',
+                    signal: 'Manually set',
+                    meaning: 'Flagged for monitoring — ranking is unstable or the keyword is in review.',
+                    action: 'Monitor — check again in 2–4 weeks before deciding on an action.',
+                  },
+                ].map(({ badge, cls, signal, meaning, action }) => (
+                  <tr key={badge} className="hover:bg-slate-50/50">
+                    <td className="px-4 py-3">
+                      <span className={cn('inline-block px-2 py-0.5 rounded-full text-xs font-medium', cls)}>{badge}</span>
+                    </td>
+                    <td className="px-4 py-3 text-slate-400 whitespace-nowrap">{signal}</td>
+                    <td className="px-4 py-3 text-slate-600 max-w-[260px]">{meaning}</td>
+                    <td className="px-4 py-3 text-slate-700 font-medium max-w-[300px]">{action}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {/* Filter bar */}
       <div className="bg-white border border-slate-200 rounded-xl p-3 flex items-center gap-2 flex-wrap">
