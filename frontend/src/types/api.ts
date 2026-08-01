@@ -7,6 +7,7 @@ export interface Project {
   country?: string
   language?: string
   integrations?: ProjectIntegrations
+  competitors?: string[]
 }
 
 export interface ProjectIntegrations {
@@ -142,6 +143,18 @@ export interface KeywordSummary {
   opportunities: number
   clusters: number
   unclustered: number
+}
+
+// Sitemap types
+export interface SitemapSummary {
+  total: number
+  last_synced: string | null
+}
+
+// Strategy types
+export interface StrategyResult {
+  skill: string
+  output: string
 }
 
 // Speed types

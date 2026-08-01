@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
-import { Globe, RefreshCw, Pencil, Check, X } from 'lucide-react'
+import { Globe, RefreshCw, Pencil, Check, X, FileSearch } from 'lucide-react'
 import { StatusBadge } from '@/components/StatusBadge'
-import { projectsApi, integrationsApi, getErrorMessage } from '@/api/client'
+import { projectsApi, integrationsApi, sitemapApi, getErrorMessage } from '@/api/client'
 import type { Project } from '@/types/api'
 import { cn } from '@/lib/utils'
 
@@ -97,6 +97,8 @@ function WebsiteField({ project }: { project: Project }) {
 }
 
 export function OverviewTab({ project }: { project: Project }) {
+  const qc = useQueryClient()
+
   const { data: status, isLoading, refetch } = useQuery({
     queryKey: ['integrations-status', project.name],
     queryFn: () => integrationsApi.status(project.name),
@@ -105,6 +107,20 @@ export function OverviewTab({ project }: { project: Project }) {
   const { data: validation } = useQuery({
     queryKey: ['validate', project.name],
     queryFn: () => projectsApi.validate(project.name),
+  })
+
+  const { data: sitemapData } = useQuery({
+    queryKey: ['sitemap-summary', project.name],
+    queryFn: () => sitemapApi.summary(project.name),
+  })
+
+  const sitemapMut = useMutation({
+    mutationFn: () => sitemapApi.sync(project.name),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ['sitemap-summary', project.name] })
+      toast.success(data.message)
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
   })
 
   return (
@@ -180,6 +196,49 @@ export function OverviewTab({ project }: { project: Project }) {
               </div>
             ))}
           </div>
+        )}
+      </div>
+
+      {/* Sitemap */}
+      <div className="bg-white rounded-xl border border-slate-200 p-5">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <FileSearch size={15} className="text-slate-400" />
+            <h3 className="font-display font-semibold text-slate-900">Existing Pages</h3>
+          </div>
+          <button
+            type="button"
+            onClick={() => sitemapMut.mutate()}
+            disabled={sitemapMut.isPending || !project.website}
+            className={cn(
+              'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer',
+              sitemapMut.isPending || !project.website
+                ? 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
+            )}
+          >
+            {sitemapMut.isPending ? 'Syncing...' : 'Sync Sitemap'}
+          </button>
+        </div>
+        {sitemapData && sitemapData.total > 0 ? (
+          <div className="flex items-center gap-4 text-sm">
+            <div>
+              <span className="text-2xl font-bold text-slate-900">{sitemapData.total}</span>
+              <span className="text-slate-500 ml-1.5">pages found</span>
+            </div>
+            {sitemapData.last_synced && (
+              <span className="text-xs text-slate-400">
+                Last synced {new Date(sitemapData.last_synced).toLocaleDateString()}
+              </span>
+            )}
+          </div>
+        ) : (
+          <p className="text-xs text-slate-400 leading-relaxed">
+            Sync your sitemap to discover which pages already exist — the system uses this to avoid suggesting new content for topics already covered.
+            {!project.website && (
+              <span className="block mt-1 text-amber-500">Set your website URL above first.</span>
+            )}
+          </p>
         )}
       </div>
 

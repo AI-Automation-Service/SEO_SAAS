@@ -15,6 +15,8 @@ import type {
   RegisterRequest,
   Keyword,
   KeywordSummary,
+  SitemapSummary,
+  StrategyResult,
   SpeedResult,
 } from '@/types/api'
 
@@ -195,6 +197,36 @@ export const keywordsApi = {
 
   reset: (name: string) =>
     api.delete<{ deleted: number; message: string }>(`/api/projects/${name}/keywords`).then((r) => r.data),
+}
+
+// ── Sitemap ───────────────────────────────────────────────────────────────────
+export const sitemapApi = {
+  summary: (name: string) =>
+    api.get<SitemapSummary>(`/api/projects/${name}/sitemap/summary`).then((r) => r.data),
+  sync: (name: string) =>
+    api.post<{ synced: number; message: string }>(`/api/projects/${name}/sitemap/sync`).then((r) => r.data),
+}
+
+// ── Strategy ──────────────────────────────────────────────────────────────────
+export const strategyApi = {
+  plan: (name: string) =>
+    api.post<StrategyResult>(`/api/projects/${name}/strategy/plan`).then((r) => r.data),
+
+  content: (name: string) =>
+    api.post<StrategyResult>(`/api/projects/${name}/strategy/content`).then((r) => r.data),
+
+  architecture: (name: string) =>
+    api.post<StrategyResult>(`/api/projects/${name}/strategy/architecture`).then((r) => r.data),
+
+  flow: (name: string, keywordId: number) =>
+    api.post<StrategyResult>(`/api/projects/${name}/strategy/flow/${keywordId}`).then((r) => r.data),
+
+  competitorPage: (name: string, competitorUrl: string) =>
+    api
+      .post<StrategyResult>(`/api/projects/${name}/strategy/competitor-page`, {
+        competitor_url: competitorUrl,
+      })
+      .then((r) => r.data),
 }
 
 // ── Speed ─────────────────────────────────────────────────────────────────────

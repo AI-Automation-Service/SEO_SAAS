@@ -1,6 +1,7 @@
 import csv
 import io
 import json
+import re
 from datetime import datetime
 from typing import Optional
 
@@ -11,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from api.dependencies import get_current_user, get_db, get_project_context, get_secret_manager
 from api.routers.api_keys import get_user_secret
-from core.db.models import Keyword, User
+from core.db.models import Keyword, SitePage, User
 from core.models.context import ProjectContext
 from core.secrets import SecretManager
 from integrations.base import IntegrationError
@@ -379,6 +380,28 @@ async def upload_planner_csv(
     return {"imported": upserted, "message": f"Imported {upserted} keywords from Keyword Planner."}
 
 
+def _match_sitemap(rows: list, db: Session, user_id: int, project_name: str) -> None:
+    """For keywords without existing_url, try to match against sitemap page slugs."""
+    unmatched = [r for r in rows if not r.existing_url]
+    if not unmatched:
+        return
+    pages = db.query(SitePage).filter(
+        SitePage.user_id == user_id,
+        SitePage.project_name == project_name,
+    ).all()
+    if not pages:
+        return
+    for row in unmatched:
+        kw_slug = re.sub(r"[^a-z0-9\s]", "", row.keyword.lower())
+        kw_slug = re.sub(r"\s+", "-", kw_slug.strip())
+        if not kw_slug:
+            continue
+        for page in pages:
+            if kw_slug in page.slug:
+                row.existing_url = page.url
+                break
+
+
 _CLUSTER_PROMPT = """\
 You are an SEO keyword clustering expert. Group these keywords into semantic clusters for content planning.
 
@@ -474,6 +497,7 @@ def run_cluster_agent(
         row.updated_at = datetime.utcnow()
         updated += 1
 
+    _match_sitemap(rows, db, current_user.id, context.name)
     db.commit()
     cluster_count = len({r.cluster for r in rows if r.cluster})
     return {

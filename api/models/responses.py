@@ -22,6 +22,7 @@ class ProjectDetail(BaseModel):
     image_source: str
     active: bool
     knowledge_files: list[str]
+    competitors: list[str] = []
 
 
 class ValidationResult(BaseModel):

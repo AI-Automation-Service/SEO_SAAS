@@ -87,3 +87,19 @@ class Keyword(Base):
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class SitePage(Base):
+    """URLs extracted from the site's XML sitemap."""
+
+    __tablename__ = "site_pages"
+    __table_args__ = (
+        UniqueConstraint("user_id", "project_name", "url", name="uq_sitepage"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    project_name: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    url: Mapped[str] = mapped_column(String, nullable=False)
+    slug: Mapped[str] = mapped_column(String, nullable=False)
+    synced_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

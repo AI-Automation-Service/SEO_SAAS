@@ -1,21 +1,26 @@
 import shutil
+from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, HttpUrl
+from sqlalchemy.orm import Session
 
-from api.dependencies import get_knowledge_loader, get_project_loader, get_project_context, get_scaffolder, get_user_projects_dir
+from api.dependencies import get_current_user, get_knowledge_loader, get_project_loader, get_project_context, get_scaffolder, get_user_projects_dir
 from api.models.responses import (
     ProjectCreated,
     ProjectDetail,
     ProjectSummary,
     ValidationResult,
 )
+from core.db.base import SessionLocal
+from core.db.models import SitePage, User
 from core.knowledge import KnowledgeLoader
 from core.models.context import ProjectContext
 from core.project import ProjectLoader
 from pathlib import Path
 from core.project_writer import update_project_yaml
 from core.scaffold import ProjectScaffolder
+from core.sitemap import fetch_sitemap_urls
 from core.validation import validate_config
 from shared.exceptions import ProjectConfigError, ProjectNotFoundError, SEOOSError
 
@@ -108,6 +113,7 @@ def get_project(
         image_source=config.image_source,
         active=config.active,
         knowledge_files=sorted(knowledge.keys()),
+        competitors=config.competitors,
     )
 
 
@@ -115,13 +121,49 @@ class UpdateProjectRequest(BaseModel):
     website: HttpUrl
 
 
+def _bg_sitemap_sync(website: str, user_id: int, project_name: str) -> None:
+    db = SessionLocal()
+    try:
+        pages = fetch_sitemap_urls(website)
+        now = datetime.utcnow()
+        for page in pages:
+            existing = (
+                db.query(SitePage)
+                .filter(
+                    SitePage.user_id == user_id,
+                    SitePage.project_name == project_name,
+                    SitePage.url == page["url"],
+                )
+                .first()
+            )
+            if existing:
+                existing.slug = page["slug"]
+                existing.synced_at = now
+            else:
+                db.add(SitePage(
+                    user_id=user_id,
+                    project_name=project_name,
+                    url=page["url"],
+                    slug=page["slug"],
+                    synced_at=now,
+                ))
+        db.commit()
+    except Exception:
+        pass
+    finally:
+        db.close()
+
+
 @router.patch("/{name}", status_code=200)
 def update_project(
     body: UpdateProjectRequest,
+    background_tasks: BackgroundTasks,
     context: ProjectContext = Depends(get_project_context),
+    current_user: User = Depends(get_current_user),
 ):
     config_file = context.project_dir / "config" / "project.yaml"
     update_project_yaml(config_file, {"website": str(body.website)})
+    background_tasks.add_task(_bg_sitemap_sync, str(body.website), current_user.id, context.name)
     return {"name": context.name, "website": str(body.website)}
 
 
