@@ -126,6 +126,8 @@ export const projectsApi = {
     api.post<Project>('/api/projects', body).then((r) => r.data),
   update: (name: string, body: { website: string }) =>
     api.patch(`/api/projects/${name}`, body).then((r) => r.data),
+  delete: (name: string) =>
+    api.delete(`/api/projects/${name}`).then((r) => r.data),
   validate: (name: string) =>
     api
       .get<{ valid: boolean; errors: string[] }>(`/api/projects/${name}/validate`)

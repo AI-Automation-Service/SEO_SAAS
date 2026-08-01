@@ -1,7 +1,9 @@
+import shutil
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, HttpUrl
 
-from api.dependencies import get_knowledge_loader, get_project_loader, get_project_context, get_scaffolder
+from api.dependencies import get_knowledge_loader, get_project_loader, get_project_context, get_scaffolder, get_user_projects_dir
 from api.models.responses import (
     ProjectCreated,
     ProjectDetail,
@@ -11,6 +13,7 @@ from api.models.responses import (
 from core.knowledge import KnowledgeLoader
 from core.models.context import ProjectContext
 from core.project import ProjectLoader
+from pathlib import Path
 from core.project_writer import update_project_yaml
 from core.scaffold import ProjectScaffolder
 from core.validation import validate_config
@@ -120,6 +123,18 @@ def update_project(
     config_file = context.project_dir / "config" / "project.yaml"
     update_project_yaml(config_file, {"website": str(body.website)})
     return {"name": context.name, "website": str(body.website)}
+
+
+@router.delete("/{name}", status_code=200)
+def delete_project(
+    name: str,
+    user_dir: Path = Depends(get_user_projects_dir),
+):
+    project_dir = user_dir / name
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail=f"Project '{name}' not found.")
+    shutil.rmtree(project_dir)
+    return {"deleted": name}
 
 
 @router.get("/{name}/validate", response_model=ValidationResult)
