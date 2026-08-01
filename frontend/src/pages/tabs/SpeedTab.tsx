@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { RefreshCw, ExternalLink, Monitor, Smartphone } from 'lucide-react'
-import { speedApi } from '@/api/client'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { RefreshCw, ExternalLink, Monitor, Smartphone, Key, Check } from 'lucide-react'
+import { speedApi, getErrorMessage } from '@/api/client'
+import axios from 'axios'
 import { cn } from '@/lib/utils'
 
 type Strategy = 'mobile' | 'desktop'
@@ -39,6 +40,63 @@ function metricBg(score: number | null) {
   if (score >= 0.9) return 'bg-green-50 border-green-100'
   if (score >= 0.5) return 'bg-amber-50 border-amber-100'
   return 'bg-red-50 border-red-100'
+}
+
+function SpeedError({ error, onRetry }: { error: unknown; onRetry: () => void }) {
+  const qc = useQueryClient()
+  const [apiKey, setApiKey] = useState('')
+  const [saved, setSaved] = useState(false)
+
+  const detail = getErrorMessage(error)
+
+  const { mutate: saveKey, isPending } = useMutation({
+    mutationFn: () =>
+      axios.put('/api/keys/google_api_key', { value: apiKey }),
+    onSuccess: () => {
+      setSaved(true)
+      qc.invalidateQueries({ queryKey: ['speed'] })
+      setTimeout(() => { setSaved(false); onRetry() }, 800)
+    },
+  })
+
+  const isRateLimit = detail.toLowerCase().includes('429') || detail.toLowerCase().includes('rate')
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+        <p className="text-red-700 text-sm font-medium mb-1">Analysis failed</p>
+        <p className="text-red-500 text-xs font-mono break-all">{detail}</p>
+      </div>
+
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+        <div className="flex items-center gap-2 mb-2">
+          <Key size={13} className="text-amber-600 shrink-0" />
+          <p className="text-amber-800 text-sm font-medium">
+            {isRateLimit ? 'Rate limit hit — add your Google API key to continue' : 'Add a Google API key to fix this'}
+          </p>
+        </div>
+        <p className="text-amber-600 text-xs mb-3">
+          Create a free key at <span className="font-mono">console.cloud.google.com</span> → APIs & Services → Credentials → Enable "PageSpeed Insights API"
+        </p>
+        <div className="flex gap-2">
+          <input
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder="AIza..."
+            className="flex-1 px-3 py-1.5 border border-amber-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
+          />
+          <button
+            onClick={() => saveKey()}
+            disabled={isPending || !apiKey.trim() || saved}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-white text-sm font-medium rounded-lg hover:bg-amber-600 disabled:opacity-50 transition-colors cursor-pointer"
+          >
+            {saved ? <Check size={13} /> : isPending ? <RefreshCw size={13} className="animate-spin" /> : null}
+            {saved ? 'Saved!' : 'Save & retry'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export function SpeedTab({ projectName, websiteUrl }: { projectName: string; websiteUrl: string }) {
@@ -122,15 +180,7 @@ export function SpeedTab({ projectName, websiteUrl }: { projectName: string; web
 
       {/* Error */}
       {error && !isLoading && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-          <p className="text-red-700 text-sm font-medium mb-1">Analysis failed</p>
-          <p className="text-red-500 text-xs">
-            {(error as Error).message || 'Could not reach PageSpeed API.'}
-          </p>
-          <p className="text-red-400 text-xs mt-2">
-            If this keeps happening, add your Google API key under Settings → API Keys.
-          </p>
-        </div>
+        <SpeedError error={error} onRetry={() => refetch()} />
       )}
 
       {/* Results */}
