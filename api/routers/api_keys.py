@@ -110,7 +110,7 @@ def test_key(body: TestKeyRequest, _: User = Depends(get_current_user)):
 
     elif body.service == "google_api_key":
         try:
-            with httpx.Client(timeout=10) as client:
+            with httpx.Client(timeout=30) as client:
                 r = client.get(
                     "https://www.googleapis.com/pagespeedonline/v5/runPagespeed",
                     params={"url": "https://www.google.com", "strategy": "mobile", "key": body.value.strip()},

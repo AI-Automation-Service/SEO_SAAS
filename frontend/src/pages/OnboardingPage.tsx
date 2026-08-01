@@ -524,7 +524,6 @@ function Step6({ onComplete }: { onComplete: () => void }) {
     e.preventDefault()
     setSaving(true)
     try {
-      await keysApi.test('google_api_key', key.trim())
       await keysApi.save('google_api_key', key.trim())
       toast.success('Google API key saved!')
       onComplete()
