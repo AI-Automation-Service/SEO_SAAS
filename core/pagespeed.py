@@ -35,9 +35,56 @@ def fetch_pagespeed(url: str, strategy: str = "mobile", api_key: str | None = No
             "score": audit.get("score"),
         }
 
+    # Opportunities — audits with type=opportunity and meaningful savings
+    opportunities = []
+    for audit_id, audit in audits.items():
+        score = audit.get("score")
+        display = audit.get("displayValue", "")
+        details = audit.get("details") or {}
+        if (
+            score is not None
+            and score < 1
+            and display
+            and details.get("type") == "opportunity"
+        ):
+            savings_ms = details.get("overallSavingsMs") or 0
+            if savings_ms >= 50:
+                opportunities.append({
+                    "id": audit_id,
+                    "title": audit.get("title", ""),
+                    "display": display,
+                    "score": score,
+                    "savings_ms": round(savings_ms),
+                })
+
+    opportunities.sort(key=lambda x: x["savings_ms"], reverse=True)
+
+    # Diagnostics — non-opportunity audits that failed
+    diagnostics = []
+    for audit_id, audit in audits.items():
+        score = audit.get("score")
+        details = audit.get("details") or {}
+        if (
+            score is not None
+            and score < 1
+            and details.get("type") not in ("opportunity",)
+            and audit.get("scoreDisplayMode") not in ("informative", "notApplicable", "manual")
+            and audit.get("displayValue")
+        ):
+            diagnostics.append({
+                "id": audit_id,
+                "title": audit.get("title", ""),
+                "display": audit.get("displayValue", ""),
+                "score": score,
+            })
+
+    diagnostics.sort(key=lambda x: x["score"])
+
     return {
         "url": url,
         "strategy": strategy,
         "performance_score": round(perf_score * 100),
         "metrics": metrics,
+        "opportunities": opportunities[:10],
+        "diagnostics": diagnostics[:8],
     }

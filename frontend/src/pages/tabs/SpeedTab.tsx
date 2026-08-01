@@ -201,7 +201,7 @@ export function SpeedTab({ projectName, websiteUrl }: { projectName: string; web
           </div>
 
           {/* Metrics grid */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 mb-6">
             {METRICS.map(({ key, label, hint }) => {
               const m = data.metrics[key as keyof typeof data.metrics]
               return (
@@ -216,7 +216,37 @@ export function SpeedTab({ projectName, websiteUrl }: { projectName: string; web
             })}
           </div>
 
-          <p className="text-xs text-slate-400 mt-4 text-center">
+          {/* Opportunities */}
+          {data.opportunities.length > 0 && (
+            <div className="mb-6">
+              <h4 className="text-sm font-semibold text-slate-800 mb-3">Opportunities</h4>
+              <div className="space-y-2">
+                {data.opportunities.map((op) => (
+                  <div key={op.id} className="flex items-center justify-between bg-amber-50 border border-amber-100 rounded-lg px-4 py-2.5">
+                    <span className="text-sm text-slate-700">{op.title}</span>
+                    <span className="text-xs font-medium text-amber-700 shrink-0 ml-4">{op.display}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Diagnostics */}
+          {data.diagnostics.length > 0 && (
+            <div className="mb-4">
+              <h4 className="text-sm font-semibold text-slate-800 mb-3">Diagnostics</h4>
+              <div className="space-y-2">
+                {data.diagnostics.map((d) => (
+                  <div key={d.id} className="flex items-center justify-between bg-slate-50 border border-slate-100 rounded-lg px-4 py-2.5">
+                    <span className="text-sm text-slate-700">{d.title}</span>
+                    <span className="text-xs text-slate-500 shrink-0 ml-4">{d.display}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <p className="text-xs text-slate-400 mt-2 text-center">
             Data from Google PageSpeed Insights · {strategy} · {new Date().toLocaleTimeString()}
           </p>
         </>

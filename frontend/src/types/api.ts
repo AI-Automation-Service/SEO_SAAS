@@ -109,6 +109,21 @@ export interface SpeedMetric {
   score: number | null
 }
 
+export interface SpeedOpportunity {
+  id: string
+  title: string
+  display: string
+  score: number
+  savings_ms: number
+}
+
+export interface SpeedDiagnostic {
+  id: string
+  title: string
+  display: string
+  score: number
+}
+
 export interface SpeedResult {
   url: string
   strategy: 'mobile' | 'desktop'
@@ -121,4 +136,6 @@ export interface SpeedResult {
     si: SpeedMetric
     tti: SpeedMetric
   }
+  opportunities: SpeedOpportunity[]
+  diagnostics: SpeedDiagnostic[]
 }
