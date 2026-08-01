@@ -12,6 +12,45 @@ _AUDITS = {
 }
 
 
+def _fmt_bytes(b: float | None) -> str | None:
+    if b is None:
+        return None
+    kb = b / 1024
+    return f"{kb:.0f} KiB" if kb < 1024 else f"{kb/1024:.1f} MiB"
+
+
+def _extract_items(details: dict) -> list[dict]:
+    """Pull up to 5 rows from audit details, keeping only url + size/savings fields."""
+    rows = details.get("items") or []
+    result = []
+    for row in rows[:5]:
+        item: dict = {}
+        # URL / label
+        node = row.get("node") or {}
+        url = (
+            row.get("url")
+            or row.get("source")
+            or node.get("snippet")
+            or node.get("nodeLabel")
+            or row.get("label")
+            or ""
+        )
+        if isinstance(url, dict):
+            url = url.get("url") or url.get("value") or ""
+        if url:
+            item["url"] = str(url)[:120]
+        # Size / savings
+        wasted_bytes = row.get("wastedBytes") or row.get("totalBytes")
+        wasted_ms = row.get("wastedMs")
+        if wasted_bytes:
+            item["size"] = _fmt_bytes(wasted_bytes)
+        if wasted_ms:
+            item["savings_ms"] = round(wasted_ms)
+        if item:
+            result.append(item)
+    return result
+
+
 def fetch_pagespeed(url: str, strategy: str = "mobile", api_key: str | None = None) -> dict:
     params: dict = {"url": url, "strategy": strategy}
     if api_key:
@@ -52,9 +91,11 @@ def fetch_pagespeed(url: str, strategy: str = "mobile", api_key: str | None = No
                 opportunities.append({
                     "id": audit_id,
                     "title": audit.get("title", ""),
+                    "description": audit.get("description", ""),
                     "display": display,
                     "score": score,
                     "savings_ms": round(savings_ms),
+                    "items": _extract_items(details),
                 })
 
     opportunities.sort(key=lambda x: x["savings_ms"], reverse=True)
@@ -74,8 +115,10 @@ def fetch_pagespeed(url: str, strategy: str = "mobile", api_key: str | None = No
             diagnostics.append({
                 "id": audit_id,
                 "title": audit.get("title", ""),
+                "description": audit.get("description", ""),
                 "display": audit.get("displayValue", ""),
                 "score": score,
+                "items": _extract_items(details),
             })
 
     diagnostics.sort(key=lambda x: x["score"])

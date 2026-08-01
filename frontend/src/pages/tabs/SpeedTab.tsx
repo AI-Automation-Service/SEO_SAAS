@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { RefreshCw, ExternalLink, Monitor, Smartphone, Key, Check } from 'lucide-react'
+import { RefreshCw, ExternalLink, Monitor, Smartphone, Key, Check, ChevronDown, ChevronUp } from 'lucide-react'
 import { api, speedApi, getErrorMessage } from '@/api/client'
+import type { SpeedAuditItem } from '@/types/api'
 import { cn } from '@/lib/utils'
 
 type Strategy = 'mobile' | 'desktop'
@@ -222,10 +223,14 @@ export function SpeedTab({ projectName, websiteUrl }: { projectName: string; web
               <h4 className="text-sm font-semibold text-slate-800 mb-3">Opportunities</h4>
               <div className="space-y-2">
                 {data.opportunities.map((op) => (
-                  <div key={op.id} className="flex items-center justify-between bg-amber-50 border border-amber-100 rounded-lg px-4 py-2.5">
-                    <span className="text-sm text-slate-700">{op.title}</span>
-                    <span className="text-xs font-medium text-amber-700 shrink-0 ml-4">{op.display}</span>
-                  </div>
+                  <AuditRow
+                    key={op.id}
+                    title={op.title}
+                    display={op.display}
+                    description={op.description}
+                    items={op.items}
+                    accent="amber"
+                  />
                 ))}
               </div>
             </div>
@@ -237,10 +242,14 @@ export function SpeedTab({ projectName, websiteUrl }: { projectName: string; web
               <h4 className="text-sm font-semibold text-slate-800 mb-3">Diagnostics</h4>
               <div className="space-y-2">
                 {data.diagnostics.map((d) => (
-                  <div key={d.id} className="flex items-center justify-between bg-slate-50 border border-slate-100 rounded-lg px-4 py-2.5">
-                    <span className="text-sm text-slate-700">{d.title}</span>
-                    <span className="text-xs text-slate-500 shrink-0 ml-4">{d.display}</span>
-                  </div>
+                  <AuditRow
+                    key={d.id}
+                    title={d.title}
+                    display={d.display}
+                    description={d.description}
+                    items={d.items}
+                    accent="slate"
+                  />
                 ))}
               </div>
             </div>
@@ -250,6 +259,63 @@ export function SpeedTab({ projectName, websiteUrl }: { projectName: string; web
             Data from Google PageSpeed Insights · {strategy} · {new Date().toLocaleTimeString()}
           </p>
         </>
+      )}
+    </div>
+  )
+}
+
+function AuditRow({
+  title, display, description, items, accent,
+}: {
+  title: string
+  display: string
+  description: string
+  items: SpeedAuditItem[]
+  accent: 'amber' | 'slate'
+}) {
+  const [open, setOpen] = useState(false)
+  const hasItems = items.length > 0
+  const bg    = accent === 'amber' ? 'bg-amber-50 border-amber-100'  : 'bg-slate-50 border-slate-100'
+  const txt   = accent === 'amber' ? 'text-amber-700 font-medium'    : 'text-slate-500'
+
+  return (
+    <div className={cn('border rounded-lg overflow-hidden', bg)}>
+      <button
+        type="button"
+        onClick={() => hasItems && setOpen(o => !o)}
+        className={cn(
+          'w-full flex items-center justify-between px-4 py-2.5 text-left',
+          hasItems ? 'cursor-pointer hover:brightness-95' : 'cursor-default'
+        )}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          {hasItems && (
+            open
+              ? <ChevronUp size={13} className="text-slate-400 shrink-0" />
+              : <ChevronDown size={13} className="text-slate-400 shrink-0" />
+          )}
+          <span className="text-sm text-slate-700 truncate">{title}</span>
+        </div>
+        <span className={cn('text-xs shrink-0 ml-4', txt)}>{display}</span>
+      </button>
+
+      {open && (
+        <div className="border-t border-slate-100 px-4 pb-3 pt-2 space-y-1">
+          {description && (
+            <p className="text-xs text-slate-400 mb-2 leading-relaxed">{description}</p>
+          )}
+          {items.map((item, i) => (
+            <div key={i} className="flex items-start justify-between gap-4 text-xs py-1 border-b border-slate-100 last:border-0">
+              <span className="text-slate-600 break-all font-mono leading-relaxed">
+                {item.url || '—'}
+              </span>
+              <div className="flex gap-3 shrink-0 text-right">
+                {item.size && <span className="text-slate-500">{item.size}</span>}
+                {item.savings_ms && <span className="text-amber-600">{item.savings_ms} ms</span>}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   )

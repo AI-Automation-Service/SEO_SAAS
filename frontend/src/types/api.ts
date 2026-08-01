@@ -109,19 +109,29 @@ export interface SpeedMetric {
   score: number | null
 }
 
+export interface SpeedAuditItem {
+  url?: string
+  size?: string
+  savings_ms?: number
+}
+
 export interface SpeedOpportunity {
   id: string
   title: string
+  description: string
   display: string
   score: number
   savings_ms: number
+  items: SpeedAuditItem[]
 }
 
 export interface SpeedDiagnostic {
   id: string
   title: string
+  description: string
   display: string
   score: number
+  items: SpeedAuditItem[]
 }
 
 export interface SpeedResult {
