@@ -232,7 +232,7 @@ function Step3({ projectName, onComplete }: { projectName: string; onComplete: (
     e.preventDefault()
     setSaving(true)
     try {
-      const envKey = projectName.toUpperCase().replace(/-/g, '_')
+      const envKey = projectName.toUpperCase().replace(/[^A-Z0-9]/g, '_')
       await integrationsApi.updateConfig(projectName, {
         wordpress: {
           enabled: true,
