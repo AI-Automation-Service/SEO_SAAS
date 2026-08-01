@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Tags, RefreshCw, Upload, Sparkles, Search, X, ExternalLink,
-  ChevronUp, ChevronDown, Trash2, Crown, Zap, HelpCircle,
+  ChevronUp, ChevronDown, Trash2, Crown, Zap, HelpCircle, RotateCcw,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { keywordsApi, getErrorMessage } from '@/api/client'
@@ -280,6 +280,22 @@ export function KeywordsTab({ projectName }: { projectName: string }) {
     onError: (err) => toast.error(getErrorMessage(err)),
   })
 
+  const resetMut = useMutation({
+    mutationFn: () => keywordsApi.reset(projectName),
+    onSuccess: (data) => {
+      toast.success(data.message)
+      qc.invalidateQueries({ queryKey: ['keywords', projectName] })
+      qc.invalidateQueries({ queryKey: ['keywords-summary', projectName] })
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
+
+  function handleReset() {
+    if (confirm('Clear all keywords for this project? You can re-sync from GSC or re-upload a CSV after.')) {
+      resetMut.mutate()
+    }
+  }
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) uploadMut.mutate(file)
@@ -366,6 +382,19 @@ export function KeywordsTab({ projectName }: { projectName: string }) {
             <Sparkles size={12} className={clusterMut.isPending ? 'animate-pulse' : ''} />
             {clusterMut.isPending ? 'Clustering…' : 'Run Cluster Agent'}
           </button>
+
+          {keywords.length > 0 && (
+            <button
+              type="button"
+              onClick={handleReset}
+              disabled={resetMut.isPending}
+              title="Clear all keywords and start fresh"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-red-200 text-red-500 rounded-lg hover:bg-red-50 disabled:opacity-50 cursor-pointer transition-colors"
+            >
+              <RotateCcw size={12} className={resetMut.isPending ? 'animate-spin' : ''} />
+              {resetMut.isPending ? 'Clearing…' : 'Reset'}
+            </button>
+          )}
         </div>
       </div>
 

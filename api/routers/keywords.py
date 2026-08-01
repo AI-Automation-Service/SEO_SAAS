@@ -511,6 +511,25 @@ def update_keyword(
     return row
 
 
+@router.delete("")
+def reset_keywords(
+    context: ProjectContext = Depends(get_project_context),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete all keywords for this project so the user can re-sync or re-upload."""
+    count = (
+        db.query(Keyword)
+        .filter(
+            Keyword.user_id == current_user.id,
+            Keyword.project_name == context.name,
+        )
+        .delete()
+    )
+    db.commit()
+    return {"deleted": count, "message": f"Cleared {count} keywords."}
+
+
 @router.delete("/{keyword_id}")
 def delete_keyword(
     keyword_id: int,

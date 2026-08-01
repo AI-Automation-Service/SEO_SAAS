@@ -192,6 +192,9 @@ export const keywordsApi = {
 
   remove: (name: string, id: number) =>
     api.delete(`/api/projects/${name}/keywords/${id}`).then((r) => r.data),
+
+  reset: (name: string) =>
+    api.delete<{ deleted: number; message: string }>(`/api/projects/${name}/keywords`).then((r) => r.data),
 }
 
 // ── Speed ─────────────────────────────────────────────────────────────────────
