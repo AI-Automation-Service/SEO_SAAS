@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import {
   Map,
   FileText,
@@ -29,10 +31,28 @@ interface SkillOutput {
 
 type SkillKey = 'plan' | 'content' | 'architecture' | 'competitorPage'
 
+function copyToClipboard(text: string): Promise<void> {
+  if (navigator.clipboard) {
+    return navigator.clipboard.writeText(text)
+  }
+  // HTTP fallback (execCommand works without HTTPS)
+  return new Promise((resolve) => {
+    const el = document.createElement('textarea')
+    el.value = text
+    el.style.cssText = 'position:fixed;top:-9999px;left:-9999px'
+    document.body.appendChild(el)
+    el.focus()
+    el.select()
+    try { document.execCommand('copy') } catch {}
+    document.body.removeChild(el)
+    resolve()
+  })
+}
+
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
   function handleCopy() {
-    navigator.clipboard.writeText(text).then(() => {
+    copyToClipboard(text).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     })
@@ -47,6 +67,35 @@ function CopyButton({ text }: { text: string }) {
       {copied ? 'Copied' : 'Copy'}
     </button>
   )
+}
+
+const MD_COMPONENTS: React.ComponentProps<typeof ReactMarkdown>['components'] = {
+  h1: ({ children }) => <h1 className="text-base font-bold text-slate-900 mt-5 mb-2">{children}</h1>,
+  h2: ({ children }) => <h2 className="text-sm font-bold text-slate-800 mt-4 mb-1.5 border-b border-slate-100 pb-1">{children}</h2>,
+  h3: ({ children }) => <h3 className="text-xs font-semibold text-slate-700 mt-3 mb-1">{children}</h3>,
+  p: ({ children }) => <p className="text-xs text-slate-600 mb-2 leading-relaxed">{children}</p>,
+  strong: ({ children }) => <strong className="font-semibold text-slate-800">{children}</strong>,
+  ul: ({ children }) => <ul className="list-disc list-inside space-y-0.5 mb-2">{children}</ul>,
+  ol: ({ children }) => <ol className="list-decimal list-inside space-y-0.5 mb-2">{children}</ol>,
+  li: ({ children }) => <li className="text-xs text-slate-600 leading-relaxed">{children}</li>,
+  table: ({ children }) => (
+    <div className="overflow-x-auto mb-3">
+      <table className="w-full text-xs border-collapse">{children}</table>
+    </div>
+  ),
+  thead: ({ children }) => <thead className="bg-slate-50">{children}</thead>,
+  th: ({ children }) => (
+    <th className="px-2 py-1.5 text-left font-medium text-slate-600 border border-slate-200 whitespace-nowrap">{children}</th>
+  ),
+  td: ({ children }) => <td className="px-2 py-1.5 text-slate-600 border border-slate-200">{children}</td>,
+  tr: ({ children }) => <tr className="even:bg-slate-50/50">{children}</tr>,
+  blockquote: ({ children }) => (
+    <blockquote className="border-l-2 border-emerald-300 pl-3 my-2 text-slate-500 text-xs italic">{children}</blockquote>
+  ),
+  code: ({ children }) => (
+    <code className="bg-slate-100 px-1 py-0.5 rounded text-[11px] font-mono text-slate-700">{children}</code>
+  ),
+  hr: () => <hr className="border-slate-200 my-3" />,
 }
 
 function OutputPanel({ text, onToggle, expanded }: { text: string; onToggle: () => void; expanded: boolean }) {
@@ -66,9 +115,11 @@ function OutputPanel({ text, onToggle, expanded }: { text: string; onToggle: () 
         </div>
       </div>
       {expanded && (
-        <pre className="p-4 text-xs text-slate-700 whitespace-pre-wrap font-mono leading-relaxed max-h-[500px] overflow-y-auto bg-white">
-          {text}
-        </pre>
+        <div className="p-4 max-h-[600px] overflow-y-auto bg-white">
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>
+            {text}
+          </ReactMarkdown>
+        </div>
       )}
     </div>
   )

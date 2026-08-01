@@ -744,17 +744,30 @@ function STh({
   )
 }
 
+function copyToClipboard(text: string): Promise<void> {
+  if (navigator.clipboard) return navigator.clipboard.writeText(text)
+  return new Promise((resolve) => {
+    const el = document.createElement('textarea')
+    el.value = text
+    el.style.cssText = 'position:fixed;top:-9999px;left:-9999px'
+    document.body.appendChild(el)
+    el.focus()
+    el.select()
+    try { document.execCommand('copy') } catch {}
+    document.body.removeChild(el)
+    resolve()
+  })
+}
+
 function CopyBtn({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
   return (
     <button
       type="button"
-      onClick={() => {
-        navigator.clipboard.writeText(text).then(() => {
-          setCopied(true)
-          setTimeout(() => setCopied(false), 2000)
-        })
-      }}
+      onClick={() => copyToClipboard(text).then(() => {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      })}
       className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
     >
       {copied ? <Check size={11} className="text-emerald-500" /> : <Copy size={11} />}
