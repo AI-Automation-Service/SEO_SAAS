@@ -167,12 +167,13 @@ function Step2({ onComplete }: { onComplete: (projectName: string) => void }) {
     if (!name.trim()) return
     setCreating(true)
     try {
-      await projectsApi.create({ name: name.trim().toLowerCase().replace(/\s+/g, '-'), cms })
+      const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+      await projectsApi.create({ name: slug, cms })
       if (website.trim()) {
-        await projectsApi.update(name.trim().toLowerCase().replace(/\s+/g, '-'), { website: website.trim() })
+        await projectsApi.update(slug, { website: website.trim() })
       }
       toast.success('Project created')
-      onComplete(name.trim().toLowerCase().replace(/\s+/g, '-'))
+      onComplete(slug)
     } catch (err) {
       toast.error(getErrorMessage(err))
     } finally {
