@@ -1,9 +1,11 @@
+import { useState } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'react-hot-toast'
 import { AuthProvider } from '@/context/AuthContext'
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import { Sidebar } from '@/components/layout/Sidebar'
+import { cn } from '@/lib/utils'
 import { LoginPage } from '@/pages/LoginPage'
 import { RegisterPage } from '@/pages/RegisterPage'
 import { OnboardingPage } from '@/pages/OnboardingPage'
@@ -21,6 +23,17 @@ const queryClient = new QueryClient({
 })
 
 function App() {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () => localStorage.getItem('sidebar_collapsed') === 'true',
+  )
+
+  function toggleSidebar() {
+    setSidebarCollapsed((prev) => {
+      localStorage.setItem('sidebar_collapsed', String(!prev))
+      return !prev
+    })
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
@@ -41,8 +54,8 @@ function App() {
               element={
                 <ProtectedRoute>
                   <div className="flex h-screen bg-slate-50 overflow-hidden">
-                    <Sidebar />
-                    <main className="flex-1 ml-60 overflow-y-auto">
+                    <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
+                    <main className={cn('flex-1 overflow-y-auto transition-all duration-200', sidebarCollapsed ? 'ml-14' : 'ml-60')}>
                       <Routes>
                         <Route path="/" element={<DashboardPage />} />
                         <Route path="/projects" element={<ProjectsPage />} />

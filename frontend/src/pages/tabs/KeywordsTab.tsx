@@ -2,12 +2,31 @@ import { useMemo, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Tags, RefreshCw, Upload, Sparkles, Search, X, ExternalLink,
-  ChevronUp, ChevronDown, Trash2, Crown, Zap,
+  ChevronUp, ChevronDown, Trash2, Crown, Zap, HelpCircle,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { keywordsApi, getErrorMessage } from '@/api/client'
 import type { Keyword, KeywordStatus, KeywordType, FunnelStage } from '@/types/api'
 import { cn } from '@/lib/utils'
+
+// ── Tooltip ───────────────────────────────────────────────────────────────────
+
+function Tip({ text }: { text: string }) {
+  return (
+    <span className="relative group/tip inline-flex items-center ml-0.5">
+      <HelpCircle size={10} className="text-slate-300 hover:text-slate-500 cursor-help transition-colors" />
+      <span
+        className={cn(
+          'pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 z-50',
+          'w-52 bg-slate-800 text-slate-100 text-xs rounded-lg px-3 py-2 leading-relaxed shadow-xl',
+          'opacity-0 group-hover/tip:opacity-100 transition-opacity duration-150',
+        )}
+      >
+        {text}
+      </span>
+    </span>
+  )
+}
 
 // ── Badge helpers ─────────────────────────────────────────────────────────────
 
@@ -384,19 +403,52 @@ export function KeywordsTab({ projectName }: { projectName: string }) {
           <table className="w-full text-sm min-w-[900px]">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50">
-                <Th field="keyword" sort={sort} dir={sortDir} onClick={toggleSort} className="min-w-[180px] sticky left-0 bg-slate-50 z-10">Keyword</Th>
-                <Th field="cluster" sort={sort} dir={sortDir} onClick={toggleSort}>Cluster</Th>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">Type</th>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">Funnel</th>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">Status</th>
-                <Th field="volume" sort={sort} dir={sortDir} onClick={toggleSort} className="text-right">Vol.</Th>
-                <Th field="clicks" sort={sort} dir={sortDir} onClick={toggleSort} className="text-right">Clicks</Th>
-                <Th field="impressions" sort={sort} dir={sortDir} onClick={toggleSort} className="text-right">Impr.</Th>
-                <Th field="position" sort={sort} dir={sortDir} onClick={toggleSort} className="text-right">Pos.</Th>
-                <Th field="ctr" sort={sort} dir={sortDir} onClick={toggleSort} className="text-right">CTR</Th>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">Comp.</th>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-slate-500 uppercase tracking-wide w-8">✦</th>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">Current URL</th>
+                <Th field="keyword" sort={sort} dir={sortDir} onClick={toggleSort} className="min-w-[280px] sticky left-0 bg-slate-50 z-10">Keyword</Th>
+                <Th field="cluster" sort={sort} dir={sortDir} onClick={toggleSort}>
+                  Cluster
+                  <Tip text="Keywords grouped into a topic by the Cluster Agent. Each cluster has one Hub (pillar page) and multiple Spokes (supporting articles)." />
+                </Th>
+                <th className="px-3 py-2.5 text-left text-xs font-medium text-slate-500 uppercase tracking-wide whitespace-nowrap">
+                  Type
+                  <Tip text="Standard: regular keyword. Question: starts with how/what/why/etc. Branded: includes your brand name. Competitor: includes a competitor name." />
+                </th>
+                <th className="px-3 py-2.5 text-left text-xs font-medium text-slate-500 uppercase tracking-wide whitespace-nowrap">
+                  Funnel
+                  <Tip text="ToFu (Top of Funnel): user is learning — write educational content. MoFu (Middle): user is comparing options — write reviews/comparisons. BoFu (Bottom): user is ready to buy — write sales/service pages." />
+                </th>
+                <th className="px-3 py-2.5 text-left text-xs font-medium text-slate-500 uppercase tracking-wide whitespace-nowrap">
+                  Status
+                  <Tip text="Covered: ranking top 3 — maintain it. Quick Win: ranking 4–10 — small push gets you to top 3. Opportunity: showing in results but below pos 10 — needs stronger content. Gap: not ranking at all — create new content." />
+                </th>
+                <Th field="volume" sort={sort} dir={sortDir} onClick={toggleSort} className="text-right whitespace-nowrap">
+                  Vol.
+                  <Tip text="Average monthly searches from Google Keyword Planner. Shows how popular this keyword is." />
+                </Th>
+                <Th field="clicks" sort={sort} dir={sortDir} onClick={toggleSort} className="text-right whitespace-nowrap">
+                  Clicks
+                  <Tip text="Actual clicks your site received from Google Search for this keyword in the last 90 days (from Google Search Console)." />
+                </Th>
+                <Th field="impressions" sort={sort} dir={sortDir} onClick={toggleSort} className="text-right whitespace-nowrap">
+                  Impr.
+                  <Tip text="Impressions: how many times your page appeared in Google search results for this keyword in the last 90 days. High impressions + low clicks = bad title/description." />
+                </Th>
+                <Th field="position" sort={sort} dir={sortDir} onClick={toggleSort} className="text-right whitespace-nowrap">
+                  Pos.
+                  <Tip text="Average position in Google search results. Position 1 = top of page 1. Below 10 = page 2 or lower." />
+                </Th>
+                <Th field="ctr" sort={sort} dir={sortDir} onClick={toggleSort} className="text-right whitespace-nowrap">
+                  CTR
+                  <Tip text="Click-through rate: percentage of people who clicked your result after seeing it. Low CTR means your title or meta description needs improvement." />
+                </Th>
+                <th className="px-3 py-2.5 text-left text-xs font-medium text-slate-500 uppercase tracking-wide whitespace-nowrap">
+                  Comp.
+                  <Tip text="Competition score (0–100) from Google Keyword Planner. Higher = more advertisers bidding = harder to rank organically. Low competition + decent volume = best opportunity." />
+                </th>
+                <th className="px-3 py-2.5 text-left text-xs font-medium text-slate-500 uppercase tracking-wide w-8 whitespace-nowrap">
+                  Gap
+                  <Tip text="Competitor gap: this keyword drives traffic to competitor sites but not to yours. High-priority target." />
+                </th>
+                <th className="px-3 py-2.5 text-left text-xs font-medium text-slate-500 uppercase tracking-wide whitespace-nowrap">Current URL</th>
                 <th className="px-3 py-2.5" />
               </tr>
             </thead>
@@ -501,7 +553,7 @@ function KeywordRow({ kw, onDelete }: { kw: Keyword; onDelete: () => void }) {
           {kw.snippet_opportunity && (
             <span title="Featured snippet opportunity"><Zap size={11} className="text-violet-500 shrink-0" /></span>
           )}
-          <span className="font-medium text-slate-800 truncate max-w-[200px]">{kw.keyword}</span>
+          <span className="font-medium text-slate-800 truncate max-w-[280px]">{kw.keyword}</span>
         </div>
       </td>
 
