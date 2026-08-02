@@ -453,11 +453,9 @@ Return ONLY a valid JSON object in this exact format — no extra text, no markd
 Rules:
 - Keywords sharing the same page URL already belong together — put them in the same cluster
 - Every cluster must have exactly one hub keyword (is_hub: true)
-- Hub selection priority: (1) quick_win with highest impressions → Google already ranks this, best to build around; (2) opportunity with highest impressions or volume → Google is already surfacing it, strongest growth target; (3) monitor or gap → only if no better option exists
-- Keywords at position 1-3 with high impressions are proven pillars — make them hub
-- Keywords at position 4-15 are quick wins — high priority as hub if impressions are strong
-- A keyword with the most impressions in a cluster is ALWAYS the hub candidate — impressions prove Google understands the match, even at low positions
-- For keywords with no GSC data, group by semantic meaning and use volume as the hub signal
+- Hub = the keyword with the HIGHEST impressions in the cluster, period. Impressions beat everything else — they prove Google is already surfacing this keyword to real users. Do not pick a hub based on keyword length, phrasing, or position unless impressions are tied
+- If two keywords have equal impressions, prefer the one with better (lower) position
+- If no keyword has any impressions, use volume; if no volume either, pick the broadest/shortest keyword
 - Spokes link back to the hub
 - Return every keyword from the input — do not skip any
 - The "keyword" field in your response must be the exact keyword text only, without any signals"""
