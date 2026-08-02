@@ -222,8 +222,8 @@ const COMPETITOR_PAGES_FAQ: FaqItem[] = [
     text: 'Link to each comparison page from your Pricing page and Homepage navigation. This tells Google the pages are important and gives buyers an easy path to find them during their research.',
   },
   {
-    label: 'Requirement',
-    text: 'Competitor URLs must be added in Project Settings → Competitors. WordPress must be connected in the Integrations tab before you can use the Publish button.',
+    label: 'Which competitor URL to use',
+    text: 'Type any competitor\'s homepage URL directly — no pre-configuration needed. You can also save frequently-used competitors in Project Settings → Competitors to get quick-access buttons here. The "Publish to WordPress" button requires WordPress to be connected in the Integrations tab.',
   },
 ]
 
@@ -425,6 +425,7 @@ export function StrategyTab({ projectName, project }: StrategyTabProps) {
   const [competitorEditingUrl, setCompetitorEditingUrl] = useState<string | null>(null)
   const [competitorEditDraft, setCompetitorEditDraft] = useState('')
   const [publishedUrls, setPublishedUrls] = useState<Record<string, string>>({})
+  const [newCompetitorUrl, setNewCompetitorUrl] = useState('')
   const initialized = useRef(false)
 
   const { data: summary } = useQuery({
@@ -690,13 +691,66 @@ export function StrategyTab({ projectName, project }: StrategyTabProps) {
           </div>
         </div>
 
-        {competitors.length === 0 ? (
-          <p className="text-xs text-slate-400 bg-slate-50 rounded-lg px-3 py-2.5">
-            No competitor URLs configured. Add competitors in Project Settings → Competitors to unlock this feature.
-          </p>
-        ) : (
-          <div className="space-y-4">
+        {/* URL input to generate for any competitor */}
+        <div className="flex gap-2">
+          <input
+            type="url"
+            value={newCompetitorUrl}
+            onChange={(e) => setNewCompetitorUrl(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && newCompetitorUrl.trim()) {
+                const url = newCompetitorUrl.trim()
+                setNewCompetitorUrl('')
+                competitorMut.mutate(url)
+              }
+            }}
+            placeholder="https://competitor.com"
+            className="flex-1 text-xs px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400"
+          />
+          <button
+            type="button"
+            disabled={!newCompetitorUrl.trim() || competitorMut.isPending}
+            onClick={() => {
+              const url = newCompetitorUrl.trim()
+              if (!url) return
+              setNewCompetitorUrl('')
+              competitorMut.mutate(url)
+            }}
+            className={cn(
+              'px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer shrink-0',
+              !newCompetitorUrl.trim() || competitorMut.isPending
+                ? 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                : 'bg-emerald-500 text-white hover:bg-emerald-600',
+            )}
+          >
+            Generate
+          </button>
+        </div>
+
+        {/* Pre-configured quick-access buttons */}
+        {competitors.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            <span className="text-[11px] text-slate-400 self-center">Quick add:</span>
             {competitors.map((url) => {
+              const label = url.replace(/^https?:\/\//, '').replace(/\/$/, '')
+              return (
+                <button
+                  key={url}
+                  type="button"
+                  onClick={() => setNewCompetitorUrl(url)}
+                  className="px-2 py-1 text-[11px] rounded-md bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer"
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Competitor output cards — all URLs that have been generated */}
+        {Object.keys(competitorOutputs).length > 0 && (
+          <div className="space-y-4">
+            {Object.keys(competitorOutputs).map((url) => {
               const label = url.replace(/^https?:\/\//, '').replace(/\/$/, '')
               const hasOutput = !!competitorOutputs[url]
               const isGenerating = competitorMut.isPending && competitorMut.variables === url

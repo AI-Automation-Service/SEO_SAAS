@@ -428,30 +428,37 @@ def run_competitor_page(
     db: Session = Depends(get_db),
 ):
     openai_key = get_user_secret("openai", current_user.id, db)
-    if body.competitor_url not in context.config.competitors:
-        raise HTTPException(
-            400,
-            "Competitor URL not found in project config. Add it in your project settings first.",
-        )
-
+    cfg = context.config
     knowledge = _knowledge_block(db, current_user.id, context.name)
     msg = (
-        f"Our product: {context.config.business_name} ({context.config.business_type})\n"
-        f"Our website: {context.config.website}\n"
-        f"Target audience: {context.config.target_audience}\n"
-        f"Tone of voice: {context.config.tone_of_voice}\n"
-        f"Our SEO goals: {', '.join(context.config.seo_goals)}"
+        f"Our business: {cfg.business_name}\n"
+        f"Business type: {cfg.business_type}\n"
+        f"Website: {cfg.website}\n"
+        f"Country: {cfg.country}, Language: {cfg.language}\n"
+        f"Target audience: {cfg.target_audience}\n"
+        f"Tone of voice: {cfg.tone_of_voice}\n"
+        f"Primary conversion goal: {cfg.primary_conversion or 'lead generation'}\n"
+        f"SEO goals: {', '.join(cfg.seo_goals)}\n"
+        f"Business goals: {', '.join(cfg.business_goals)}\n"
         f"{knowledge}\n\n"
-        f"Competitor: {body.competitor_url}\n\n"
-        "Generate a full SEO-optimized comparison page. Include:\n"
-        "1. Meta title + meta description (target keyword: '[our brand] vs [competitor name]')\n"
-        "2. H1 + intro section (150-200 words)\n"
-        "3. Feature comparison table (10+ features, honest assessment)\n"
-        "4. Pros and cons for each product\n"
-        "5. Verdict section with recommendation\n"
-        "6. FAQ section (5 questions optimized for 'People Also Ask')\n"
-        "7. CTA section\n"
-        "Output the full page in Markdown, ready to copy into WordPress."
+        f"Competitor website: {body.competitor_url}\n\n"
+        "CRITICAL RULES — you must follow these exactly:\n"
+        "- NEVER use placeholder text such as [Feature], [Target Audience], $X/mo, Feature 1, "
+        "Your Business Name, [specific tool], [date], or any bracketed text.\n"
+        "- Use ONLY the real business name, real features, and real information from the context above.\n"
+        "- For the competitor, use your knowledge of that company's actual product, pricing, and features.\n"
+        "- If you are unsure of a competitor detail, say 'not publicly disclosed' or 'varies by plan' — "
+        "never invent a placeholder.\n"
+        "- Write in the specified tone of voice. Address the target audience directly.\n\n"
+        "Generate a full SEO-optimized comparison page in Markdown. Include:\n"
+        "1. Meta title + meta description targeting the keyword '[our brand] vs [competitor name]'\n"
+        "2. H1 + intro (150-200 words) — speak to the target audience's real pain points\n"
+        "3. Feature comparison table (10+ real features, honest and specific)\n"
+        "4. Pros and cons for each — based on real strengths and weaknesses\n"
+        "5. Verdict — clear recommendation with reasoning\n"
+        "6. FAQ section — 5 questions matching real 'People Also Ask' queries for this comparison\n"
+        "7. CTA — aligned with the primary conversion goal\n"
+        "Output clean Markdown ready to publish to WordPress."
     )
     output = _run_skill("seo-competitor-pages", openai_key, msg)
     _save_output(db, current_user.id, context.name, f"competitor:{body.competitor_url}", output)
