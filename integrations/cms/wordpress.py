@@ -1,3 +1,5 @@
+from urllib.parse import urlparse
+
 import httpx
 
 from integrations.base import (
@@ -96,6 +98,64 @@ class WordPressAdapter(CMSAdapter):
             title=data["title"]["rendered"],
             status=data["status"],
         )
+
+    def get_post(self, post_id: int) -> dict:
+        response = self._request("GET", f"/posts/{post_id}", params={"context": "edit"})
+        data = response.json()
+        return {
+            "id": data["id"],
+            "title": data["title"]["raw"],
+            "content": data["content"]["raw"],
+            "link": data["link"],
+            "slug": data["slug"],
+            "type": "post",
+            "has_yoast": "yoast_head" in data,
+            "has_rankmath": bool(data.get("meta", {}).get("rank_math_title")),
+        }
+
+    def get_page(self, page_id: int) -> dict:
+        response = self._request("GET", f"/pages/{page_id}", params={"context": "edit"})
+        data = response.json()
+        return {
+            "id": data["id"],
+            "title": data["title"]["raw"],
+            "content": data["content"]["raw"],
+            "link": data["link"],
+            "slug": data["slug"],
+            "type": "page",
+            "has_yoast": "yoast_head" in data,
+            "has_rankmath": bool(data.get("meta", {}).get("rank_math_title")),
+        }
+
+    def find_post_by_url(self, url: str) -> dict | None:
+        slug = urlparse(url).path.rstrip("/").split("/")[-1]
+        if not slug:
+            return None
+        for content_type in ("posts", "pages"):
+            resp = self._request(
+                "GET", f"/{content_type}",
+                params={"slug": slug, "context": "edit", "_fields": "id,title,content,link,slug,meta,yoast_head"},
+            )
+            results = resp.json()
+            if results:
+                data = results[0]
+                return {
+                    "id": data["id"],
+                    "title": data["title"]["raw"],
+                    "content": data["content"]["raw"],
+                    "link": data["link"],
+                    "slug": data["slug"],
+                    "type": content_type.rstrip("s"),  # "posts" → "post", "pages" → "page"
+                    "has_yoast": "yoast_head" in data,
+                    "has_rankmath": bool(data.get("meta", {}).get("rank_math_title")),
+                }
+        return None
+
+    def update_post(self, post_id: int, new_content: str) -> None:
+        self._request("PUT", f"/posts/{post_id}", json={"content": new_content})
+
+    def update_page(self, page_id: int, new_content: str) -> None:
+        self._request("PUT", f"/pages/{page_id}", json={"content": new_content})
 
     def get_sitemap_urls(self) -> list[str]:
         urls: list[str] = []

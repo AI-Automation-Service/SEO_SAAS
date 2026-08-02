@@ -3,11 +3,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Tags, RefreshCw, Upload, Sparkles, Search, X, ExternalLink,
   ChevronUp, ChevronDown, Trash2, Crown, Zap, HelpCircle, RotateCcw, Info,
-  Wand2, Copy, Check, ChevronRight,
+  Wand2, Copy, Check, ChevronRight, Wrench, RotateCcw as Rollback, CheckCircle, AlertCircle,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { keywordsApi, strategyApi, getErrorMessage } from '@/api/client'
-import type { Keyword, KeywordStatus, KeywordType, FunnelStage } from '@/types/api'
+import { keywordsApi, strategyApi, improveApi, getErrorMessage } from '@/api/client'
+import type { Keyword, KeywordStatus, KeywordType, FunnelStage, PageChange } from '@/types/api'
 import { cn } from '@/lib/utils'
 
 // ── Tooltip ───────────────────────────────────────────────────────────────────
@@ -668,7 +668,7 @@ export function KeywordsTab({ projectName }: { projectName: string }) {
 
       {/* Cluster legend */}
       {clusterOptions.length > 0 && (
-        <ClusterLegend keywords={keywords} />
+        <ClusterLegend keywords={keywords} projectName={projectName} />
       )}
     </div>
   )
@@ -995,9 +995,225 @@ function KeywordRow({
   )
 }
 
+// ── Improve panel ─────────────────────────────────────────────────────────────
+
+function ImprovePanelDiff({ original, updated }: { original: string; updated: string }) {
+  // Strip HTML tags for readable diff preview
+  const strip = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+  const origText = strip(original)
+  const newText = strip(updated)
+  return (
+    <div className="grid grid-cols-2 gap-3 text-xs">
+      <div>
+        <p className="font-medium text-slate-500 mb-1.5 uppercase tracking-wide text-[10px]">Before</p>
+        <div className="bg-red-50 border border-red-100 rounded-lg p-3 text-slate-600 whitespace-pre-wrap line-clamp-[20] overflow-y-auto max-h-80">
+          {origText.slice(0, 1500)}{origText.length > 1500 ? '…' : ''}
+        </div>
+      </div>
+      <div>
+        <p className="font-medium text-slate-500 mb-1.5 uppercase tracking-wide text-[10px]">After</p>
+        <div className="bg-emerald-50 border border-emerald-100 rounded-lg p-3 text-slate-600 whitespace-pre-wrap line-clamp-[20] overflow-y-auto max-h-80">
+          {newText.slice(0, 1500)}{newText.length > 1500 ? '…' : ''}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ImprovePanel({
+  projectName,
+  clusterName,
+  onClose,
+}: {
+  projectName: string
+  clusterName: string
+  onClose: () => void
+}) {
+  const qc = useQueryClient()
+  const [change, setChange] = useState<PageChange | null>(null)
+
+  const analyzeMut = useMutation({
+    mutationFn: () => improveApi.analyze(projectName, clusterName),
+    onSuccess: (data) => setChange(data),
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
+
+  const applyMut = useMutation({
+    mutationFn: (id: number) => improveApi.apply(projectName, id),
+    onSuccess: (data) => {
+      setChange(data)
+      toast.success('Changes pushed to WordPress successfully.')
+      qc.invalidateQueries({ queryKey: ['improve-history', projectName] })
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
+
+  const rollbackMut = useMutation({
+    mutationFn: (id: number) => improveApi.rollback(projectName, id),
+    onSuccess: (data) => {
+      setChange(data)
+      toast.success('Page restored to original.')
+      qc.invalidateQueries({ queryKey: ['improve-history', projectName] })
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
+
+  const isLoading = analyzeMut.isPending || applyMut.isPending || rollbackMut.isPending
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <div className="relative w-full max-w-2xl bg-white shadow-2xl flex flex-col h-full overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+          <div>
+            <p className="text-xs text-slate-400 uppercase tracking-wide">Improve Cluster</p>
+            <p className="text-sm font-semibold text-slate-800 mt-0.5">{clusterName}</p>
+          </div>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          {!change && !analyzeMut.isPending && (
+            <div className="flex flex-col items-center justify-center py-16 text-center gap-4">
+              <Wrench size={32} className="text-slate-300" />
+              <div>
+                <p className="text-sm font-medium text-slate-700">Analyze this cluster's hub page</p>
+                <p className="text-xs text-slate-400 mt-1 max-w-xs">
+                  The agent will fetch the live WordPress page, check what's missing for AEO/GEO, and suggest specific changes.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => analyzeMut.mutate()}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 cursor-pointer transition-colors"
+              >
+                <Sparkles size={14} />
+                Analyze & Suggest Changes
+              </button>
+            </div>
+          )}
+
+          {analyzeMut.isPending && (
+            <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
+              <RefreshCw size={24} className="text-emerald-500 animate-spin" />
+              <p className="text-sm text-slate-500">Fetching page and analyzing with AI…</p>
+              <p className="text-xs text-slate-400">This may take 20–40 seconds</p>
+            </div>
+          )}
+
+          {change && (
+            <div className="space-y-4">
+              {/* Status badge */}
+              <div className={cn(
+                'flex items-start gap-2.5 p-3 rounded-lg text-sm',
+                change.status === 'no_action' ? 'bg-slate-50 border border-slate-200' :
+                change.status === 'approved' ? 'bg-emerald-50 border border-emerald-200' :
+                change.status === 'rolled_back' ? 'bg-amber-50 border border-amber-200' :
+                'bg-blue-50 border border-blue-200'
+              )}>
+                {change.status === 'no_action' ? <AlertCircle size={16} className="text-slate-400 shrink-0 mt-0.5" /> :
+                 change.status === 'approved' ? <CheckCircle size={16} className="text-emerald-600 shrink-0 mt-0.5" /> :
+                 <Sparkles size={16} className="text-blue-500 shrink-0 mt-0.5" />}
+                <p className="text-slate-700 leading-relaxed">{change.change_summary}</p>
+              </div>
+
+              {/* Changes list */}
+              {change.changes_made && change.changes_made.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Changes</p>
+                  <ul className="space-y-1">
+                    {change.changes_made.map((c, i) => (
+                      <li key={i} className="flex items-start gap-2 text-xs text-slate-600">
+                        <CheckCircle size={12} className="text-emerald-500 shrink-0 mt-0.5" />
+                        {c}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Diff */}
+              {change.status === 'pending' && (
+                <div>
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Preview</p>
+                  <ImprovePanelDiff original={change.original_content} updated={change.new_content} />
+                </div>
+              )}
+
+              {/* Page link */}
+              <a
+                href={change.wp_post_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
+              >
+                <ExternalLink size={11} />
+                View page on WordPress
+              </a>
+            </div>
+          )}
+        </div>
+
+        {/* Footer actions */}
+        {change && (
+          <div className="border-t border-slate-200 px-5 py-4 flex items-center gap-3">
+            {change.status === 'pending' && (
+              <>
+                <button
+                  type="button"
+                  disabled={isLoading}
+                  onClick={() => applyMut.mutate(change.id)}
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 disabled:opacity-50 cursor-pointer transition-colors"
+                >
+                  {applyMut.isPending ? <RefreshCw size={14} className="animate-spin" /> : <CheckCircle size={14} />}
+                  Approve & Push to WordPress
+                </button>
+                <button
+                  type="button"
+                  disabled={isLoading}
+                  onClick={() => { setChange(null); analyzeMut.reset() }}
+                  className="px-4 py-2 border border-slate-300 text-slate-600 text-sm rounded-lg hover:bg-slate-50 disabled:opacity-50 cursor-pointer transition-colors"
+                >
+                  Discard
+                </button>
+              </>
+            )}
+            {change.status === 'approved' && (
+              <button
+                type="button"
+                disabled={isLoading}
+                onClick={() => rollbackMut.mutate(change.id)}
+                className="inline-flex items-center gap-2 px-4 py-2 border border-amber-300 text-amber-700 text-sm rounded-lg hover:bg-amber-50 disabled:opacity-50 cursor-pointer transition-colors"
+              >
+                {rollbackMut.isPending ? <RefreshCw size={14} className="animate-spin" /> : <Rollback size={14} />}
+                Rollback to Original
+              </button>
+            )}
+            {(change.status === 'no_action' || change.status === 'rolled_back') && (
+              <button
+                type="button"
+                onClick={() => { setChange(null); analyzeMut.reset() }}
+                className="px-4 py-2 border border-slate-300 text-slate-600 text-sm rounded-lg hover:bg-slate-50 cursor-pointer transition-colors"
+              >
+                Re-analyze
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Cluster legend ─────────────────────────────────────────────────────────────
 
-function ClusterLegend({ keywords }: { keywords: Keyword[] }) {
+function ClusterLegend({ keywords, projectName }: { keywords: Keyword[]; projectName: string }) {
+  const [improveCluster, setImproveCluster] = useState<string | null>(null)
+
   const clusters = useMemo(() => {
     const map = new Map<string, { hub: string | null; count: number; statuses: string[]; impressions: number }>()
     for (const kw of keywords) {
@@ -1019,33 +1235,51 @@ function ClusterLegend({ keywords }: { keywords: Keyword[] }) {
   if (clusters.length === 0) return null
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-4">
-      <h3 className="text-sm font-semibold text-slate-700 mb-3">Cluster Overview</h3>
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-        {clusters.map(([name, info]) => {
-          const covered = info.statuses.filter((s) => s === 'covered' || s === 'quick_win').length
-          const pct = Math.round((covered / info.count) * 100)
-          return (
-            <div key={name} className="border border-slate-100 rounded-lg p-3">
-              <p className="text-xs font-semibold text-slate-700 truncate">{name}</p>
-              {info.hub && (
-                <p className="text-xs text-amber-600 truncate flex items-center gap-1 mt-0.5">
-                  <Crown size={9} /> {info.hub}
-                </p>
-              )}
-              <div className="flex items-center gap-2 mt-2">
-                <div className="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-emerald-400 rounded-full"
-                    style={{ width: `${pct}%` }}
-                  />
+    <>
+      <div className="bg-white border border-slate-200 rounded-xl p-4">
+        <h3 className="text-sm font-semibold text-slate-700 mb-3">Cluster Overview</h3>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          {clusters.map(([name, info]) => {
+            const covered = info.statuses.filter((s) => s === 'covered' || s === 'quick_win').length
+            const pct = Math.round((covered / info.count) * 100)
+            return (
+              <div key={name} className="border border-slate-100 rounded-lg p-3 group">
+                <p className="text-xs font-semibold text-slate-700 truncate">{name}</p>
+                {info.hub && (
+                  <p className="text-xs text-amber-600 truncate flex items-center gap-1 mt-0.5">
+                    <Crown size={9} /> {info.hub}
+                  </p>
+                )}
+                <div className="flex items-center gap-2 mt-2">
+                  <div className="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-400 rounded-full"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <span className="text-xs text-slate-400">{info.count} kw</span>
                 </div>
-                <span className="text-xs text-slate-400">{info.count} kw</span>
+                <button
+                  type="button"
+                  onClick={() => setImproveCluster(name)}
+                  className="mt-2 w-full inline-flex items-center justify-center gap-1.5 px-2 py-1 text-[11px] font-medium text-violet-600 border border-violet-200 rounded-md hover:bg-violet-50 cursor-pointer transition-colors opacity-0 group-hover:opacity-100"
+                >
+                  <Wrench size={10} />
+                  Improve
+                </button>
               </div>
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
       </div>
-    </div>
+
+      {improveCluster && (
+        <ImprovePanel
+          projectName={projectName}
+          clusterName={improveCluster}
+          onClose={() => setImproveCluster(null)}
+        />
+      )}
+    </>
   )
 }

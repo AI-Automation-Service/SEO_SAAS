@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, text, JSON
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.db.base import Base
@@ -144,3 +144,25 @@ class SitePage(Base):
     slug: Mapped[str] = mapped_column(String, nullable=False)
     page_type: Mapped[str] = mapped_column(String, default="unknown")  # page / post / unknown
     synced_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class PageChange(Base):
+    """Stores before/after content for every WordPress page improvement. Enables rollback."""
+
+    __tablename__ = "page_changes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    project_name: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    cluster_name: Mapped[str] = mapped_column(String, nullable=False)
+    wp_post_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    wp_post_url: Mapped[str] = mapped_column(String, nullable=False)
+    wp_post_type: Mapped[str] = mapped_column(String, default="post")  # post / page
+    original_content: Mapped[str] = mapped_column(Text, nullable=False)
+    new_content: Mapped[str] = mapped_column(Text, nullable=False)
+    change_summary: Mapped[str] = mapped_column(Text, nullable=False)
+    changes_made: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON list of change descriptions
+    # pending / approved / rolled_back / no_action
+    status: Mapped[str] = mapped_column(String, default="pending")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

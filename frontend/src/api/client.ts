@@ -20,6 +20,7 @@ import type {
   SitePage,
   StrategyResult,
   SpeedResult,
+  PageChange,
 } from '@/types/api'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? ''
@@ -274,6 +275,21 @@ export const knowledgeApi = {
     api.get<ProjectKnowledge>(`/api/projects/${name}/knowledge`).then((r) => r.data),
   save: (name: string, body: Omit<ProjectKnowledge, 'updated_at'>) =>
     api.put<ProjectKnowledge>(`/api/projects/${name}/knowledge`, body).then((r) => r.data),
+}
+
+// ── Page Improvement ──────────────────────────────────────────────────────────
+export const improveApi = {
+  analyze: (name: string, cluster_name: string) =>
+    api.post<PageChange>(`/api/projects/${name}/improve/analyze`, { cluster_name }).then((r) => r.data),
+
+  apply: (name: string, changeId: number) =>
+    api.post<PageChange>(`/api/projects/${name}/improve/apply/${changeId}`).then((r) => r.data),
+
+  rollback: (name: string, changeId: number) =>
+    api.post<PageChange>(`/api/projects/${name}/improve/rollback/${changeId}`).then((r) => r.data),
+
+  history: (name: string) =>
+    api.get<PageChange[]>(`/api/projects/${name}/improve/history`).then((r) => r.data),
 }
 
 // ── Health ────────────────────────────────────────────────────────────────────

@@ -155,6 +155,24 @@ export interface KeywordSummary {
   unclustered: number
 }
 
+// Page Improvement types
+export type PageChangeStatus = 'pending' | 'approved' | 'rolled_back' | 'no_action'
+
+export interface PageChange {
+  id: number
+  cluster_name: string
+  wp_post_id: number
+  wp_post_url: string
+  wp_post_type: string
+  change_summary: string
+  changes_made: string[] | null
+  original_content: string
+  new_content: string
+  status: PageChangeStatus
+  created_at: string
+  approved_at: string | null
+}
+
 // Knowledge Base types
 export interface ProjectKnowledge {
   about: string | null
