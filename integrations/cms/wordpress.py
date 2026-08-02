@@ -130,6 +130,14 @@ class WordPressAdapter(CMSAdapter):
     def find_post_by_url(self, url: str) -> dict | None:
         slug = urlparse(url).path.rstrip("/").split("/")[-1]
         if not slug:
+            # Homepage URL — fetch whichever page WordPress set as the front page
+            try:
+                settings = self._request("GET", "/settings").json()
+                page_id = settings.get("page_on_front")
+                if page_id:
+                    return self.get_page(int(page_id))
+            except Exception:
+                pass
             return None
         for content_type in ("posts", "pages"):
             resp = self._request(
