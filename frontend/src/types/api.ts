@@ -13,6 +13,8 @@ export interface Project {
   business_goals?: string[]
   competitors?: string[]
   seo_plugin?: string
+  primary_conversion?: string
+  business_location?: string
   integrations?: ProjectIntegrations
 }
 

@@ -27,6 +27,8 @@ class ProjectDetail(BaseModel):
     target_audience: str = ""
     seo_goals: list[str] = []
     business_goals: list[str] = []
+    primary_conversion: str = ""
+    business_location: str = ""
 
 
 class ValidationResult(BaseModel):

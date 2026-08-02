@@ -17,16 +17,23 @@ router = APIRouter(prefix="/projects/{name}/strategy", tags=["strategy"])
 
 def _project_block(ctx: ProjectContext) -> str:
     cfg = ctx.config
-    return (
-        f"Business: {cfg.business_name} ({cfg.business_type})\n"
-        f"Website: {cfg.website}\n"
-        f"Country: {cfg.country}, Language: {cfg.language}\n"
-        f"Tone of voice: {cfg.tone_of_voice}\n"
-        f"Target audience: {cfg.target_audience}\n"
-        f"SEO goals: {', '.join(cfg.seo_goals)}\n"
-        f"Business goals: {', '.join(cfg.business_goals)}\n"
-        f"Competitors: {', '.join(cfg.competitors) if cfg.competitors else 'None specified'}"
-    )
+    lines = [
+        f"Business: {cfg.business_name} ({cfg.business_type})",
+        f"Website: {cfg.website}",
+        f"Country: {cfg.country}, Language: {cfg.language}",
+    ]
+    if cfg.business_location:
+        lines.append(f"Location: {cfg.business_location}")
+    lines += [
+        f"Tone of voice: {cfg.tone_of_voice}",
+        f"Target audience: {cfg.target_audience}",
+        f"Primary conversion goal: {cfg.primary_conversion or 'not specified'}",
+        f"SEO plugin: {cfg.seo_plugin or 'not specified'}",
+        f"SEO goals: {', '.join(cfg.seo_goals)}",
+        f"Business goals: {', '.join(cfg.business_goals)}",
+        f"Competitors: {', '.join(cfg.competitors) if cfg.competitors else 'None specified'}",
+    ]
+    return "\n".join(lines)
 
 
 def _cluster_summary(rows: list) -> str:

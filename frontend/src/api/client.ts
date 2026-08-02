@@ -129,7 +129,7 @@ export const projectsApi = {
   get: (name: string) => api.get<Project>(`/api/projects/${name}`).then((r) => r.data),
   create: (body: CreateProjectRequest) =>
     api.post<Project>('/api/projects', body).then((r) => r.data),
-  update: (name: string, body: Partial<Pick<Project, 'website' | 'business_name' | 'business_type' | 'country' | 'language' | 'tone_of_voice' | 'target_audience' | 'seo_goals' | 'business_goals' | 'competitors' | 'seo_plugin'>>) =>
+  update: (name: string, body: Partial<Pick<Project, 'website' | 'business_name' | 'business_type' | 'country' | 'language' | 'tone_of_voice' | 'target_audience' | 'seo_goals' | 'business_goals' | 'competitors' | 'seo_plugin' | 'primary_conversion' | 'business_location'>>) =>
     api.patch(`/api/projects/${name}`, body).then((r) => r.data),
   delete: (name: string) =>
     api.delete(`/api/projects/${name}`).then((r) => r.data),

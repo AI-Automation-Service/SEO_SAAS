@@ -120,6 +120,8 @@ def get_project(
         target_audience=config.target_audience,
         seo_goals=config.seo_goals,
         business_goals=config.business_goals,
+        primary_conversion=config.primary_conversion,
+        business_location=config.business_location,
     )
 
 
@@ -135,6 +137,8 @@ class UpdateProjectRequest(BaseModel):
     business_goals: Optional[list[str]] = None
     competitors: Optional[list[str]] = None
     seo_plugin: Optional[str] = None
+    primary_conversion: Optional[str] = None
+    business_location: Optional[str] = None
 
 
 def _bg_sitemap_sync(website: str, user_id: int, project_name: str) -> None:
@@ -182,26 +186,14 @@ def update_project(
     if body.website is not None:
         updates["website"] = str(body.website)
         background_tasks.add_task(_bg_sitemap_sync, str(body.website), current_user.id, context.name)
-    if body.business_name is not None:
-        updates["business_name"] = body.business_name
-    if body.business_type is not None:
-        updates["business_type"] = body.business_type
-    if body.country is not None:
-        updates["country"] = body.country
-    if body.language is not None:
-        updates["language"] = body.language
-    if body.tone_of_voice is not None:
-        updates["tone_of_voice"] = body.tone_of_voice
-    if body.target_audience is not None:
-        updates["target_audience"] = body.target_audience
-    if body.seo_goals is not None:
-        updates["seo_goals"] = body.seo_goals
-    if body.business_goals is not None:
-        updates["business_goals"] = body.business_goals
-    if body.competitors is not None:
-        updates["competitors"] = body.competitors
-    if body.seo_plugin is not None:
-        updates["seo_plugin"] = body.seo_plugin
+    for field in (
+        "business_name", "business_type", "country", "language",
+        "tone_of_voice", "target_audience", "seo_goals", "business_goals",
+        "competitors", "seo_plugin", "primary_conversion", "business_location",
+    ):
+        val = getattr(body, field)
+        if val is not None:
+            updates[field] = val
     if updates:
         update_project_yaml(config_file, updates)
     return {"name": context.name, **updates}

@@ -23,6 +23,21 @@ const TONE_OPTIONS = [
   'Formal',
 ]
 
+const SEO_PLUGIN_OPTIONS = [
+  { value: 'rankmath', label: 'RankMath' },
+  { value: 'yoast', label: 'Yoast SEO' },
+  { value: 'aioseo', label: 'AIOSEO' },
+  { value: 'none', label: 'No SEO Plugin' },
+]
+
+const CONVERSION_OPTIONS = [
+  { value: 'lead_generation', label: 'Lead Generation (forms / enquiries)' },
+  { value: 'ecommerce', label: 'E-commerce (product sales)' },
+  { value: 'phone_call', label: 'Phone Calls' },
+  { value: 'email_signup', label: 'Email Signups / Newsletter' },
+  { value: 'brand_awareness', label: 'Brand Awareness (content reach)' },
+]
+
 // ── Tag Input ────────────────────────────────────────────────────────────────
 
 function TagInput({
@@ -179,8 +194,11 @@ interface SettingsForm {
   business_type: string
   country: string
   language: string
+  business_location: string
   tone_of_voice: string
   target_audience: string
+  primary_conversion: string
+  seo_plugin: string
   seo_goals: string[]
   business_goals: string[]
   competitors: string[]
@@ -192,8 +210,11 @@ function formFromProject(p: Project): SettingsForm {
     business_type: p.business_type ?? '',
     country: p.country ?? '',
     language: p.language ?? '',
+    business_location: p.business_location ?? '',
     tone_of_voice: p.tone_of_voice ?? '',
     target_audience: p.target_audience ?? '',
+    primary_conversion: p.primary_conversion ?? '',
+    seo_plugin: p.seo_plugin ?? '',
     seo_goals: p.seo_goals ?? [],
     business_goals: p.business_goals ?? [],
     competitors: p.competitors ?? [],
@@ -310,19 +331,62 @@ function ProjectSettingsCard({ project }: { project: Project }) {
           </div>
         </div>
 
-        {/* Tone of voice */}
+        {/* Business location */}
         <div>
-          <label className="block text-xs text-slate-500 mb-1">Tone of Voice</label>
+          <label className="block text-xs text-slate-500 mb-1">
+            Business Location
+            <span className="text-slate-400 font-normal ml-1">(city / region — for local SEO)</span>
+          </label>
+          {editing
+            ? <input {...field('business_location')} className={inputCls(true)} placeholder="e.g. Cairo, Egypt" />
+            : <p className="text-xs text-slate-800">{readValue(form.business_location)}</p>}
+        </div>
+
+        {/* Row 3: tone + conversion */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Tone of Voice</label>
+            {editing ? (
+              <select {...field('tone_of_voice')} className={inputCls(true)}>
+                <option value="">Select tone…</option>
+                {TONE_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            ) : (
+              <p className="text-xs text-slate-800">{readValue(form.tone_of_voice)}</p>
+            )}
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Primary Conversion Goal</label>
+            {editing ? (
+              <select {...field('primary_conversion')} className={inputCls(true)}>
+                <option value="">Select goal…</option>
+                {CONVERSION_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            ) : (
+              <p className="text-xs text-slate-800">
+                {CONVERSION_OPTIONS.find(o => o.value === form.primary_conversion)?.label
+                  || readValue(form.primary_conversion)}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* SEO Plugin */}
+        <div>
+          <label className="block text-xs text-slate-500 mb-1">
+            SEO Plugin
+            <span className="text-slate-400 font-normal ml-1">(affects meta tag & schema recommendations)</span>
+          </label>
           {editing ? (
-            <select {...field('tone_of_voice')} className={inputCls(true)}>
-              <option value="">Select tone…</option>
-              {TONE_OPTIONS.map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-              <option value="custom">Custom…</option>
+            <select {...field('seo_plugin')} className={inputCls(true)}>
+              <option value="">Select plugin…</option>
+              {SEO_PLUGIN_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           ) : (
-            <p className="text-xs text-slate-800">{readValue(form.tone_of_voice)}</p>
+            <p className="text-xs text-slate-800">
+              {SEO_PLUGIN_OPTIONS.find(o => o.value === form.seo_plugin)?.label
+                || readValue(form.seo_plugin)}
+            </p>
           )}
         </div>
 

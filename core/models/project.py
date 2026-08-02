@@ -44,5 +44,7 @@ class ProjectConfig(BaseModel):
     target_audience: str
     seo_plugin: Optional[str] = None   # rankmath | yoast | aioseo | none
     image_source: str = "client"        # client | dalle
+    primary_conversion: str = ""        # lead_generation | ecommerce | phone_call | email_signup | brand_awareness
+    business_location: str = ""         # city/region e.g. "Cairo, Egypt"
     integrations: ProjectIntegrations = ProjectIntegrations()
     active: bool = True
