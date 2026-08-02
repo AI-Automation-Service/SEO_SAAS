@@ -841,7 +841,7 @@ export function StrategyTab({ projectName, project }: StrategyTabProps) {
                           </a>
                         )}
                         <span className="text-[11px] text-slate-400">
-                          Saved as a draft — the URL is set by your WordPress permalink settings. You can change the slug inside WordPress before publishing.
+                          Saved as a draft with the focus keyword as the slug. The full URL follows your WordPress permalink structure.
                         </span>
                       </div>
                     </>

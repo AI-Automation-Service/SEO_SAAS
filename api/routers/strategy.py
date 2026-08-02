@@ -458,12 +458,14 @@ def run_competitor_page(
     return StrategyResult(skill="seo-competitor-pages", output=output)
 
 
-def _competitor_title(business_name: str, competitor_url: str) -> str:
-    """Returns the page title derived from the competitor URL."""
+def _competitor_title_and_slug(business_name: str, competitor_url: str) -> tuple[str, str]:
+    import re
     host = urlparse(competitor_url).hostname or competitor_url
     host = host.removeprefix("www.")
     competitor_name = host.split(".")[0].replace("-", " ").title()
-    return f"{business_name} vs {competitor_name}"
+    title = f"{business_name} vs {competitor_name}"
+    slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
+    return title, slug
 
 
 @router.post("/publish-competitor")
@@ -501,11 +503,10 @@ def publish_competitor_page(
         raise HTTPException(400, f"WordPress credentials error: {e}")
 
     html = md.markdown(row.output, extensions=["tables", "fenced_code"])
-    title = _competitor_title(context.config.business_name, body.competitor_url)
+    title, slug = _competitor_title_and_slug(context.config.business_name, body.competitor_url)
 
     try:
-        # No slug set — WordPress auto-generates from title, respecting the site's permalink structure
-        result = adapter.create_page(PostDraft(title=title, content=html, status="draft"))
+        result = adapter.create_page(PostDraft(title=title, content=html, slug=slug, status="draft"))
     except IntegrationError as e:
         raise HTTPException(502, str(e))
 
