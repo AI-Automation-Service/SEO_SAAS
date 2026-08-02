@@ -4,6 +4,7 @@ import json
 import re
 from datetime import datetime
 from typing import Optional
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
@@ -404,8 +405,35 @@ def _match_sitemap(rows: list, db: Session, user_id: int, project_name: str) -> 
                 break
 
 
+def _format_keyword_line(row) -> str:
+    data = []
+    if row.clicks is not None:
+        data.append(f"clicks:{row.clicks}")
+    if row.impressions is not None:
+        data.append(f"impr:{row.impressions:,}")
+    if row.position is not None:
+        data.append(f"pos:{row.position:.1f}")
+    if row.ctr is not None:
+        data.append(f"ctr:{row.ctr * 100:.1f}%")
+    if row.volume is not None:
+        data.append(f"vol:{row.volume:,}")
+    data.append(f"status:{row.status}")
+    if row.existing_url:
+        path = urlparse(row.existing_url).path or row.existing_url
+        data.append(f"page:{path}")
+    return f"- {row.keyword} [{', '.join(data)}]"
+
+
 _CLUSTER_USER_MSG = """\
-Cluster the following keywords for this project into semantic topic groups for content planning.
+Cluster the following keywords into semantic topic groups for content planning.
+
+Each keyword shows available performance signals:
+- clicks/impr: real Google Search Console data (last 90 days)
+- pos: average Google ranking position (1=top, lower is better)
+- ctr: click-through rate from Google search results
+- vol: estimated monthly search volume
+- status: quick_win=ranking pos 4-15 with traffic | opportunity=not yet ranking but has volume | monitor=low signals | covered=page already exists
+- page: URL on this site that currently ranks for this keyword (keywords sharing the same page belong in the same cluster)
 
 Keywords:
 {keywords}
@@ -413,7 +441,7 @@ Keywords:
 Return ONLY a valid JSON object in this exact format — no extra text, no markdown:
 {{"keywords": [
   {{
-    "keyword": "<exact string from input>",
+    "keyword": "<exact keyword text from input, no signals>",
     "cluster": "<short cluster name 2-4 words, e.g. Hotel Booking>",
     "is_hub": <true for the single best pillar keyword per cluster, false otherwise>,
     "intent": "<informational|commercial|navigational|transactional>",
@@ -423,9 +451,15 @@ Return ONLY a valid JSON object in this exact format — no extra text, no markd
 ]}}
 
 Rules:
+- Keywords sharing the same page URL already belong together — put them in the same cluster
 - Every cluster must have exactly one hub keyword (is_hub: true)
+- Hub selection priority: (1) quick_win with highest impressions → Google already ranks this, best to build around; (2) opportunity with highest volume → strongest new content target; (3) monitor → only if no better option exists
+- Keywords at position 1-3 with high impressions are proven pillars — make them hub
+- Keywords at position 4-15 are quick wins — high priority as hub if impressions are strong
+- For keywords with no GSC data, group by semantic meaning and use volume as the hub signal
 - Spokes link back to the hub
-- Return every keyword from the input — do not skip any"""
+- Return every keyword from the input — do not skip any
+- The "keyword" field in your response must be the exact keyword text only, without any signals"""
 
 _BATCH_SIZE = 150
 
@@ -462,12 +496,13 @@ def run_cluster_agent(
         if parts:
             kb_prefix = "Context:\n" + "\n".join(parts) + "\n\n"
 
-    keywords = [r.keyword for r in rows]
     all_results: list[dict] = []
 
-    for i in range(0, len(keywords), _BATCH_SIZE):
-        batch = keywords[i : i + _BATCH_SIZE]
-        user_msg = kb_prefix + _CLUSTER_USER_MSG.format(keywords="\n".join(f"- {kw}" for kw in batch))
+    for i in range(0, len(rows), _BATCH_SIZE):
+        batch_rows = rows[i : i + _BATCH_SIZE]
+        user_msg = kb_prefix + _CLUSTER_USER_MSG.format(
+            keywords="\n".join(_format_keyword_line(r) for r in batch_rows)
+        )
 
         try:
             raw = agent.run(user_msg, timeout=90, json_mode=True)
