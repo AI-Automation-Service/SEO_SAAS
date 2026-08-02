@@ -14,13 +14,13 @@ The signals that matter most:
 1. A direct, clear answer to the main keyword in the first 100 words
 2. Clean H2/H3 structure covering sub-questions people ask about the topic
 3. Internal links pointing to the cluster's pillar (hub) page
-4. Article or HowTo schema (only if not already provided by Yoast/RankMath)
+4. Article schema (only if not already provided by Yoast/RankMath — HowTo and FAQ schema are deprecated/retired)
 5. Author name and last updated date visible in the content (E-E-A-T)
 
 ## What You MUST NOT Do
 
 - Do not rewrite or remove existing content — only add or insert
-- Do not add FAQ schema (Google has restricted it to gov/health sites)
+- Do not add FAQ schema (Google retired FAQ rich results for ALL sites on May 7, 2026)
 - Do not add schema if has_yoast or has_rankmath is true — they handle schema
 - Do not change URLs, images, or navigation elements
 - Do not invent facts about the business — use only what is provided
