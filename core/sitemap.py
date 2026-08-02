@@ -9,8 +9,16 @@ import httpx
 _TIMEOUT = 15
 
 # Sub-sitemap name patterns → page_type
-_PAGE_PATTERNS = re.compile(r"page[s]?[-_]sitemap|sitemap[-_]page[s]?", re.IGNORECASE)
-_POST_PATTERNS = re.compile(r"post[s]?[-_]sitemap|sitemap[-_]post[s]?", re.IGNORECASE)
+# Handles Yoast/RankMath: page-sitemap.xml, post-sitemap.xml
+# Handles WordPress core: wp-sitemap-posts-page-1.xml, wp-sitemap-posts-post-1.xml
+_PAGE_PATTERNS = re.compile(
+    r"pages?[-_]sitemap|sitemap[-_]pages?(?:[.\-]|$)|posts[-_]page[-_]\d",
+    re.IGNORECASE,
+)
+_POST_PATTERNS = re.compile(
+    r"posts?[-_]sitemap|posts[-_]post[-_]\d",
+    re.IGNORECASE,
+)
 # Skip non-content sub-sitemaps
 _SKIP_PATTERNS = re.compile(
     r"category|categories|tag[s]?|author[s]?|product[s]?|attachment|taxonomy",
