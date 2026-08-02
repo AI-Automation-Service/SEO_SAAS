@@ -35,6 +35,20 @@ def _page_type_from_sitemap_url(sitemap_url: str) -> str:
     return "unknown"
 
 
+def _refine_page_type(url: str, current_type: str) -> str:
+    """
+    Single-segment root URLs (e.g. /terms-and-condition/) are always pages,
+    even when WordPress puts them in a post-sitemap. Real posts have a parent
+    path segment (e.g. /blog/post-title/ or /2024/01/title/).
+    """
+    if current_type == "page":
+        return "page"
+    path = urlparse(url).path.strip("/")
+    if "/" not in path:
+        return "page"
+    return current_type
+
+
 def fetch_sitemap_urls(website: str) -> list[dict]:
     """
     Try sitemap_index.xml → sitemap.xml → robots.txt Sitemap: directive.
@@ -92,7 +106,7 @@ def fetch_sitemap_urls(website: str) -> list[dict]:
             if not slug:
                 continue
             seen.add(url)
-            results.append({"url": url, "slug": slug, "page_type": page_type})
+            results.append({"url": url, "slug": slug, "page_type": _refine_page_type(url, page_type)})
 
     if "<sitemapindex" in raw_xml:
         sub_urls = _parse_locs(raw_xml)

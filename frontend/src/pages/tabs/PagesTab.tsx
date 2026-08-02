@@ -137,18 +137,20 @@ export function PagesTab({ projectName }: PagesTabProps) {
               {filtered.map((page) => {
                 const slug = page.slug.split('/').filter(Boolean).pop() ?? page.slug
                 const keyword = slug.replace(/[-_]+/g, ' ').replace(/\.\w+$/, '')
-                const isPage = page.page_type === 'page'
+                const typeLabel = page.page_type === 'page' ? 'Page' : page.page_type === 'post' ? 'Post' : 'Page'
+                const typeStyle = page.page_type === 'post'
+                  ? 'bg-orange-50 text-orange-600'
+                  : 'bg-blue-50 text-blue-600'
+                const TypeIcon = page.page_type === 'post' ? Globe : FileText
                 return (
                   <tr key={page.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-4 py-2.5">
                       <span className={cn(
                         'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium',
-                        isPage
-                          ? 'bg-blue-50 text-blue-600'
-                          : 'bg-orange-50 text-orange-600',
+                        typeStyle,
                       )}>
-                        {isPage ? <FileText size={9} /> : <Globe size={9} />}
-                        {isPage ? 'Page' : 'Post'}
+                        <TypeIcon size={9} />
+                        {typeLabel}
                       </span>
                     </td>
                     <td className="px-4 py-2.5">
