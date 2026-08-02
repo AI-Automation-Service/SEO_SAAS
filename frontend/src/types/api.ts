@@ -4,10 +4,16 @@ export interface Project {
   cms: string
   website?: string
   business_name?: string
+  business_type?: string
   country?: string
   language?: string
-  integrations?: ProjectIntegrations
+  tone_of_voice?: string
+  target_audience?: string
+  seo_goals?: string[]
+  business_goals?: string[]
   competitors?: string[]
+  seo_plugin?: string
+  integrations?: ProjectIntegrations
 }
 
 export interface ProjectIntegrations {

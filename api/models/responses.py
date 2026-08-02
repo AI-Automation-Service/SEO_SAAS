@@ -23,6 +23,10 @@ class ProjectDetail(BaseModel):
     active: bool
     knowledge_files: list[str]
     competitors: list[str] = []
+    tone_of_voice: str = ""
+    target_audience: str = ""
+    seo_goals: list[str] = []
+    business_goals: list[str] = []
 
 
 class ValidationResult(BaseModel):

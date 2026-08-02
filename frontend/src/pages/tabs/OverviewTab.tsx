@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
-import { Globe, RefreshCw, Pencil, Check, X, FileSearch } from 'lucide-react'
+import { Globe, RefreshCw, FileSearch, Pencil, Check, X, Settings2, Plus } from 'lucide-react'
 import { StatusBadge } from '@/components/StatusBadge'
 import { projectsApi, integrationsApi, sitemapApi, getErrorMessage } from '@/api/client'
 import type { Project } from '@/types/api'
@@ -12,6 +12,88 @@ const INTEGRATION_LABELS: Record<string, string> = {
   google_search_console: 'Search Console',
   google_analytics: 'Google Analytics',
 }
+
+const TONE_OPTIONS = [
+  'Professional',
+  'Friendly',
+  'Authoritative',
+  'Casual',
+  'Technical',
+  'Conversational',
+  'Formal',
+]
+
+// ── Tag Input ────────────────────────────────────────────────────────────────
+
+function TagInput({
+  values,
+  onChange,
+  placeholder,
+  disabled,
+}: {
+  values: string[]
+  onChange: (v: string[]) => void
+  placeholder: string
+  disabled?: boolean
+}) {
+  const [input, setInput] = useState('')
+
+  function add() {
+    const v = input.trim()
+    if (v && !values.includes(v)) {
+      onChange([...values, v])
+      setInput('')
+    }
+  }
+
+  return (
+    <div>
+      <div className="flex flex-wrap gap-1.5 mb-2">
+        {values.map((v) => (
+          <span
+            key={v}
+            className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 rounded-md text-xs text-slate-700"
+          >
+            {v}
+            {!disabled && (
+              <button
+                type="button"
+                onClick={() => onChange(values.filter((x) => x !== v))}
+                className="text-slate-400 hover:text-red-500 transition-colors cursor-pointer"
+              >
+                <X size={10} />
+              </button>
+            )}
+          </span>
+        ))}
+        {values.length === 0 && disabled && (
+          <span className="text-xs text-slate-400 italic">None configured</span>
+        )}
+      </div>
+      {!disabled && (
+        <div className="flex gap-2">
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add() } }}
+            placeholder={placeholder}
+            className="flex-1 px-2.5 py-1.5 border border-slate-200 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-emerald-400"
+          />
+          <button
+            type="button"
+            onClick={add}
+            className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 text-slate-600 rounded-md text-xs hover:bg-slate-200 transition-colors cursor-pointer"
+          >
+            <Plus size={11} />
+            Add
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Inline website field (existing) ──────────────────────────────────────────
 
 function WebsiteField({ project }: { project: Project }) {
   const qc = useQueryClient()
@@ -28,10 +110,7 @@ function WebsiteField({ project }: { project: Project }) {
     onError: (err) => toast.error(getErrorMessage(err)),
   })
 
-  const cancel = () => {
-    setValue(project.website ?? '')
-    setEditing(false)
-  }
+  const cancel = () => { setValue(project.website ?? ''); setEditing(false) }
 
   if (editing) {
     return (
@@ -83,10 +162,7 @@ function WebsiteField({ project }: { project: Project }) {
         )}
         <button
           onClick={() => { setValue(project.website ?? ''); setEditing(true) }}
-          className={cn(
-            'p-1 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer',
-            'opacity-0 group-hover:opacity-100'
-          )}
+          className="p-1 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer opacity-0 group-hover:opacity-100"
           title="Edit website URL"
         >
           <Pencil size={11} />
@@ -95,6 +171,217 @@ function WebsiteField({ project }: { project: Project }) {
     </div>
   )
 }
+
+// ── Settings form state type ──────────────────────────────────────────────────
+
+interface SettingsForm {
+  business_name: string
+  business_type: string
+  country: string
+  language: string
+  tone_of_voice: string
+  target_audience: string
+  seo_goals: string[]
+  business_goals: string[]
+  competitors: string[]
+}
+
+function formFromProject(p: Project): SettingsForm {
+  return {
+    business_name: p.business_name ?? '',
+    business_type: p.business_type ?? '',
+    country: p.country ?? '',
+    language: p.language ?? '',
+    tone_of_voice: p.tone_of_voice ?? '',
+    target_audience: p.target_audience ?? '',
+    seo_goals: p.seo_goals ?? [],
+    business_goals: p.business_goals ?? [],
+    competitors: p.competitors ?? [],
+  }
+}
+
+// ── Project Settings card ─────────────────────────────────────────────────────
+
+function ProjectSettingsCard({ project }: { project: Project }) {
+  const qc = useQueryClient()
+  const [editing, setEditing] = useState(false)
+  const [form, setForm] = useState<SettingsForm>(() => formFromProject(project))
+
+  function field(k: keyof SettingsForm) {
+    return {
+      value: form[k] as string,
+      onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+        setForm((f) => ({ ...f, [k]: e.target.value })),
+    }
+  }
+
+  const { mutate, isPending } = useMutation({
+    mutationFn: () => projectsApi.update(project.name, form),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['project', project.name] })
+      toast.success('Project settings saved')
+      setEditing(false)
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
+
+  function cancel() {
+    setForm(formFromProject(project))
+    setEditing(false)
+  }
+
+  const inputCls = (active: boolean) =>
+    cn(
+      'w-full px-2.5 py-1.5 rounded-md text-xs border transition-colors',
+      active
+        ? 'border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-white'
+        : 'border-transparent bg-transparent text-slate-800 cursor-default',
+    )
+
+  const readValue = (v: string) => v || <span className="text-slate-400 italic">Not set</span>
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-5">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Settings2 size={15} className="text-slate-400" />
+          <h3 className="font-display font-semibold text-slate-900">Project Settings</h3>
+        </div>
+        {editing ? (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={cancel}
+              className="px-3 py-1.5 rounded-lg text-xs text-slate-500 hover:bg-slate-100 transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => mutate()}
+              disabled={isPending}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-50 transition-colors cursor-pointer"
+            >
+              {isPending ? 'Saving...' : 'Save settings'}
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => { setForm(formFromProject(project)); setEditing(true) }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-slate-500 hover:bg-slate-100 transition-colors cursor-pointer"
+          >
+            <Pencil size={12} />
+            Edit
+          </button>
+        )}
+      </div>
+
+      <div className="space-y-4">
+        {/* Row 1: name + type */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Business Name</label>
+            {editing
+              ? <input {...field('business_name')} className={inputCls(true)} placeholder="My Business" />
+              : <p className="text-xs text-slate-800">{readValue(form.business_name)}</p>}
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Business Type</label>
+            {editing
+              ? <input {...field('business_type')} className={inputCls(true)} placeholder="e.g. SaaS, Agency, E-commerce" />
+              : <p className="text-xs text-slate-800">{readValue(form.business_type)}</p>}
+          </div>
+        </div>
+
+        {/* Row 2: country + language */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Country</label>
+            {editing
+              ? <input {...field('country')} className={inputCls(true)} placeholder="e.g. Egypt, United States" />
+              : <p className="text-xs text-slate-800">{readValue(form.country)}</p>}
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Language</label>
+            {editing
+              ? <input {...field('language')} className={inputCls(true)} placeholder="e.g. English, Arabic" />
+              : <p className="text-xs text-slate-800">{readValue(form.language)}</p>}
+          </div>
+        </div>
+
+        {/* Tone of voice */}
+        <div>
+          <label className="block text-xs text-slate-500 mb-1">Tone of Voice</label>
+          {editing ? (
+            <select {...field('tone_of_voice')} className={inputCls(true)}>
+              <option value="">Select tone…</option>
+              {TONE_OPTIONS.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+              <option value="custom">Custom…</option>
+            </select>
+          ) : (
+            <p className="text-xs text-slate-800">{readValue(form.tone_of_voice)}</p>
+          )}
+        </div>
+
+        {/* Target audience */}
+        <div>
+          <label className="block text-xs text-slate-500 mb-1">Target Audience</label>
+          {editing ? (
+            <textarea
+              {...field('target_audience')}
+              rows={2}
+              placeholder="e.g. Small business owners in Egypt looking for affordable SEO services"
+              className="w-full px-2.5 py-1.5 border border-slate-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-emerald-400 resize-none"
+            />
+          ) : (
+            <p className="text-xs text-slate-800 leading-relaxed">{readValue(form.target_audience)}</p>
+          )}
+        </div>
+
+        {/* Competitors */}
+        <div>
+          <label className="block text-xs text-slate-500 mb-1">
+            Competitors
+            <span className="text-slate-400 font-normal ml-1">(used for "Competitor Pages" strategy)</span>
+          </label>
+          <TagInput
+            values={form.competitors}
+            onChange={(v) => setForm((f) => ({ ...f, competitors: v }))}
+            placeholder="https://competitor.com"
+            disabled={!editing}
+          />
+        </div>
+
+        {/* SEO goals */}
+        <div>
+          <label className="block text-xs text-slate-500 mb-1">SEO Goals</label>
+          <TagInput
+            values={form.seo_goals}
+            onChange={(v) => setForm((f) => ({ ...f, seo_goals: v }))}
+            placeholder="e.g. Rank for local keywords"
+            disabled={!editing}
+          />
+        </div>
+
+        {/* Business goals */}
+        <div>
+          <label className="block text-xs text-slate-500 mb-1">Business Goals</label>
+          <TagInput
+            values={form.business_goals}
+            onChange={(v) => setForm((f) => ({ ...f, business_goals: v }))}
+            placeholder="e.g. Generate 50 leads/month"
+            disabled={!editing}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Main OverviewTab ──────────────────────────────────────────────────────────
 
 export function OverviewTab({ project }: { project: Project }) {
   const qc = useQueryClient()
@@ -156,6 +443,9 @@ export function OverviewTab({ project }: { project: Project }) {
         </dl>
       </div>
 
+      {/* Project Settings */}
+      <ProjectSettingsCard project={project} />
+
       {/* Integration health */}
       <div className="bg-white rounded-xl border border-slate-200 p-5">
         <div className="flex items-center justify-between mb-4">
@@ -169,9 +459,7 @@ export function OverviewTab({ project }: { project: Project }) {
           </button>
         </div>
 
-        {isLoading && (
-          <p className="text-slate-400 text-sm">Checking integrations...</p>
-        )}
+        {isLoading && <p className="text-slate-400 text-sm">Checking integrations...</p>}
 
         {status && (
           <div className="grid grid-cols-3 gap-3">
@@ -247,9 +535,7 @@ export function OverviewTab({ project }: { project: Project }) {
         <div className="bg-red-50 border border-red-200 rounded-xl p-4">
           <p className="text-red-700 font-medium text-sm mb-2">Config Issues</p>
           <ul className="text-red-600 text-xs space-y-1 list-disc list-inside">
-            {validation.errors.map((e, i) => (
-              <li key={i}>{e}</li>
-            ))}
+            {validation.errors.map((e, i) => <li key={i}>{e}</li>)}
           </ul>
         </div>
       )}
