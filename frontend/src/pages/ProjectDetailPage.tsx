@@ -9,6 +9,7 @@ import { IntegrationsTab } from './tabs/IntegrationsTab'
 import { KnowledgeTab } from './tabs/KnowledgeTab'
 import { KeywordsTab } from './tabs/KeywordsTab'
 import { StrategyTab } from './tabs/StrategyTab'
+import { CompetitorTab } from './tabs/CompetitorTab'
 import { ContentTab } from './tabs/ContentTab'
 import { SpeedTab } from './tabs/SpeedTab'
 import { projectsApi, getErrorMessage } from '@/api/client'
@@ -19,6 +20,7 @@ const TABS = [
   { id: 'integrations', label: 'Integrations' },
   { id: 'knowledge', label: 'Knowledge' },
   { id: 'keywords', label: 'Keywords' },
+  { id: 'competitor', label: 'Competitor Pages' },
   { id: 'strategy', label: 'Strategy' },
   { id: 'content', label: 'Content' },
   { id: 'speed', label: 'Speed' },
@@ -177,7 +179,8 @@ export function ProjectDetailPage() {
         {activeTab === 'integrations' && <IntegrationsTab projectName={name!} />}
         {activeTab === 'knowledge' && <KnowledgeTab projectName={name!} />}
         {activeTab === 'keywords' && <KeywordsTab projectName={name!} />}
-        {activeTab === 'strategy' && <StrategyTab projectName={name!} project={project} />}
+        {activeTab === 'competitor' && <CompetitorTab projectName={name!} />}
+        {activeTab === 'strategy' && <StrategyTab projectName={name!} />}
         {activeTab === 'content' && <ContentTab />}
         {activeTab === 'speed' && (
           <SpeedTab projectName={name!} websiteUrl={project.website ?? ''} />

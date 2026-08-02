@@ -6,7 +6,6 @@ import {
   Map,
   FileText,
   Layers,
-  Globe,
   ChevronDown,
   ChevronUp,
   Copy,
@@ -16,17 +15,13 @@ import {
   Pencil,
   Save,
   X,
-  Upload,
-  ExternalLink,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { strategyApi, keywordsApi, getErrorMessage } from '@/api/client'
-import type { Project } from '@/types/api'
 import { cn } from '@/lib/utils'
 
 interface StrategyTabProps {
   projectName: string
-  project: Project
 }
 
 type SkillKey = 'plan' | 'content' | 'architecture'
@@ -196,36 +191,6 @@ const SITE_ARCHITECTURE_FAQ: FaqItem[] = [
   },
 ]
 
-const COMPETITOR_PAGES_FAQ: FaqItem[] = [
-  {
-    label: 'What is a competitor comparison page?',
-    text: 'A dedicated page on your website — for example yoursite.com/vs/competitor — that compares your product or service against one competitor. It is NOT a blog article. It is a permanent, standalone conversion page.',
-  },
-  {
-    label: 'Why does it matter?',
-    text: 'When someone searches "[Your Brand] vs [Competitor]" or "[Competitor] alternative", they are already in buying mode — one step away from a decision. If you do not have a page for that search, a third-party review site (G2, Capterra, a blogger) ranks there instead and controls what the buyer reads. By publishing your own comparison page, you rank for that keyword and control the narrative.',
-  },
-  {
-    label: 'What the agent produces',
-    text: 'A full page in Markdown ready to publish: meta title + description, H1, intro paragraph, feature comparison table (10+ features), pros/cons for each side, a verdict section, 5 FAQ questions optimised for People Also Ask, and a CTA.',
-  },
-  {
-    label: 'One page per competitor',
-    text: 'You need one comparison page for each competitor you want to target. 3 competitors = 3 pages on your WordPress site. Each is generated and saved separately — generating for Competitor B does not overwrite Competitor A.',
-  },
-  {
-    label: 'What happens after you generate',
-    text: 'Review the output, adjust any claims you disagree with, then click "Publish to WordPress". The system creates a draft PAGE (not a post) on your WordPress site with the correct title and slug. You review it in WordPress and hit Publish when ready.',
-  },
-  {
-    label: 'Where to link these pages',
-    text: 'Link to each comparison page from your Pricing page and Homepage navigation. This tells Google the pages are important and gives buyers an easy path to find them during their research.',
-  },
-  {
-    label: 'Which competitor URL to use',
-    text: 'Type any competitor\'s homepage URL directly — no pre-configuration needed. You can also save frequently-used competitors in Project Settings → Competitors to get quick-access buttons here. The "Publish to WordPress" button requires WordPress to be connected in the Integrations tab.',
-  },
-]
 
 interface OutputPanelProps {
   text: string
@@ -413,19 +378,12 @@ function SkillCard({
   )
 }
 
-export function StrategyTab({ projectName, project }: StrategyTabProps) {
+export function StrategyTab({ projectName }: StrategyTabProps) {
   const qc = useQueryClient()
   const [outputs, setOutputs] = useState<Partial<Record<SkillKey, string>>>({})
   const [expandedKeys, setExpandedKeys] = useState<Set<SkillKey>>(new Set())
   const [editingKey, setEditingKey] = useState<SkillKey | null>(null)
   const [editDraft, setEditDraft] = useState('')
-  // Per-competitor state (keyed by competitor URL)
-  const [competitorOutputs, setCompetitorOutputs] = useState<Record<string, string>>({})
-  const [competitorExpanded, setCompetitorExpanded] = useState<Record<string, boolean>>({})
-  const [competitorEditingUrl, setCompetitorEditingUrl] = useState<string | null>(null)
-  const [competitorEditDraft, setCompetitorEditDraft] = useState('')
-  const [publishedUrls, setPublishedUrls] = useState<Record<string, string>>({})
-  const [newCompetitorUrl, setNewCompetitorUrl] = useState('')
   const initialized = useRef(false)
 
   const { data: summary } = useQuery({
@@ -444,22 +402,12 @@ export function StrategyTab({ projectName, project }: StrategyTabProps) {
     initialized.current = true
     const loaded: Partial<Record<SkillKey, string>> = {}
     const expanded = new Set<SkillKey>()
-    const competitorLoaded: Record<string, string> = {}
-    const competitorExpandedInit: Record<string, boolean> = {}
     for (const [dbType, text] of Object.entries(savedOutputs)) {
-      if (dbType.startsWith('competitor:')) {
-        const url = dbType.slice('competitor:'.length)
-        if (text) { competitorLoaded[url] = text; competitorExpandedInit[url] = true }
-      } else {
-        const key = DB_TO_SKILL[dbType]
-        if (key && text) { loaded[key] = text; expanded.add(key) }
-      }
+      if (dbType.startsWith('competitor:')) continue
+      const key = DB_TO_SKILL[dbType]
+      if (key && text) { loaded[key] = text; expanded.add(key) }
     }
     if (Object.keys(loaded).length > 0) { setOutputs(loaded); setExpandedKeys(expanded) }
-    if (Object.keys(competitorLoaded).length > 0) {
-      setCompetitorOutputs(competitorLoaded)
-      setCompetitorExpanded(competitorExpandedInit)
-    }
   }, [savedOutputs])
 
   const hasKeywords = (summary?.total ?? 0) > 0
@@ -538,49 +486,6 @@ export function StrategyTab({ projectName, project }: StrategyTabProps) {
     onSuccess: (data) => { setOutput('architecture', data.output); qc.invalidateQueries({ queryKey: ['strategy-saved', projectName] }) },
     onError: (err) => toast.error(getErrorMessage(err)),
   })
-
-  const competitorMut = useMutation({
-    mutationFn: (url: string) => strategyApi.competitorPage(projectName, url),
-    onSuccess: (data, url) => {
-      setCompetitorOutputs((prev) => ({ ...prev, [url]: data.output }))
-      setCompetitorExpanded((prev) => ({ ...prev, [url]: true }))
-      qc.invalidateQueries({ queryKey: ['strategy-saved', projectName] })
-    },
-    onError: (err) => toast.error(getErrorMessage(err)),
-  })
-
-  const competitorDeleteMut = useMutation({
-    mutationFn: (url: string) => strategyApi.deleteOutput(projectName, `competitor:${url}`),
-    onSuccess: (_data, url) => {
-      setCompetitorOutputs((prev) => { const n = { ...prev }; delete n[url]; return n })
-      setCompetitorExpanded((prev) => { const n = { ...prev }; delete n[url]; return n })
-      if (competitorEditingUrl === url) { setCompetitorEditingUrl(null); setCompetitorEditDraft('') }
-    },
-    onError: (err) => toast.error(getErrorMessage(err)),
-  })
-
-  const competitorEditSaveMut = useMutation({
-    mutationFn: ({ url, text }: { url: string; text: string }) =>
-      strategyApi.updateOutput(projectName, `competitor:${url}`, text),
-    onSuccess: (_data, { url, text }) => {
-      setCompetitorOutputs((prev) => ({ ...prev, [url]: text }))
-      setCompetitorEditingUrl(null)
-      setCompetitorEditDraft('')
-      toast.success('Output saved')
-    },
-    onError: (err) => toast.error(getErrorMessage(err)),
-  })
-
-  const publishMut = useMutation({
-    mutationFn: (url: string) => strategyApi.publishCompetitor(projectName, url),
-    onSuccess: (data, url) => {
-      setPublishedUrls((prev) => ({ ...prev, [url]: data.url }))
-      toast.success(`Draft page created in WordPress — review it before publishing.`)
-    },
-    onError: (err) => toast.error(getErrorMessage(err)),
-  })
-
-  const competitors = project.competitors ?? []
 
   if (!hasKeywords) {
     return (
@@ -676,236 +581,6 @@ export function StrategyTab({ projectName, project }: StrategyTabProps) {
         {...skillCardProps('architecture')}
       />
 
-      {/* Competitor Pages */}
-      <div className="bg-white border border-slate-200 rounded-xl p-5">
-        <div className="flex items-start gap-3 mb-4">
-          <div className="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0 text-emerald-600">
-            <Globe size={16} />
-          </div>
-          <div className="flex-1">
-            <h3 className="text-sm font-semibold text-slate-900">Competitor Pages</h3>
-            <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
-              One "[Your Brand] vs [Competitor]" page per competitor — targets high-intent buyers who are already comparing options. Each page is saved separately and can be published to WordPress as a draft.
-            </p>
-            <AgentFAQ items={COMPETITOR_PAGES_FAQ} />
-          </div>
-        </div>
-
-        {/* URL input to generate for any competitor */}
-        <div className="flex gap-2">
-          <input
-            type="url"
-            value={newCompetitorUrl}
-            onChange={(e) => setNewCompetitorUrl(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && newCompetitorUrl.trim()) {
-                const url = newCompetitorUrl.trim()
-                setNewCompetitorUrl('')
-                competitorMut.mutate(url)
-              }
-            }}
-            placeholder="https://competitor.com"
-            className="flex-1 text-xs px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400"
-          />
-          <button
-            type="button"
-            disabled={!newCompetitorUrl.trim() || competitorMut.isPending}
-            onClick={() => {
-              const url = newCompetitorUrl.trim()
-              if (!url) return
-              setNewCompetitorUrl('')
-              competitorMut.mutate(url)
-            }}
-            className={cn(
-              'px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer shrink-0',
-              !newCompetitorUrl.trim() || competitorMut.isPending
-                ? 'bg-slate-100 text-slate-300 cursor-not-allowed'
-                : 'bg-emerald-500 text-white hover:bg-emerald-600',
-            )}
-          >
-            Generate
-          </button>
-        </div>
-
-        {/* Pre-configured quick-access buttons */}
-        {competitors.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            <span className="text-[11px] text-slate-400 self-center">Quick add:</span>
-            {competitors.map((url) => {
-              const label = url.replace(/^https?:\/\//, '').replace(/\/$/, '')
-              return (
-                <button
-                  key={url}
-                  type="button"
-                  onClick={() => setNewCompetitorUrl(url)}
-                  className="px-2 py-1 text-[11px] rounded-md bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer"
-                >
-                  {label}
-                </button>
-              )
-            })}
-          </div>
-        )}
-
-        {/* Competitor output cards — all URLs that have been generated */}
-        {Object.keys(competitorOutputs).length > 0 && (
-          <div className="space-y-4">
-            {Object.keys(competitorOutputs).map((url) => {
-              const label = url.replace(/^https?:\/\//, '').replace(/\/$/, '')
-              const hasOutput = !!competitorOutputs[url]
-              const isGenerating = competitorMut.isPending && competitorMut.variables === url
-              const isEditing = competitorEditingUrl === url
-              const isPublishing = publishMut.isPending && publishMut.variables === url
-              const wpUrl = publishedUrls[url]
-
-              return (
-                <div key={url} className="border border-slate-100 rounded-lg p-4">
-                  {/* Competitor header row */}
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-xs font-medium text-slate-700 truncate">{label}</span>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {hasOutput && !isGenerating && !isEditing && (
-                        <button
-                          type="button"
-                          onClick={() => competitorDeleteMut.mutate(url)}
-                          title="Delete output"
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors cursor-pointer"
-                        >
-                          <RotateCcw size={13} />
-                        </button>
-                      )}
-                      {!isEditing && (
-                        <button
-                          type="button"
-                          onClick={() => competitorMut.mutate(url)}
-                          disabled={isGenerating || competitorMut.isPending}
-                          className={cn(
-                            'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer',
-                            isGenerating || competitorMut.isPending
-                              ? 'bg-slate-100 text-slate-300 cursor-not-allowed'
-                              : hasOutput
-                              ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                              : 'bg-emerald-500 text-white hover:bg-emerald-600',
-                          )}
-                        >
-                          {isGenerating ? 'Generating...' : hasOutput ? 'Regenerate' : 'Generate'}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {isGenerating && (
-                    <div className="mt-3 flex items-center gap-2 text-xs text-slate-400">
-                      <div className="w-3 h-3 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
-                      Running skill agent — this may take 1–2 minutes...
-                    </div>
-                  )}
-
-                  {hasOutput && (
-                    <>
-                      <div className="mt-3 border border-slate-200 rounded-lg overflow-hidden">
-                        <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border-b border-slate-200">
-                          <span className="text-xs font-medium text-slate-500">
-                            {isEditing ? 'Editing' : 'Output'}
-                          </span>
-                          <div className="flex items-center gap-3">
-                            {isEditing ? (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => competitorEditSaveMut.mutate({ url, text: competitorEditDraft })}
-                                  disabled={competitorEditSaveMut.isPending}
-                                  className="flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-700 font-medium transition-colors cursor-pointer disabled:opacity-50"
-                                >
-                                  <Save size={11} />
-                                  {competitorEditSaveMut.isPending ? 'Saving...' : 'Save'}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => { setCompetitorEditingUrl(null); setCompetitorEditDraft('') }}
-                                  className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
-                                >
-                                  <X size={11} />
-                                  Cancel
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                <CopyButton text={competitorOutputs[url]} />
-                                <button
-                                  type="button"
-                                  onClick={() => { setCompetitorEditingUrl(url); setCompetitorEditDraft(competitorOutputs[url]) }}
-                                  className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
-                                >
-                                  <Pencil size={11} />
-                                  Edit
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setCompetitorExpanded((prev) => ({ ...prev, [url]: !prev[url] }))}
-                                  className="text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
-                                >
-                                  {competitorExpanded[url] ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        </div>
-
-                        {isEditing ? (
-                          <textarea
-                            value={competitorEditDraft}
-                            onChange={(e) => setCompetitorEditDraft(e.target.value)}
-                            className="w-full h-[500px] p-4 text-xs font-mono text-slate-700 bg-white resize-y focus:outline-none leading-relaxed"
-                          />
-                        ) : competitorExpanded[url] ? (
-                          <div className="p-4 max-h-[600px] overflow-y-auto bg-white">
-                            <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>
-                              {competitorOutputs[url]}
-                            </ReactMarkdown>
-                          </div>
-                        ) : null}
-                      </div>
-
-                      {/* Publish row */}
-                      <div className="mt-3 flex items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={() => publishMut.mutate(url)}
-                          disabled={isPublishing}
-                          className={cn(
-                            'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer',
-                            isPublishing
-                              ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                              : 'bg-blue-500 text-white hover:bg-blue-600',
-                          )}
-                        >
-                          <Upload size={11} />
-                          {isPublishing ? 'Publishing...' : 'Publish to WordPress'}
-                        </button>
-                        {wpUrl && (
-                          <a
-                            href={wpUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex items-center gap-1 text-xs text-blue-600 hover:underline"
-                          >
-                            <ExternalLink size={11} />
-                            View draft
-                          </a>
-                        )}
-                        <span className="text-[11px] text-slate-400">
-                          Saved as a draft with the focus keyword as the slug. The full URL follows your WordPress permalink structure.
-                        </span>
-                      </div>
-                    </>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
     </div>
   )
 }

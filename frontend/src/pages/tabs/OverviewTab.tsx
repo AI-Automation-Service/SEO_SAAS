@@ -217,7 +217,6 @@ interface SettingsForm {
   seo_plugin: string
   seo_goals: string[]
   business_goals: string[]
-  competitors: string[]
 }
 
 function formFromProject(p: Project): SettingsForm {
@@ -233,7 +232,6 @@ function formFromProject(p: Project): SettingsForm {
     seo_plugin: p.seo_plugin ?? '',
     seo_goals: p.seo_goals ?? [],
     business_goals: p.business_goals ?? [],
-    competitors: p.competitors ?? [],
   }
 }
 
@@ -442,19 +440,6 @@ function ProjectSettingsCard({ project }: { project: Project }) {
           )}
         </div>
 
-        {/* Competitors */}
-        <div>
-          <label className="block text-xs text-slate-500 mb-1">
-            Competitors
-            <FieldHint text="Websites you compete with. Used in the Competitor Pages strategy to analyse what content is working for them and where you can outrank them." />
-          </label>
-          <TagInput
-            values={form.competitors}
-            onChange={(v) => setForm((f) => ({ ...f, competitors: v }))}
-            placeholder="https://competitor.com"
-            disabled={!editing}
-          />
-        </div>
 
         {/* SEO goals */}
         <div>
