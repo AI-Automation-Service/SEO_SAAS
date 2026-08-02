@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint, text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.db.base import Base
@@ -110,6 +110,22 @@ class ProjectKnowledge(Base):
     competitors_notes: Mapped[str | None] = mapped_column(String, nullable=True)
     seo_context: Mapped[str | None] = mapped_column(String, nullable=True)
 
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class StrategyOutput(Base):
+    """Persisted AI-generated strategy output per project per type."""
+
+    __tablename__ = "strategy_outputs"
+    __table_args__ = (
+        UniqueConstraint("user_id", "project_name", "strategy_type", name="uq_strategy_output"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    project_name: Mapped[str] = mapped_column(String, nullable=False)
+    strategy_type: Mapped[str] = mapped_column(String, nullable=False)  # plan / content / architecture / competitor
+    output: Mapped[str] = mapped_column(Text, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 

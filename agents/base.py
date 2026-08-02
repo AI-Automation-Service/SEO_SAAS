@@ -14,7 +14,13 @@ class SkillAgent:
         self.client = OpenAI(api_key=openai_key)
         self.model = model
 
-    def run(self, user_message: str, timeout: int = 180, json_mode: bool = False) -> str:
+    def run(
+        self,
+        user_message: str,
+        timeout: int = 180,
+        json_mode: bool = False,
+        temperature: float = 0.0,
+    ) -> str:
         kwargs: dict = {}
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}
@@ -25,6 +31,7 @@ class SkillAgent:
                 {"role": "user", "content": user_message},
             ],
             timeout=timeout,
+            temperature=temperature,
             **kwargs,
         )
         return response.choices[0].message.content or ""

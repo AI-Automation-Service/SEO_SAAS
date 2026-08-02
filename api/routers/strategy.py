@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -5,7 +7,7 @@ from sqlalchemy.orm import Session
 from agents.base import SkillAgent
 from api.dependencies import get_current_user, get_db, get_project_context
 from api.routers.api_keys import get_user_secret
-from core.db.models import Keyword, ProjectKnowledge, SitePage, User
+from core.db.models import Keyword, ProjectKnowledge, SitePage, StrategyOutput, User
 from core.models.context import ProjectContext
 
 router = APIRouter(prefix="/projects/{name}/strategy", tags=["strategy"])
@@ -118,6 +120,29 @@ def _get_keywords(db: Session, user_id: int, project_name: str) -> list:
     )
 
 
+def _save_output(db: Session, user_id: int, project_name: str, strategy_type: str, output: str) -> None:
+    row = (
+        db.query(StrategyOutput)
+        .filter(
+            StrategyOutput.user_id == user_id,
+            StrategyOutput.project_name == project_name,
+            StrategyOutput.strategy_type == strategy_type,
+        )
+        .first()
+    )
+    if row:
+        row.output = output
+        row.updated_at = datetime.utcnow()
+    else:
+        db.add(StrategyOutput(
+            user_id=user_id,
+            project_name=project_name,
+            strategy_type=strategy_type,
+            output=output,
+        ))
+    db.commit()
+
+
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
 class StrategyResult(BaseModel):
@@ -129,7 +154,57 @@ class CompetitorPageRequest(BaseModel):
     competitor_url: str
 
 
-# ── Endpoints ─────────────────────────────────────────────────────────────────
+class UpdateOutputRequest(BaseModel):
+    output: str
+
+
+# ── Saved output endpoints ────────────────────────────────────────────────────
+
+@router.get("/saved")
+def get_saved_outputs(
+    context: ProjectContext = Depends(get_project_context),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, str]:
+    rows = (
+        db.query(StrategyOutput)
+        .filter(
+            StrategyOutput.user_id == current_user.id,
+            StrategyOutput.project_name == context.name,
+        )
+        .all()
+    )
+    return {r.strategy_type: r.output for r in rows}
+
+
+@router.put("/saved/{strategy_type}", response_model=StrategyResult)
+def update_saved_output(
+    strategy_type: str,
+    body: UpdateOutputRequest,
+    context: ProjectContext = Depends(get_project_context),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _save_output(db, current_user.id, context.name, strategy_type, body.output)
+    return StrategyResult(skill=strategy_type, output=body.output)
+
+
+@router.delete("/saved/{strategy_type}", status_code=204)
+def delete_saved_output(
+    strategy_type: str,
+    context: ProjectContext = Depends(get_project_context),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    db.query(StrategyOutput).filter(
+        StrategyOutput.user_id == current_user.id,
+        StrategyOutput.project_name == context.name,
+        StrategyOutput.strategy_type == strategy_type,
+    ).delete()
+    db.commit()
+
+
+# ── Generation endpoints ──────────────────────────────────────────────────────
 
 @router.post("/plan", response_model=StrategyResult)
 def run_seo_plan(
@@ -155,7 +230,9 @@ def run_seo_plan(
         "Include: executive summary, KPI targets table (Baseline/3 Month/6 Month/12 Month), "
         "content priorities per cluster, and phased implementation roadmap. Output in Markdown."
     )
-    return StrategyResult(skill="seo-plan", output=_run_skill("seo-plan", openai_key, msg))
+    output = _run_skill("seo-plan", openai_key, msg)
+    _save_output(db, current_user.id, context.name, "plan", output)
+    return StrategyResult(skill="seo-plan", output=output)
 
 
 @router.post("/content", response_model=StrategyResult)
@@ -187,7 +264,9 @@ def run_content_strategy(
         "4. Publishing cadence recommendation per pillar\n"
         "Output in Markdown."
     )
-    return StrategyResult(skill="content-strategy", output=_run_skill("content-strategy", openai_key, msg))
+    output = _run_skill("content-strategy", openai_key, msg)
+    _save_output(db, current_user.id, context.name, "content", output)
+    return StrategyResult(skill="content-strategy", output=output)
 
 
 @router.post("/architecture", response_model=StrategyResult)
@@ -220,7 +299,9 @@ def run_site_architecture(
         "4. Internal linking plan: hub pages and their spokes with anchor text recommendations\n"
         "Output in Markdown."
     )
-    return StrategyResult(skill="site-architecture", output=_run_skill("site-architecture", openai_key, msg))
+    output = _run_skill("site-architecture", openai_key, msg)
+    _save_output(db, current_user.id, context.name, "architecture", output)
+    return StrategyResult(skill="site-architecture", output=output)
 
 
 @router.post("/flow/{keyword_id}", response_model=StrategyResult)
@@ -358,7 +439,6 @@ def run_competitor_page(
         "7. CTA section\n"
         "Output the full page in Markdown, ready to copy into WordPress."
     )
-    return StrategyResult(
-        skill="seo-competitor-pages",
-        output=_run_skill("seo-competitor-pages", openai_key, msg),
-    )
+    output = _run_skill("seo-competitor-pages", openai_key, msg)
+    _save_output(db, current_user.id, context.name, "competitor", output)
+    return StrategyResult(skill="seo-competitor-pages", output=output)

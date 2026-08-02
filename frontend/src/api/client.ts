@@ -233,6 +233,17 @@ export const strategyApi = {
     api
       .post<StrategyResult>(`/api/projects/${name}/strategy/improve-page/${keywordId}`)
       .then((r) => r.data),
+
+  savedOutputs: (name: string) =>
+    api.get<Record<string, string>>(`/api/projects/${name}/strategy/saved`).then((r) => r.data),
+
+  updateOutput: (name: string, type: string, output: string) =>
+    api
+      .put<StrategyResult>(`/api/projects/${name}/strategy/saved/${encodeURIComponent(type)}`, { output })
+      .then((r) => r.data),
+
+  deleteOutput: (name: string, type: string) =>
+    api.delete(`/api/projects/${name}/strategy/saved/${encodeURIComponent(type)}`).then((r) => r.data),
 }
 
 // ── Speed ─────────────────────────────────────────────────────────────────────
