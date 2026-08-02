@@ -424,39 +424,230 @@ def _format_keyword_line(row) -> str:
     return f"- {row.keyword} [{', '.join(data)}]"
 
 
-_CLUSTER_USER_MSG = """\
-Cluster the following keywords into semantic topic groups for content planning.
+def _site_url_samples(db, user_id: int, project_name: str) -> str:
+    """Return a small sample of distinct URL paths from the sitemap to show the site's URL structure."""
+    pages = (
+        db.query(SitePage)
+        .filter(SitePage.user_id == user_id, SitePage.project_name == project_name)
+        .limit(50)
+        .all()
+    )
+    if not pages:
+        return ""
+    seen_patterns: set[str] = set()
+    samples: list[str] = []
+    for p in pages:
+        path = urlparse(p.url).path or "/"
+        parts = [x for x in path.strip("/").split("/") if x]
+        pattern = "/" + parts[0] + "/" if parts else "/"
+        if pattern not in seen_patterns:
+            seen_patterns.add(pattern)
+            samples.append(path if path != "/" else "/")
+        if len(samples) >= 6:
+            break
+    return "Site URL structure examples: " + ", ".join(samples)
 
-Each keyword shows available performance signals:
-- clicks/impr: real Google Search Console data (last 90 days)
-- pos: average Google ranking position (1=top, lower is better)
-- ctr: click-through rate from Google search results
-- vol: estimated monthly search volume
-- status: quick_win/opportunity/covered/gap
-- page: URL on this site that currently ranks for this keyword
+
+_CLUSTER_USER_MSG = """\
+--------------------------------------------------
+OPTIONAL BUSINESS CONTEXT
+--------------------------------------------------
+
+If business context is provided, use it ONLY to improve semantic grouping and URL suggestions.
+
+<<BUSINESS_CONTEXT>>
+
+Ignore this section if not provided.
+
+--------------------------------------------------
+TASK
+--------------------------------------------------
+
+Cluster the provided keywords into logical semantic topic groups.
+
+Each keyword may include SEO performance signals.
+
+Available signals:
+
+- clicks = Google Search Console clicks (last 90 days)
+- impr = Google Search Console impressions
+- pos = Average Google ranking position
+- ctr = Click Through Rate
+- vol = Estimated monthly search volume
+- status: quick_win / opportunity / covered / gap
+- page = Existing page URL currently ranking for this keyword
+
+Missing signals are allowed. Never invent missing values. Use only available information.
+
+--------------------------------------------------
+INPUT
+--------------------------------------------------
+
+<<SITE_URL_PATTERN>>
 
 Keywords:
-{keywords}
 
-Return ONLY a valid JSON object in this exact format — no extra text, no markdown:
-{{"keywords": [
-  {{
-    "keyword": "<exact keyword text from input, no signals>",
-    "cluster": "<short cluster name 2-4 words, e.g. Hotel Booking>",
-    "is_hub": <true for the single best pillar keyword per cluster, false otherwise>,
-    "intent": "<informational|commercial|navigational|transactional>",
-    "funnel_stage": "<tofu|mofu|bofu>",
-    "suggested_url": "<clean URL slug e.g. /blog/hotel-booking-cairo>"
-  }}
-]}}
+<<KEYWORDS>>
 
-Rules:
-- Keywords with the SAME page URL must go in the SAME cluster — they already share a page
-- Keywords with a UNIQUE page URL that no other keyword shares get their own cluster
-- Group remaining keywords by semantic topic
-- Every cluster must have exactly one hub (is_hub: true) — the keyword with the HIGHEST impressions in that cluster. If impressions are equal, pick the one with the most volume. If still equal, pick the shortest keyword
-- Return every keyword from the input — do not skip any
-- The "keyword" field must be the exact keyword text only, no signals"""
+--------------------------------------------------
+OUTPUT FORMAT
+--------------------------------------------------
+
+Return ONLY this JSON structure:
+
+{
+  "clusters": [
+    {
+      "cluster": "AI Consulting",
+      "cluster_id": "ai-consulting",
+      "hub_keyword": "ai consultant services",
+      "intent": "commercial",
+      "funnel_stage": "mofu",
+      "suggested_url": "/ai-consulting"
+    }
+  ],
+  "keywords": [
+    {
+      "keyword": "ai consultant services",
+      "cluster": "AI Consulting",
+      "cluster_id": "ai-consulting",
+      "is_hub": true,
+      "intent": "commercial",
+      "funnel_stage": "mofu",
+      "suggested_url": "/ai-consulting",
+      "confidence": "high"
+    }
+  ]
+}
+
+Return no additional fields. Return no explanations.
+
+--------------------------------------------------
+CLUSTERING RULES
+--------------------------------------------------
+
+Priority 1
+Keywords that already share the SAME page URL MUST belong to the SAME cluster.
+Never separate them.
+
+Priority 2
+If a keyword has a UNIQUE page URL that no other keyword shares,
+it becomes its own cluster.
+
+Priority 3
+Group all remaining keywords by semantic meaning.
+Group synonyms, close variants and highly related search intents together.
+Do not group unrelated search intent.
+
+--------------------------------------------------
+HOMEPAGE EXCEPTION
+--------------------------------------------------
+
+If page="/", do NOT automatically force keywords into the same cluster.
+Treat homepage keywords using semantic similarity.
+Only group homepage keywords together if they clearly represent the same topic.
+
+--------------------------------------------------
+HUB SELECTION
+--------------------------------------------------
+
+Every cluster MUST contain exactly ONE hub keyword (is_hub: true).
+The hub_keyword in the clusters array must match the is_hub keyword in the keywords array.
+
+Choose the hub using this priority:
+
+Priority 1 - Highest impressions (impr)
+Priority 2 - Highest search volume (vol)
+Priority 3 - Best ranking position (lowest pos number)
+Priority 4 - Shortest and broadest keyword
+
+--------------------------------------------------
+SEARCH INTENT
+--------------------------------------------------
+
+Choose exactly one:
+
+informational - user wants information or education
+commercial - user is comparing products, services or providers
+transactional - user intends to buy, book, hire or contact
+navigational - user wants a specific company, brand or webpage
+
+Never leave intent empty.
+
+--------------------------------------------------
+FUNNEL STAGE
+--------------------------------------------------
+
+Choose exactly one:
+
+tofu - general educational searches
+mofu - comparison or evaluation
+bofu - purchase, booking or contact intent
+
+--------------------------------------------------
+CLUSTER NAME
+--------------------------------------------------
+
+2-4 words. Human readable. Title Case. Describes the shared topic.
+
+--------------------------------------------------
+CLUSTER ID
+--------------------------------------------------
+
+Machine-readable version of cluster name.
+lowercase, hyphen-separated, letters and numbers only.
+Example: "AI Consulting" -> "ai-consulting"
+
+--------------------------------------------------
+SUGGESTED URL
+--------------------------------------------------
+
+Generate ONE canonical URL per cluster.
+All keywords in the same cluster MUST share the SAME suggested_url.
+
+Analyze the existing page URLs provided to understand this site's URL structure.
+Follow the same pattern as the existing pages.
+If no clear structure exists, use /slug format.
+
+Rules: lowercase, hyphen-separated, concise, no trailing slash.
+Never generate duplicate URLs for different clusters.
+If an existing page already represents the cluster, reuse that URL.
+
+--------------------------------------------------
+KEYWORD FIELD RULES
+--------------------------------------------------
+
+The keyword field MUST contain ONLY the original keyword text.
+Never modify spelling, rewrite, singularize, pluralize, remove or add words.
+It must exactly match the input.
+
+--------------------------------------------------
+CONFIDENCE
+--------------------------------------------------
+
+high - clear semantic or existing page relationship
+medium - reasonable relationship but some ambiguity
+low - weak relationship or insufficient signals
+
+--------------------------------------------------
+VALIDATION
+--------------------------------------------------
+
+Before returning the JSON verify:
+
+- Every input keyword appears exactly once
+- No keyword is missing
+- No duplicate keywords exist
+- Every cluster has exactly one hub (is_hub: true)
+- hub_keyword in clusters array matches the is_hub keyword in keywords array
+- Every keyword has: cluster, cluster_id, is_hub, intent, funnel_stage, suggested_url, confidence
+- Every cluster has: cluster, cluster_id, hub_keyword, intent, funnel_stage, suggested_url
+- All keywords in the same cluster share the same cluster_id and suggested_url
+- JSON is valid
+
+If any validation fails, correct it before producing the final output.
+
+Return ONLY the JSON object."""
 
 _BATCH_SIZE = 150
 
@@ -479,30 +670,38 @@ def run_cluster_agent(
     except FileNotFoundError as e:
         raise HTTPException(500, str(e))
 
-    # Build knowledge context once for all batches
+    # Business context
     kb = db.query(ProjectKnowledge).filter(
         ProjectKnowledge.user_id == current_user.id,
         ProjectKnowledge.project_name == context.name,
     ).first()
-    kb_prefix = ""
     if kb:
         parts = []
         if kb.about: parts.append(f"Business: {kb.about.strip()[:300]}")
-        if kb.products_services: parts.append(f"Products/Services: {kb.products_services.strip()[:200]}")
-        if kb.target_audience: parts.append(f"Target audience: {kb.target_audience.strip()[:200]}")
-        if parts:
-            kb_prefix = "Context:\n" + "\n".join(parts) + "\n\n"
+        if kb.products_services: parts.append(f"Products / Services: {kb.products_services.strip()[:200]}")
+        if kb.target_audience: parts.append(f"Target Audience: {kb.target_audience.strip()[:200]}")
+        business_context = "\n".join(parts) if parts else "Not provided."
+    else:
+        business_context = "Not provided."
+
+    # Site URL pattern from sitemap
+    site_url_pattern = _site_url_samples(db, current_user.id, context.name)
 
     all_results: list[dict] = []
+    all_clusters: list[dict] = []
 
     for i in range(0, len(rows), _BATCH_SIZE):
         batch_rows = rows[i : i + _BATCH_SIZE]
-        user_msg = kb_prefix + _CLUSTER_USER_MSG.format(
-            keywords="\n".join(_format_keyword_line(r) for r in batch_rows)
+        keywords_block = "\n".join(_format_keyword_line(r) for r in batch_rows)
+        user_msg = (
+            _CLUSTER_USER_MSG
+            .replace("<<BUSINESS_CONTEXT>>", business_context)
+            .replace("<<SITE_URL_PATTERN>>", site_url_pattern)
+            .replace("<<KEYWORDS>>", keywords_block)
         )
 
         try:
-            raw = agent.run(user_msg, timeout=90, json_mode=True)
+            raw = agent.run(user_msg, timeout=120, json_mode=True)
         except Exception as e:
             raise HTTPException(502, f"OpenAI error: {e}")
 
@@ -511,16 +710,23 @@ def run_cluster_agent(
         except json.JSONDecodeError as e:
             raise HTTPException(502, f"OpenAI returned invalid JSON: {e}. Response: {raw[:300]}")
 
-        if isinstance(parsed, list):
-            items = parsed
-        elif isinstance(parsed, dict):
-            items = next((v for v in parsed.values() if isinstance(v, list)), [])
-        else:
-            items = []
+        if isinstance(parsed, dict):
+            all_results.extend(parsed.get("keywords", []))
+            all_clusters.extend(parsed.get("clusters", []))
+        elif isinstance(parsed, list):
+            all_results.extend(parsed)
 
-        all_results.extend(items)
+    # Build hub map from clusters array: cluster_id -> hub_keyword
+    hub_map: dict[str, str] = {}
+    for c in all_clusters:
+        if isinstance(c, dict) and "cluster_id" in c and "hub_keyword" in c:
+            hub_map[c["cluster_id"]] = c["hub_keyword"].strip().lower()
 
-    results_map = {r["keyword"].lower(): r for r in all_results if isinstance(r, dict) and "keyword" in r}
+    results_map = {
+        r["keyword"].lower(): r
+        for r in all_results
+        if isinstance(r, dict) and "keyword" in r
+    }
 
     updated = 0
     for row in rows:
@@ -528,11 +734,16 @@ def run_cluster_agent(
         if not data:
             continue
         row.cluster = data.get("cluster") or row.cluster
-        row.is_hub = bool(data.get("is_hub", False))
         row.intent = data.get("intent") or row.intent
         row.funnel_stage = data.get("funnel_stage") or row.funnel_stage
         row.suggested_url = data.get("suggested_url") or row.suggested_url
         row.updated_at = datetime.utcnow()
+        # Hub: prefer clusters array hub_keyword, fallback to is_hub field
+        cluster_id = data.get("cluster_id", "")
+        if hub_map and cluster_id in hub_map:
+            row.is_hub = (hub_map[cluster_id] == row.keyword.strip().lower())
+        else:
+            row.is_hub = bool(data.get("is_hub", False))
         updated += 1
 
     _match_sitemap(rows, db, current_user.id, context.name)

@@ -978,16 +978,21 @@ function KeywordRow({
 
 function ClusterLegend({ keywords }: { keywords: Keyword[] }) {
   const clusters = useMemo(() => {
-    const map = new Map<string, { hub: string | null; count: number; statuses: string[] }>()
+    const map = new Map<string, { hub: string | null; count: number; statuses: string[]; impressions: number }>()
     for (const kw of keywords) {
       if (!kw.cluster) continue
-      const entry = map.get(kw.cluster) ?? { hub: null, count: 0, statuses: [] }
+      const entry = map.get(kw.cluster) ?? { hub: null, count: 0, statuses: [], impressions: 0 }
       entry.count++
       entry.statuses.push(kw.status)
+      entry.impressions += kw.impressions ?? 0
       if (kw.is_hub) entry.hub = kw.keyword
       map.set(kw.cluster, entry)
     }
-    return [...map.entries()].sort((a, b) => b[1].count - a[1].count)
+    return [...map.entries()].sort((a, b) =>
+      b[1].impressions !== a[1].impressions
+        ? b[1].impressions - a[1].impressions
+        : b[1].count - a[1].count
+    )
   }, [keywords])
 
   if (clusters.length === 0) return null
