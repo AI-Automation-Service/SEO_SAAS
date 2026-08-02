@@ -116,7 +116,7 @@ export interface RegisterRequest {
 export type KeywordType = 'standard' | 'question' | 'branded' | 'competitor'
 export type KeywordIntent = 'informational' | 'commercial' | 'navigational' | 'transactional'
 export type FunnelStage = 'tofu' | 'mofu' | 'bofu'
-export type KeywordStatus = 'covered' | 'quick_win' | 'opportunity' | 'gap' | 'watch'
+export type KeywordStatus = 'covered' | 'quick_win' | 'opportunity' | 'low_ranking' | 'gap' | 'watch'
 export type KeywordSource = 'gsc' | 'planner' | 'both' | 'manual' | 'sitemap'
 
 export interface Keyword {
@@ -148,8 +148,9 @@ export interface KeywordSummary {
   total: number
   covered: number
   quick_wins: number
-  gaps: number
   opportunities: number
+  low_ranking: number
+  gaps: number
   clusters: number
   unclustered: number
 }

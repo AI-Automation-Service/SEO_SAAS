@@ -199,6 +199,9 @@ export const keywordsApi = {
 
   reset: (name: string) =>
     api.delete<{ deleted: number; message: string }>(`/api/projects/${name}/keywords`).then((r) => r.data),
+
+  reclassify: (name: string) =>
+    api.post<{ updated: number }>(`/api/projects/${name}/keywords/reclassify`).then((r) => r.data),
 }
 
 // ── Sitemap ───────────────────────────────────────────────────────────────────

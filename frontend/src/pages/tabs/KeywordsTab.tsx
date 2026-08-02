@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Tags, RefreshCw, Upload, Sparkles, Search, X, ExternalLink,
@@ -37,6 +37,7 @@ const STATUS_STYLES: Record<KeywordStatus, string> = {
   covered:     'bg-emerald-100 text-emerald-700',
   quick_win:   'bg-amber-100 text-amber-700',
   opportunity: 'bg-blue-100 text-blue-700',
+  low_ranking: 'bg-orange-100 text-orange-700',
   gap:         'bg-red-100 text-red-600',
   watch:       'bg-slate-100 text-slate-500',
 }
@@ -44,6 +45,7 @@ const STATUS_LABELS: Record<KeywordStatus, string> = {
   covered:     'Covered',
   quick_win:   'Quick Win',
   opportunity: 'Opportunity',
+  low_ranking: 'Low Ranking',
   gap:         'Gap',
   watch:       'Watch',
 }
@@ -293,6 +295,17 @@ export function KeywordsTab({ projectName }: { projectName: string }) {
     onError: (err) => toast.error(getErrorMessage(err)),
   })
 
+  // Silently reclassify existing keywords with the updated 5-bucket logic on tab load
+  useEffect(() => {
+    keywordsApi.reclassify(projectName).then((data) => {
+      if (data.updated > 0) {
+        qc.invalidateQueries({ queryKey: ['keywords', projectName] })
+        qc.invalidateQueries({ queryKey: ['keywords-summary', projectName] })
+      }
+    }).catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectName])
+
   function handleReset() {
     if (confirm('Clear all keywords for this project? You can re-sync from GSC or re-upload a CSV after.')) {
       resetMut.mutate()
@@ -410,10 +423,12 @@ export function KeywordsTab({ projectName }: { projectName: string }) {
             active={statusFilter === 'covered'} onClick={() => setStatusFilter(statusFilter === 'covered' ? '' : 'covered')} />
           <StatCard label="Quick Wins" value={summary.quick_wins} color="text-amber-600"
             active={statusFilter === 'quick_win'} onClick={() => setStatusFilter(statusFilter === 'quick_win' ? '' : 'quick_win')} />
+          <StatCard label="Opportunity" value={summary.opportunities} color="text-blue-600"
+            active={statusFilter === 'opportunity'} onClick={() => setStatusFilter(statusFilter === 'opportunity' ? '' : 'opportunity')} />
+          <StatCard label="Low Ranking" value={summary.low_ranking} color="text-orange-600"
+            active={statusFilter === 'low_ranking'} onClick={() => setStatusFilter(statusFilter === 'low_ranking' ? '' : 'low_ranking')} />
           <StatCard label="Gaps" value={summary.gaps} color="text-red-600"
             active={statusFilter === 'gap'} onClick={() => setStatusFilter(statusFilter === 'gap' ? '' : 'gap')} />
-          <StatCard label="Opportunities" value={summary.opportunities} color="text-blue-600"
-            active={statusFilter === 'opportunity'} onClick={() => setStatusFilter(statusFilter === 'opportunity' ? '' : 'opportunity')} />
           <StatCard label="Clusters" value={summary.clusters} color="text-violet-600"
             active={false} onClick={() => {}} />
         </div>
@@ -461,6 +476,12 @@ export function KeywordsTab({ projectName }: { projectName: string }) {
                     signal: 'Google is showing your page in results but it\'s on page 2 or lower (position 11+).',
                     meaning: 'Google knows your page exists and is relevant, but the content isn\'t strong enough to reach page 1 yet.',
                     action: 'Rewrite — expand the content depth, add an FAQ section, and strengthen on-page SEO.',
+                  },
+                  {
+                    badge: 'Low Ranking', cls: 'bg-orange-100 text-orange-700',
+                    signal: 'Your page shows in Google but ranks very low (position 31–100).',
+                    meaning: 'Google has found your page but doesn\'t consider it strong enough to appear on pages 1 or 2.',
+                    action: 'Rebuild — rewrite the page with deeper content, stronger on-page SEO, and more internal links.',
                   },
                   {
                     badge: 'Gap', cls: 'bg-red-100 text-red-600',
@@ -568,7 +589,7 @@ export function KeywordsTab({ projectName }: { projectName: string }) {
                 </STh>
                 <STh col="status" onResize={startResize} style={{ width: colWidths.status }}>
                   Status
-                  <Tip text="Covered: ranking top 3 — maintain it. Quick Win: ranking 4–10 — small push gets you to top 3. Opportunity: showing in results but below pos 10 — needs stronger content. Gap: not ranking at all — create new content." />
+                  <Tip text="Covered: pos 1–3 — maintain. Quick Win: pos 4–10 — small push needed. Opportunity: pos 11–30 — improve content. Low Ranking: pos 31–100 — rebuild content. Gap: no impressions — create new content." />
                 </STh>
                 <Th field="volume" col="volume" sort={sort} dir={sortDir} onClick={toggleSort}
                     onResize={startResize} style={{ width: colWidths.volume }} className="text-right">

@@ -61,11 +61,13 @@ def _funnel(intent: str) -> str:
 def _status(clicks: Optional[int], impressions: Optional[int], position: Optional[float]) -> str:
     if not impressions:
         return "gap"
-    if position and position <= 3 and clicks:
+    if position and position <= 3:
         return "covered"
-    if position and position <= 10 and clicks:
+    if position and position <= 10:
         return "quick_win"
-    return "opportunity"
+    if position and position <= 30:
+        return "opportunity"
+    return "low_ranking"
 
 
 def _snippet_opp(ktype: str, position: Optional[float], impressions: Optional[int]) -> bool:
@@ -120,8 +122,9 @@ class KeywordSummary(BaseModel):
     total: int
     covered: int
     quick_wins: int
-    gaps: int
     opportunities: int
+    low_ranking: int
+    gaps: int
     clusters: int
     unclustered: int
 
@@ -149,11 +152,30 @@ def keyword_summary(
         total=len(rows),
         covered=sum(1 for r in rows if r.status == "covered"),
         quick_wins=sum(1 for r in rows if r.status == "quick_win"),
-        gaps=sum(1 for r in rows if r.status == "gap"),
         opportunities=sum(1 for r in rows if r.status == "opportunity"),
+        low_ranking=sum(1 for r in rows if r.status == "low_ranking"),
+        gaps=sum(1 for r in rows if r.status == "gap"),
         clusters=len(clusters),
         unclustered=sum(1 for r in rows if not r.cluster),
     )
+
+
+@router.post("/reclassify")
+def reclassify_statuses(
+    context: ProjectContext = Depends(get_project_context),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    rows = _project_keywords(db, current_user.id, context.name).all()
+    updated = 0
+    for row in rows:
+        new_status = _status(row.clicks, row.impressions, row.position)
+        if row.status != new_status:
+            row.status = new_status
+            updated += 1
+    if updated:
+        db.commit()
+    return {"updated": updated}
 
 
 @router.get("", response_model=list[KeywordOut])
