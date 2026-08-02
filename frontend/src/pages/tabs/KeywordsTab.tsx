@@ -802,23 +802,36 @@ function KeywordRow({
       <tr className="hover:bg-slate-50/50 transition-colors group">
         {/* Keyword */}
         <td className="px-3 py-2.5 sticky left-0 bg-white group-hover:bg-slate-50/50 transition-colors z-10">
-          <div className="flex items-center gap-1.5">
-            {kw.is_hub && (
-              <span title="Hub / Pillar page"><Crown size={11} className="text-amber-500 shrink-0" /></span>
-            )}
-            {kw.snippet_opportunity && (
-              <span title="Featured snippet opportunity"><Zap size={11} className="text-violet-500 shrink-0" /></span>
-            )}
-            <span className="font-medium text-slate-800 truncate">{kw.keyword}</span>
-            {pageTypeBadge && (
-              <span className={cn(
-                'shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium',
-                pageTypeBadge === 'page'
-                  ? 'bg-sky-100 text-sky-600'
-                  : 'bg-violet-100 text-violet-600',
-              )}>
-                {pageTypeBadge}
-              </span>
+          <div className="flex flex-col gap-0.5">
+            <div className="flex items-center gap-1.5">
+              {kw.is_hub && (
+                <span title="Hub / Pillar page"><Crown size={11} className="text-amber-500 shrink-0" /></span>
+              )}
+              {kw.snippet_opportunity && (
+                <span title="Featured snippet opportunity"><Zap size={11} className="text-violet-500 shrink-0" /></span>
+              )}
+              <span className="font-medium text-slate-800 truncate">{kw.keyword}</span>
+              {pageTypeBadge && (
+                <span className={cn(
+                  'shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium',
+                  pageTypeBadge === 'page'
+                    ? 'bg-sky-100 text-sky-600'
+                    : 'bg-violet-100 text-violet-600',
+                )}>
+                  {pageTypeBadge}
+                </span>
+              )}
+            </div>
+            {kw.existing_url && (
+              <a
+                href={kw.existing_url}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-0.5 text-[10px] text-slate-400 hover:text-blue-500 transition-colors truncate max-w-xs"
+              >
+                <ExternalLink size={9} className="shrink-0" />
+                {kw.existing_url}
+              </a>
             )}
           </div>
         </td>
