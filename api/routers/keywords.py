@@ -432,8 +432,8 @@ Each keyword shows available performance signals:
 - pos: average Google ranking position (1=top, lower is better)
 - ctr: click-through rate from Google search results
 - vol: estimated monthly search volume
-- status: quick_win=ranking pos 4-15 with traffic | opportunity=not yet ranking but has volume | monitor=low signals | covered=page already exists
-- page: URL on this site that currently ranks for this keyword (keywords sharing the same page belong in the same cluster)
+- status: quick_win/opportunity/covered/gap
+- page: URL on this site that currently ranks for this keyword
 
 Keywords:
 {keywords}
@@ -443,7 +443,6 @@ Return ONLY a valid JSON object in this exact format — no extra text, no markd
   {{
     "keyword": "<exact keyword text from input, no signals>",
     "cluster": "<short cluster name 2-4 words, e.g. Hotel Booking>",
-    "is_hub": <true for the single best pillar keyword per cluster, false otherwise>,
     "intent": "<informational|commercial|navigational|transactional>",
     "funnel_stage": "<tofu|mofu|bofu>",
     "suggested_url": "<clean URL slug e.g. /blog/hotel-booking-cairo>"
@@ -451,14 +450,11 @@ Return ONLY a valid JSON object in this exact format — no extra text, no markd
 ]}}
 
 Rules:
-- Keywords sharing the same page URL already belong together — put them in the same cluster
-- Every cluster must have exactly one hub keyword (is_hub: true)
-- Hub = the keyword with the HIGHEST impressions in the cluster, period. Impressions beat everything else — they prove Google is already surfacing this keyword to real users. Do not pick a hub based on keyword length, phrasing, or position unless impressions are tied
-- If two keywords have equal impressions, prefer the one with better (lower) position
-- If no keyword has any impressions, use volume; if no volume either, pick the broadest/shortest keyword
-- Spokes link back to the hub
+- Keywords with the SAME page URL must go in the SAME cluster — they already share a page
+- Keywords with a UNIQUE page URL that no other keyword shares get their own cluster
+- Group remaining keywords by semantic topic
 - Return every keyword from the input — do not skip any
-- The "keyword" field in your response must be the exact keyword text only, without any signals"""
+- The "keyword" field must be the exact keyword text only, no signals"""
 
 _BATCH_SIZE = 150
 
@@ -530,12 +526,24 @@ def run_cluster_agent(
         if not data:
             continue
         row.cluster = data.get("cluster") or row.cluster
-        row.is_hub = bool(data.get("is_hub", False))
+        row.is_hub = False  # will be set by Python below
         row.intent = data.get("intent") or row.intent
         row.funnel_stage = data.get("funnel_stage") or row.funnel_stage
         row.suggested_url = data.get("suggested_url") or row.suggested_url
         row.updated_at = datetime.utcnow()
         updated += 1
+
+    # Set hub per cluster: highest impressions → highest volume → shortest keyword
+    clusters: dict[str, list] = {}
+    for row in rows:
+        if row.cluster:
+            clusters.setdefault(row.cluster, []).append(row)
+    for cluster_rows in clusters.values():
+        best = max(
+            cluster_rows,
+            key=lambda r: (r.impressions or 0, r.volume or 0, -len(r.keyword)),
+        )
+        best.is_hub = True
 
     _match_sitemap(rows, db, current_user.id, context.name)
     db.commit()
