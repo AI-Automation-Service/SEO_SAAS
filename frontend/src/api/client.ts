@@ -244,6 +244,14 @@ export const strategyApi = {
 
   deleteOutput: (name: string, type: string) =>
     api.delete(`/api/projects/${name}/strategy/saved/${encodeURIComponent(type)}`).then((r) => r.data),
+
+  publishCompetitor: (name: string, competitorUrl: string) =>
+    api
+      .post<{ id: number; url: string; title: string; status: string }>(
+        `/api/projects/${name}/strategy/publish-competitor`,
+        { competitor_url: competitorUrl },
+      )
+      .then((r) => r.data),
 }
 
 // ── Speed ─────────────────────────────────────────────────────────────────────

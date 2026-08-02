@@ -1,14 +1,21 @@
 from datetime import datetime
+from urllib.parse import urlparse
 
+import markdown as md
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from agents.base import SkillAgent
-from api.dependencies import get_current_user, get_db, get_project_context
+from api.dependencies import get_current_user, get_db, get_project_context, get_secret_manager
 from api.routers.api_keys import get_user_secret
 from core.db.models import Keyword, ProjectKnowledge, SitePage, StrategyOutput, User
 from core.models.context import ProjectContext
+from core.secrets import SecretManager
+from integrations.base import IntegrationError
+from integrations.cms.base import PostDraft
+from integrations.cms.wordpress import WordPressAdapter
+from shared.exceptions import SecretNotFoundError
 
 router = APIRouter(prefix="/projects/{name}/strategy", tags=["strategy"])
 
@@ -447,5 +454,61 @@ def run_competitor_page(
         "Output the full page in Markdown, ready to copy into WordPress."
     )
     output = _run_skill("seo-competitor-pages", openai_key, msg)
-    _save_output(db, current_user.id, context.name, "competitor", output)
+    _save_output(db, current_user.id, context.name, f"competitor:{body.competitor_url}", output)
     return StrategyResult(skill="seo-competitor-pages", output=output)
+
+
+def _competitor_meta(business_name: str, competitor_url: str) -> tuple[str, str]:
+    """Returns (page_title, wp_slug) derived from the competitor URL."""
+    host = urlparse(competitor_url).hostname or competitor_url
+    host = host.removeprefix("www.")
+    domain_name = host.split(".")[0]
+    competitor_name = domain_name.replace("-", " ").title()
+    title = f"{business_name} vs {competitor_name}"
+    slug = f"vs-{domain_name.lower()}"
+    return title, slug
+
+
+@router.post("/publish-competitor")
+def publish_competitor_page(
+    body: CompetitorPageRequest,
+    context: ProjectContext = Depends(get_project_context),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    secrets: SecretManager = Depends(get_secret_manager),
+):
+    strategy_type = f"competitor:{body.competitor_url}"
+    row = (
+        db.query(StrategyOutput)
+        .filter(
+            StrategyOutput.user_id == current_user.id,
+            StrategyOutput.project_name == context.name,
+            StrategyOutput.strategy_type == strategy_type,
+        )
+        .first()
+    )
+    if not row:
+        raise HTTPException(404, "No saved output for this competitor. Generate it first.")
+
+    wp_cfg = context.config.integrations.wordpress
+    if not wp_cfg.enabled:
+        raise HTTPException(400, "WordPress integration is not enabled. Connect WordPress in the Integrations tab first.")
+
+    try:
+        adapter = WordPressAdapter(
+            url=wp_cfg.url,
+            username=secrets.get(wp_cfg.username_env),
+            password=secrets.get(wp_cfg.password_env),
+        )
+    except (SecretNotFoundError, Exception) as e:
+        raise HTTPException(400, f"WordPress credentials error: {e}")
+
+    html = md.markdown(row.output, extensions=["tables", "fenced_code"])
+    title, slug = _competitor_meta(context.config.business_name, body.competitor_url)
+
+    try:
+        result = adapter.create_page(PostDraft(title=title, content=html, slug=slug, status="draft"))
+    except IntegrationError as e:
+        raise HTTPException(502, str(e))
+
+    return {"id": result.id, "url": result.url, "title": result.title, "status": result.status}

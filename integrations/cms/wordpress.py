@@ -80,6 +80,23 @@ class WordPressAdapter(CMSAdapter):
         )
         return response.json()
 
+    def create_page(self, draft: PostDraft) -> PublishedPost:
+        payload: dict = {
+            "title": draft.title,
+            "content": draft.content,
+            "status": draft.status,
+        }
+        if draft.slug:
+            payload["slug"] = draft.slug
+        response = self._request("POST", "/pages", json=payload)
+        data = response.json()
+        return PublishedPost(
+            id=data["id"],
+            url=data["link"],
+            title=data["title"]["rendered"],
+            status=data["status"],
+        )
+
     def get_sitemap_urls(self) -> list[str]:
         urls: list[str] = []
         for content_type in ("posts", "pages"):
