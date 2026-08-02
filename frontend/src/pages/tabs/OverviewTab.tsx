@@ -38,6 +38,22 @@ const CONVERSION_OPTIONS = [
   { value: 'brand_awareness', label: 'Brand Awareness (content reach)' },
 ]
 
+// ── Field hint tooltip ───────────────────────────────────────────────────────
+
+function FieldHint({ text }: { text: string }) {
+  return (
+    <span className="relative inline-flex items-center ml-1 group/hint">
+      <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-slate-200 text-slate-500 text-[9px] font-bold cursor-default select-none leading-none">
+        ?
+      </span>
+      <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 w-56 rounded-lg bg-slate-800 text-white text-[11px] leading-snug px-2.5 py-2 opacity-0 group-hover/hint:opacity-100 transition-opacity duration-150 z-50 shadow-lg">
+        {text}
+        <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800" />
+      </span>
+    </span>
+  )
+}
+
 // ── Tag Input ────────────────────────────────────────────────────────────────
 
 function TagInput({
@@ -302,13 +318,19 @@ function ProjectSettingsCard({ project }: { project: Project }) {
         {/* Row 1: name + type */}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Business Name</label>
+            <label className="block text-xs text-slate-500 mb-1">
+              Business Name
+              <FieldHint text="Your company name. Used in every agent prompt to identify the business being optimised." />
+            </label>
             {editing
               ? <input {...field('business_name')} className={inputCls(true)} placeholder="My Business" />
               : <p className="text-xs text-slate-800">{readValue(form.business_name)}</p>}
           </div>
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Business Type</label>
+            <label className="block text-xs text-slate-500 mb-1">
+              Business Type
+              <FieldHint text="Your industry or model (e.g. SaaS, agency, e-commerce). Helps agents choose the right SEO strategy and content angle." />
+            </label>
             {editing
               ? <input {...field('business_type')} className={inputCls(true)} placeholder="e.g. SaaS, Agency, E-commerce" />
               : <p className="text-xs text-slate-800">{readValue(form.business_type)}</p>}
@@ -318,13 +340,19 @@ function ProjectSettingsCard({ project }: { project: Project }) {
         {/* Row 2: country + language */}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Country</label>
+            <label className="block text-xs text-slate-500 mb-1">
+              Country
+              <FieldHint text="Your primary target market. Affects keyword relevance, search volume context, and local SEO recommendations." />
+            </label>
             {editing
               ? <input {...field('country')} className={inputCls(true)} placeholder="e.g. Egypt, United States" />
               : <p className="text-xs text-slate-800">{readValue(form.country)}</p>}
           </div>
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Language</label>
+            <label className="block text-xs text-slate-500 mb-1">
+              Language
+              <FieldHint text="The language your site content is written in. Agents generate strategy and content briefs in this language." />
+            </label>
             {editing
               ? <input {...field('language')} className={inputCls(true)} placeholder="e.g. English, Arabic" />
               : <p className="text-xs text-slate-800">{readValue(form.language)}</p>}
@@ -335,7 +363,7 @@ function ProjectSettingsCard({ project }: { project: Project }) {
         <div>
           <label className="block text-xs text-slate-500 mb-1">
             Business Location
-            <span className="text-slate-400 font-normal ml-1">(city / region — for local SEO)</span>
+            <FieldHint text="City or region you serve — only needed for local SEO. E.g. 'Cairo, Egypt'. Leave blank for national or global sites." />
           </label>
           {editing
             ? <input {...field('business_location')} className={inputCls(true)} placeholder="e.g. Cairo, Egypt" />
@@ -345,7 +373,10 @@ function ProjectSettingsCard({ project }: { project: Project }) {
         {/* Row 3: tone + conversion */}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Tone of Voice</label>
+            <label className="block text-xs text-slate-500 mb-1">
+              Tone of Voice
+              <FieldHint text="How your content should sound. Injected into every content brief so agents write in your brand's style." />
+            </label>
             {editing ? (
               <select {...field('tone_of_voice')} className={inputCls(true)}>
                 <option value="">Select tone…</option>
@@ -356,7 +387,10 @@ function ProjectSettingsCard({ project }: { project: Project }) {
             )}
           </div>
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Primary Conversion Goal</label>
+            <label className="block text-xs text-slate-500 mb-1">
+              Primary Conversion Goal
+              <FieldHint text="What you want visitors to do. Agents align content structure, CTAs, and page hierarchy around this goal." />
+            </label>
             {editing ? (
               <select {...field('primary_conversion')} className={inputCls(true)}>
                 <option value="">Select goal…</option>
@@ -375,7 +409,7 @@ function ProjectSettingsCard({ project }: { project: Project }) {
         <div>
           <label className="block text-xs text-slate-500 mb-1">
             SEO Plugin
-            <span className="text-slate-400 font-normal ml-1">(affects meta tag & schema recommendations)</span>
+            <FieldHint text="Your WordPress SEO plugin. Agents tailor meta tag field names, schema steps, and optimization tips to match your plugin's interface." />
           </label>
           {editing ? (
             <select {...field('seo_plugin')} className={inputCls(true)}>
@@ -392,7 +426,10 @@ function ProjectSettingsCard({ project }: { project: Project }) {
 
         {/* Target audience */}
         <div>
-          <label className="block text-xs text-slate-500 mb-1">Target Audience</label>
+          <label className="block text-xs text-slate-500 mb-1">
+            Target Audience
+            <FieldHint text="Who you're writing for. Helps agents pick the right vocabulary, messaging, and reading level for every piece of content." />
+          </label>
           {editing ? (
             <textarea
               {...field('target_audience')}
@@ -409,7 +446,7 @@ function ProjectSettingsCard({ project }: { project: Project }) {
         <div>
           <label className="block text-xs text-slate-500 mb-1">
             Competitors
-            <span className="text-slate-400 font-normal ml-1">(used for "Competitor Pages" strategy)</span>
+            <FieldHint text="Websites you compete with. Used in the Competitor Pages strategy to analyse what content is working for them and where you can outrank them." />
           </label>
           <TagInput
             values={form.competitors}
@@ -421,7 +458,10 @@ function ProjectSettingsCard({ project }: { project: Project }) {
 
         {/* SEO goals */}
         <div>
-          <label className="block text-xs text-slate-500 mb-1">SEO Goals</label>
+          <label className="block text-xs text-slate-500 mb-1">
+            SEO Goals
+            <FieldHint text="The SEO outcomes you're targeting (e.g. 'Rank for local keywords', 'Build topical authority'). Agents prioritise recommendations around these goals." />
+          </label>
           <TagInput
             values={form.seo_goals}
             onChange={(v) => setForm((f) => ({ ...f, seo_goals: v }))}
@@ -432,7 +472,10 @@ function ProjectSettingsCard({ project }: { project: Project }) {
 
         {/* Business goals */}
         <div>
-          <label className="block text-xs text-slate-500 mb-1">Business Goals</label>
+          <label className="block text-xs text-slate-500 mb-1">
+            Business Goals
+            <FieldHint text="What the business needs to achieve (e.g. 'Generate 50 leads/month'). Keeps strategy aligned with real business outcomes, not just rankings." />
+          </label>
           <TagInput
             values={form.business_goals}
             onChange={(v) => setForm((f) => ({ ...f, business_goals: v }))}
