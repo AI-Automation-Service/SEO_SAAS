@@ -841,7 +841,7 @@ export function StrategyTab({ projectName, project }: StrategyTabProps) {
                           </a>
                         )}
                         <span className="text-[11px] text-slate-400">
-                          Published as a draft — review in WordPress before going live
+                          Saved as a draft — the URL is set by your WordPress permalink settings. You can change the slug inside WordPress before publishing.
                         </span>
                       </div>
                     </>
