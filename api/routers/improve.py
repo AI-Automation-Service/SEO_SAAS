@@ -11,6 +11,7 @@ from api.dependencies import get_current_user, get_db, get_project_context
 from api.routers.api_keys import get_user_secret
 from core.db.models import Keyword, PageChange, User
 from core.models.context import ProjectContext
+from core.secrets import SecretManager
 from integrations.cms.wordpress import WordPressAdapter
 from integrations.base import IntegrationError
 from shared.exceptions import SecretNotFoundError
@@ -20,22 +21,19 @@ router = APIRouter(prefix="/projects/{name}/improve", tags=["improve"])
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _get_wp_adapter(context: ProjectContext, user_id: int, db: Session) -> WordPressAdapter:
+def _get_wp_adapter(context: ProjectContext) -> WordPressAdapter:
     wp_cfg = context.config.integrations.wordpress
-    if not wp_cfg or not wp_cfg.get("enabled"):
+    if not wp_cfg.enabled:
         raise HTTPException(400, "WordPress integration is not connected. Go to Integrations tab first.")
-    wp_url = wp_cfg.get("url") or ""
-    wp_user = wp_cfg.get("username") or ""
+    secrets = SecretManager()
     try:
-        wp_pass = get_user_secret("wp_app_password", user_id, db)
-    except SecretNotFoundError:
-        wp_pass = wp_cfg.get("app_password") or ""
-    if not wp_pass:
-        raise HTTPException(400, "WordPress application password not found.")
-    try:
-        return WordPressAdapter(url=wp_url, username=wp_user, password=wp_pass)
-    except IntegrationError as e:
-        raise HTTPException(400, str(e))
+        return WordPressAdapter(
+            url=wp_cfg.url,
+            username=secrets.get(wp_cfg.username_env),
+            password=secrets.get(wp_cfg.password_env),
+        )
+    except (SecretNotFoundError, Exception) as e:
+        raise HTTPException(400, f"WordPress credentials error: {e}")
 
 
 def _detect_builder(content: str) -> str:
@@ -114,7 +112,7 @@ def analyze_cluster(
     if not hub.existing_url:
         raise HTTPException(400, "Hub keyword has no existing page URL. Run GSC sync first.")
 
-    wp = _get_wp_adapter(context, current_user.id, db)
+    wp = _get_wp_adapter(context)
     try:
         post_data = wp.find_post_by_url(hub.existing_url)
     except IntegrationError as e:
@@ -287,7 +285,7 @@ def apply_change(
     if record.status != "pending":
         raise HTTPException(400, f"Change is already '{record.status}'.")
 
-    wp = _get_wp_adapter(context, current_user.id, db)
+    wp = _get_wp_adapter(context)
     try:
         _wp_push(wp, record, record.new_content)
     except IntegrationError as e:
@@ -317,7 +315,7 @@ def rollback_change(
     if record.status != "approved":
         raise HTTPException(400, "Only approved changes can be rolled back.")
 
-    wp = _get_wp_adapter(context, current_user.id, db)
+    wp = _get_wp_adapter(context)
     try:
         _wp_push(wp, record, record.original_content)
     except IntegrationError as e:
