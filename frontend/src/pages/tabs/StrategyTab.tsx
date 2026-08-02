@@ -104,6 +104,117 @@ const MD_COMPONENTS: React.ComponentProps<typeof ReactMarkdown>['components'] = 
   hr: () => <hr className="border-slate-200 my-3" />,
 }
 
+// ── Agent FAQ accordion ───────────────────────────────────────────────────────
+
+interface FaqItem {
+  label: string
+  text: string
+}
+
+function AgentFAQ({ items }: { items: FaqItem[] }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="mt-2">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-500 transition-colors cursor-pointer"
+      >
+        {open ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+        How does this work?
+      </button>
+      {open && (
+        <div className="mt-2 space-y-2.5 bg-slate-50 border border-slate-100 rounded-lg px-3 py-3">
+          {items.map((item) => (
+            <div key={item.label}>
+              <p className="text-[11px] font-semibold text-slate-600">{item.label}</p>
+              <p className="text-[11px] text-slate-500 leading-relaxed mt-0.5">{item.text}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── FAQ content per agent ─────────────────────────────────────────────────────
+
+const SEO_PLAN_FAQ: FaqItem[] = [
+  {
+    label: 'What the agent does',
+    text: 'Reads your keyword clusters, business context, and goals, then builds a structured 4-phase, 12-month SEO roadmap covering quick wins, content expansion, scaling, and authority building.',
+  },
+  {
+    label: 'What you get',
+    text: 'One strategy document with priorities per content pillar, KPI targets per phase, and specific recommendations for technical fixes, content creation, and link-building direction.',
+  },
+  {
+    label: 'When to run it',
+    text: 'After your keywords are clustered. Run once to set direction; regenerate whenever you add new keyword clusters or change your business goals.',
+  },
+  {
+    label: 'Note',
+    text: 'This is a strategy document — it tells you what to do and in what order. The Content Strategy and Site Architecture agents add the execution detail.',
+  },
+]
+
+const CONTENT_STRATEGY_FAQ: FaqItem[] = [
+  {
+    label: 'What the agent does',
+    text: 'Takes your keyword clusters and maps them to content pillars, funnel stages (TOFU / MOFU / BOFU), content types, and a recommended publishing cadence.',
+  },
+  {
+    label: 'What "Landing Page", "Hub/Spoke", "Use-Case" means',
+    text: 'These are content types the agent recommends you create on your website. The system does not auto-publish pages — you (or your team) build them. A "Landing Page" recommendation means: create a conversion-focused page for that topic.',
+  },
+  {
+    label: 'Why the number of pillars may differ from your cluster count',
+    text: 'The agent may merge semantically similar keyword clusters into a single content pillar. 6 keyword clusters might become 4 pillars — this is intentional, not a bug. The agent groups by strategic theme, not just keyword similarity.',
+  },
+  {
+    label: 'When to run it',
+    text: 'After the SEO Plan. Use it to decide what content to create and in what order before briefing writers or publishing.',
+  },
+]
+
+const SITE_ARCHITECTURE_FAQ: FaqItem[] = [
+  {
+    label: 'What the agent does',
+    text: 'Designs your website\'s URL structure, page hierarchy, navigation layout, and internal linking plan — all based on your keyword clusters and any existing pages already on the site.',
+  },
+  {
+    label: 'What you get',
+    text: 'A site tree showing every page to create, the URL for each, which section it belongs to, and which pages should link to which.',
+  },
+  {
+    label: 'About internal links',
+    text: 'Spoke pages (individual cluster articles) should link back to their Hub (pillar page), and the Hub links to all Spokes. The agent maps this out — you implement the links when creating or editing pages on your site.',
+  },
+  {
+    label: 'When to run it',
+    text: 'After Content Strategy. Use it when building a new site or restructuring an existing one to make sure your URL structure supports your SEO goals.',
+  },
+]
+
+const COMPETITOR_PAGES_FAQ: FaqItem[] = [
+  {
+    label: 'What the agent does',
+    text: 'Takes a competitor\'s homepage URL from your Project Settings, analyses their positioning and strengths, then writes a "[Your Brand] vs [Competitor]" comparison page optimised to rank for "brand vs brand" search queries.',
+  },
+  {
+    label: 'When to use it',
+    text: 'When a competitor is ranking for keywords you want to capture, especially bottom-of-funnel (BOFU) terms where users are already comparing options. These pages target people who are one step away from a buying decision.',
+  },
+  {
+    label: 'What you get',
+    text: 'A ready-to-review comparison page draft. You check the claims, adjust anything that needs updating, then publish it to your WordPress site.',
+  },
+  {
+    label: 'Important',
+    text: 'You must add competitor URLs in Project Settings → Competitors before this feature becomes available. Each run targets one selected competitor — select a different one to generate another page.',
+  },
+]
+
 interface OutputPanelProps {
   text: string
   expanded: boolean
@@ -193,6 +304,8 @@ interface SkillCardProps {
   icon: React.ReactNode
   title: string
   description: string
+  faq: FaqItem[]
+  notice?: React.ReactNode
   text: string | null
   expanded: boolean
   isLoading: boolean
@@ -211,7 +324,7 @@ interface SkillCardProps {
 }
 
 function SkillCard({
-  icon, title, description, text, expanded, isLoading,
+  icon, title, description, faq, notice, text, expanded, isLoading,
   onGenerate, onReset, onToggleExpand, disabled,
   editing, editDraft, onEdit, onEditChange, onSaveEdit, onCancelEdit, isSavingEdit,
 }: SkillCardProps) {
@@ -222,9 +335,10 @@ function SkillCard({
           <div className="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0 text-emerald-600">
             {icon}
           </div>
-          <div>
+          <div className="flex-1">
             <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
             <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{description}</p>
+            <AgentFAQ items={faq} />
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -259,6 +373,8 @@ function SkillCard({
           )}
         </div>
       </div>
+
+      {notice && <div className="mt-3">{notice}</div>}
 
       {isLoading && (
         <div className="mt-3 flex items-center gap-2 text-xs text-slate-400">
@@ -467,6 +583,7 @@ export function StrategyTab({ projectName, project }: StrategyTabProps) {
         icon={<Map size={16} />}
         title="SEO Plan"
         description="12-month roadmap with 4 phases: Foundation, Expansion, Scale, and Authority. Includes KPI targets and content priorities per cluster."
+        faq={SEO_PLAN_FAQ}
         isLoading={planMut.isPending}
         onGenerate={() => planMut.mutate()}
         {...skillCardProps('plan')}
@@ -476,6 +593,16 @@ export function StrategyTab({ projectName, project }: StrategyTabProps) {
         icon={<FileText size={16} />}
         title="Content Strategy"
         description="Content pillars, priority topics table, topic cluster map, and publishing cadence — all mapped to your TOFU/MOFU/BOFU funnel."
+        faq={CONTENT_STRATEGY_FAQ}
+        notice={
+          <div className="flex items-start gap-2 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2.5">
+            <span className="text-amber-500 text-xs mt-0.5 shrink-0">ℹ</span>
+            <p className="text-[11px] text-amber-700 leading-relaxed">
+              <strong>Content types are recommendations, not auto-created pages.</strong>{' '}
+              When the output says "Landing Page", "Hub/Spoke", or "Use-Case" — that is the type of page you need to build on your website. The system advises what to create; it does not publish pages automatically.
+            </p>
+          </div>
+        }
         isLoading={contentMut.isPending}
         onGenerate={() => contentMut.mutate()}
         {...skillCardProps('content')}
@@ -485,6 +612,7 @@ export function StrategyTab({ projectName, project }: StrategyTabProps) {
         icon={<Layers size={16} />}
         title="Site Architecture"
         description="URL structure, page hierarchy tree, navigation spec, and internal linking plan based on your keyword clusters and suggested URLs."
+        faq={SITE_ARCHITECTURE_FAQ}
         isLoading={archMut.isPending}
         onGenerate={() => archMut.mutate()}
         {...skillCardProps('architecture')}
@@ -496,11 +624,12 @@ export function StrategyTab({ projectName, project }: StrategyTabProps) {
           <div className="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0 text-emerald-600">
             <Globe size={16} />
           </div>
-          <div>
+          <div className="flex-1">
             <h3 className="text-sm font-semibold text-slate-900">Competitor Pages</h3>
             <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
               Generate an SEO-optimized "[Your Brand] vs [Competitor]" comparison page, ready to publish to WordPress.
             </p>
+            <AgentFAQ items={COMPETITOR_PAGES_FAQ} />
           </div>
         </div>
 
