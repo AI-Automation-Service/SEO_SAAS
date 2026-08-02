@@ -443,6 +443,7 @@ Return ONLY a valid JSON object in this exact format — no extra text, no markd
   {{
     "keyword": "<exact keyword text from input, no signals>",
     "cluster": "<short cluster name 2-4 words, e.g. Hotel Booking>",
+    "is_hub": <true for the single best pillar keyword per cluster, false otherwise>,
     "intent": "<informational|commercial|navigational|transactional>",
     "funnel_stage": "<tofu|mofu|bofu>",
     "suggested_url": "<clean URL slug e.g. /blog/hotel-booking-cairo>"
@@ -453,6 +454,7 @@ Rules:
 - Keywords with the SAME page URL must go in the SAME cluster — they already share a page
 - Keywords with a UNIQUE page URL that no other keyword shares get their own cluster
 - Group remaining keywords by semantic topic
+- Every cluster must have exactly one hub (is_hub: true) — the keyword with the HIGHEST impressions in that cluster. If impressions are equal, pick the one with the most volume. If still equal, pick the shortest keyword
 - Return every keyword from the input — do not skip any
 - The "keyword" field must be the exact keyword text only, no signals"""
 
@@ -526,7 +528,7 @@ def run_cluster_agent(
         if not data:
             continue
         row.cluster = data.get("cluster") or row.cluster
-        row.is_hub = False
+        row.is_hub = bool(data.get("is_hub", False))
         row.intent = data.get("intent") or row.intent
         row.funnel_stage = data.get("funnel_stage") or row.funnel_stage
         row.suggested_url = data.get("suggested_url") or row.suggested_url
@@ -534,22 +536,6 @@ def run_cluster_agent(
         updated += 1
 
     _match_sitemap(rows, db, current_user.id, context.name)
-    db.commit()
-
-    # Hub selection on fresh rows to avoid stale ORM session state
-    # Reset all hubs, then pick highest impressions per cluster
-    _project_keywords(db, current_user.id, context.name).update({"is_hub": False})
-    fresh = _project_keywords(db, current_user.id, context.name).all()
-    cluster_map: dict[str, list] = {}
-    for r in fresh:
-        if r.cluster:
-            cluster_map.setdefault(r.cluster, []).append(r)
-    for cluster_rows in cluster_map.values():
-        best = max(
-            cluster_rows,
-            key=lambda r: (r.impressions or 0, r.volume or 0, -len(r.keyword)),
-        )
-        best.is_hub = True
     db.commit()
     cluster_count = len({r.cluster for r in rows if r.cluster})
     return {
