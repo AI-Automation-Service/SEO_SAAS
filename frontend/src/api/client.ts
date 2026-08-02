@@ -17,6 +17,7 @@ import type {
   KeywordSummary,
   ProjectKnowledge,
   SitemapSummary,
+  SitePage,
   StrategyResult,
   SpeedResult,
 } from '@/types/api'
@@ -206,6 +207,8 @@ export const sitemapApi = {
     api.get<SitemapSummary>(`/api/projects/${name}/sitemap/summary`).then((r) => r.data),
   sync: (name: string) =>
     api.post<{ synced: number; message: string }>(`/api/projects/${name}/sitemap/sync`).then((r) => r.data),
+  pages: (name: string) =>
+    api.get<SitePage[]>(`/api/projects/${name}/sitemap/pages`).then((r) => r.data),
 }
 
 // ── Strategy ──────────────────────────────────────────────────────────────────

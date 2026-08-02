@@ -19,6 +19,14 @@ class SitemapSummary(BaseModel):
     last_synced: Optional[datetime] = None
 
 
+class SitePageOut(BaseModel):
+    id: int
+    url: str
+    slug: str
+    page_type: str
+    synced_at: datetime
+
+
 def _slug_to_keyword(slug: str) -> str:
     """Convert URL slug to keyword text: blog/hotel-booking-cairo → hotel booking cairo"""
     last_part = slug.split("/")[-1]
@@ -124,6 +132,23 @@ def sync_sitemap(
             "Make sure your site has an XML sitemap at /sitemap.xml or /sitemap_index.xml.",
         )
     return {"synced": count, "message": f"Found {count} existing pages in sitemap."}
+
+
+@router.get("/pages", response_model=list[SitePageOut])
+def list_pages(
+    context: ProjectContext = Depends(get_project_context),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return (
+        db.query(SitePage)
+        .filter(
+            SitePage.user_id == current_user.id,
+            SitePage.project_name == context.name,
+        )
+        .order_by(SitePage.page_type, SitePage.slug)
+        .all()
+    )
 
 
 @router.get("/summary", response_model=SitemapSummary)

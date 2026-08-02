@@ -171,6 +171,14 @@ export interface SitemapSummary {
   last_synced: string | null
 }
 
+export interface SitePage {
+  id: number
+  url: string
+  slug: string
+  page_type: string
+  synced_at: string
+}
+
 // Strategy types
 export interface StrategyResult {
   skill: string
