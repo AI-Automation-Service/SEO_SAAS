@@ -424,8 +424,6 @@ Return ONLY a valid JSON object in this exact format — no extra text, no markd
 
 Rules:
 - Every cluster must have exactly one hub keyword (is_hub: true)
-- Keywords tagged [existing-page] are already published pages with no new content needed — do NOT set them as is_hub: true unless every keyword in that cluster is also tagged [existing-page]
-- Prefer keywords without any tag as hub — those represent new content opportunities worth targeting
 - Spokes link back to the hub
 - Return every keyword from the input — do not skip any"""
 
@@ -464,22 +462,11 @@ def run_cluster_agent(
         if parts:
             kb_prefix = "Context:\n" + "\n".join(parts) + "\n\n"
 
-    def _label(row) -> str:
-        is_existing = row.status == "covered" or (
-            row.clicks is None and row.impressions is None and row.source == "sitemap"
-        )
-        return f"{row.keyword} [existing-page]" if is_existing else row.keyword
-
-    labels = [_label(r) for r in rows]
-    label_to_kw: dict[str, str] = {}
-    for row, label in zip(rows, labels):
-        label_to_kw[label.lower()] = row.keyword
-        label_to_kw[row.keyword.lower()] = row.keyword
-
+    keywords = [r.keyword for r in rows]
     all_results: list[dict] = []
 
-    for i in range(0, len(labels), _BATCH_SIZE):
-        batch = labels[i : i + _BATCH_SIZE]
+    for i in range(0, len(keywords), _BATCH_SIZE):
+        batch = keywords[i : i + _BATCH_SIZE]
         user_msg = kb_prefix + _CLUSTER_USER_MSG.format(keywords="\n".join(f"- {kw}" for kw in batch))
 
         try:
@@ -501,12 +488,7 @@ def run_cluster_agent(
 
         all_results.extend(items)
 
-    results_map: dict[str, dict] = {}
-    for r in all_results:
-        if isinstance(r, dict) and "keyword" in r:
-            key = r["keyword"].lower()
-            orig = label_to_kw.get(key, key)
-            results_map[orig.lower()] = r
+    results_map = {r["keyword"].lower(): r for r in all_results if isinstance(r, dict) and "keyword" in r}
 
     updated = 0
     for row in rows:
