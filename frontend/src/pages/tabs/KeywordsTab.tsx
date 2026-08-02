@@ -793,10 +793,6 @@ function KeywordRow({
     onError: (err) => toast.error(getErrorMessage(err)),
   })
 
-  const pageTypeBadge = kw.page_type && kw.page_type !== 'unknown'
-    ? kw.page_type
-    : null
-
   return (
     <>
       <tr className="hover:bg-slate-50/50 transition-colors group">
@@ -810,16 +806,6 @@ function KeywordRow({
               <span title="Featured snippet opportunity"><Zap size={11} className="text-violet-500 shrink-0" /></span>
             )}
             <span className="font-medium text-slate-800 truncate">{kw.keyword}</span>
-            {pageTypeBadge && (
-              <span className={cn(
-                'shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium',
-                pageTypeBadge === 'page'
-                  ? 'bg-sky-100 text-sky-600'
-                  : 'bg-violet-100 text-violet-600',
-              )}>
-                {pageTypeBadge}
-              </span>
-            )}
           </div>
         </td>
 
