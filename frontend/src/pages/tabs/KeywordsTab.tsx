@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { keywordsApi, strategyApi, improveApi, getErrorMessage } from '@/api/client'
-import type { Keyword, KeywordStatus, KeywordType, FunnelStage, PageChange } from '@/types/api'
+import type { Keyword, KeywordStatus, KeywordType, FunnelStage, PageChange, PageStatistics } from '@/types/api'
 import { cn } from '@/lib/utils'
 
 // ── Tooltip ───────────────────────────────────────────────────────────────────
@@ -995,6 +995,34 @@ function KeywordRow({
   )
 }
 
+// ── Page stats card ───────────────────────────────────────────────────────────
+
+function PageStatsCard({ stats }: { stats: PageStatistics }) {
+  const items: { label: string; value: string | number; ok: boolean }[] = [
+    { label: 'Words',         value: stats.word_count.toLocaleString(), ok: stats.word_count >= 300 },
+    { label: 'H1',            value: stats.h1_count,                    ok: stats.h1_count === 1 },
+    { label: 'H2s',           value: stats.h2_count,                    ok: stats.h2_count >= 2 },
+    { label: 'Body links',    value: stats.internal_link_count,         ok: stats.internal_link_count >= 1 },
+    { label: 'Hub links',     value: stats.hub_link_count,              ok: stats.hub_link_count >= 1 },
+    { label: 'Schema',        value: stats.has_article_schema ? 'Yes' : 'No', ok: stats.has_article_schema },
+    { label: 'Author',        value: stats.author_visible   ? 'Yes' : 'No',   ok: stats.author_visible },
+    { label: 'Date',          value: stats.date_visible     ? 'Yes' : 'No',   ok: stats.date_visible },
+  ]
+  return (
+    <div>
+      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Page Snapshot</p>
+      <div className="grid grid-cols-4 gap-2">
+        {items.map(({ label, value, ok }) => (
+          <div key={label} className="bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-center">
+            <p className={cn('text-sm font-bold', ok ? 'text-emerald-600' : 'text-red-500')}>{value}</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">{label}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ── Improve panel ─────────────────────────────────────────────────────────────
 
 function ImprovePanelDiff({ original, updated }: { original: string; updated: string }) {
@@ -1120,6 +1148,9 @@ function ImprovePanel({
                  <Sparkles size={16} className="text-blue-500 shrink-0 mt-0.5" />}
                 <p className="text-slate-700 leading-relaxed">{change.change_summary}</p>
               </div>
+
+              {/* Page statistics */}
+              {change.statistics && <PageStatsCard stats={change.statistics} />}
 
               {/* Changes list */}
               {change.changes_made && change.changes_made.length > 0 && (

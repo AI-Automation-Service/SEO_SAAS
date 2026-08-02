@@ -158,6 +158,17 @@ export interface KeywordSummary {
 // Page Improvement types
 export type PageChangeStatus = 'pending' | 'approved' | 'rolled_back' | 'no_action'
 
+export interface PageStatistics {
+  word_count: number
+  h1_count: number
+  h2_count: number
+  internal_link_count: number
+  hub_link_count: number
+  has_article_schema: boolean
+  author_visible: boolean
+  date_visible: boolean
+}
+
 export interface PageChange {
   id: number
   cluster_name: string
@@ -166,6 +177,7 @@ export interface PageChange {
   wp_post_type: string
   change_summary: string
   changes_made: string[] | null
+  statistics: PageStatistics | null
   original_content: string
   new_content: string
   status: PageChangeStatus

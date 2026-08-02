@@ -24,16 +24,15 @@ def _get_wp_adapter(context: ProjectContext, user_id: int, db: Session) -> WordP
     wp_cfg = context.config.integrations.wordpress
     if not wp_cfg or not wp_cfg.get("enabled"):
         raise HTTPException(400, "WordPress integration is not connected. Go to Integrations tab first.")
+    wp_url = wp_cfg.get("url") or ""
+    wp_user = wp_cfg.get("username") or ""
     try:
-        wp_url = wp_cfg.get("url") or ""
-        wp_user = wp_cfg.get("username") or ""
-        wp_pass = ""
-        try:
-            wp_pass = get_user_secret("wp_app_password", user_id, db)
-        except SecretNotFoundError:
-            wp_pass = wp_cfg.get("app_password") or ""
-        if not wp_pass:
-            raise HTTPException(400, "WordPress application password not found.")
+        wp_pass = get_user_secret("wp_app_password", user_id, db)
+    except SecretNotFoundError:
+        wp_pass = wp_cfg.get("app_password") or ""
+    if not wp_pass:
+        raise HTTPException(400, "WordPress application password not found.")
+    try:
         return WordPressAdapter(url=wp_url, username=wp_user, password=wp_pass)
     except IntegrationError as e:
         raise HTTPException(400, str(e))
@@ -49,19 +48,11 @@ def _detect_builder(content: str) -> str:
     return "classic"
 
 
-def _cluster_keywords_block(rows: list) -> str:
-    lines = []
-    for r in rows:
-        parts = []
-        if r.impressions is not None:
-            parts.append(f"impr:{r.impressions:,}")
-        if r.position is not None:
-            parts.append(f"pos:{r.position:.1f}")
-        parts.append(f"status:{r.status}")
-        if r.existing_url:
-            parts.append(f"url:{r.existing_url}")
-        lines.append(f"- {r.keyword} [{', '.join(parts)}]")
-    return "\n".join(lines)
+def _wp_push(wp: WordPressAdapter, record: PageChange, content: str) -> None:
+    if record.wp_post_type == "page":
+        wp.update_page(record.wp_post_id, content)
+    else:
+        wp.update_post(record.wp_post_id, content)
 
 
 def _change_history_block(history: list[PageChange]) -> str:
@@ -87,6 +78,7 @@ class ChangeOut(BaseModel):
     wp_post_type: str
     change_summary: str
     changes_made: Optional[list[str]] = None
+    statistics: Optional[dict] = None
     original_content: str
     new_content: str
     status: str
@@ -106,7 +98,6 @@ def analyze_cluster(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    # Get cluster keywords
     rows = (
         db.query(Keyword)
         .filter(
@@ -119,28 +110,27 @@ def analyze_cluster(
     if not rows:
         raise HTTPException(404, f"Cluster '{body.cluster_name}' not found.")
 
-    # Find hub keyword and its URL
     hub = next((r for r in rows if r.is_hub), rows[0])
-    page_url = hub.existing_url
-    if not page_url:
+    if not hub.existing_url:
         raise HTTPException(400, "Hub keyword has no existing page URL. Run GSC sync first.")
 
-    # Fetch page from WordPress
     wp = _get_wp_adapter(context, current_user.id, db)
     try:
-        post_data = wp.find_post_by_url(page_url)
+        post_data = wp.find_post_by_url(hub.existing_url)
     except IntegrationError as e:
         raise HTTPException(502, f"WordPress error: {e}")
-
     if not post_data:
-        raise HTTPException(404, f"Page not found in WordPress for URL: {page_url}")
+        raise HTTPException(404, f"Page not found in WordPress for URL: {hub.existing_url}")
 
-    # Block unsupported builders
     builder = _detect_builder(post_data["content"])
     if builder in ("elementor", "divi"):
-        raise HTTPException(400, f"This page uses {builder.title()} page builder. Automatic editing is not yet supported for {builder.title()}. Check the follow-up roadmap.")
+        raise HTTPException(
+            400,
+            f"This page uses {builder.title()} page builder. "
+            f"Automatic editing is not yet supported for {builder.title()}. "
+            "Check the follow-up roadmap.",
+        )
 
-    # Get change history for this cluster
     history = (
         db.query(PageChange)
         .filter(
@@ -153,55 +143,113 @@ def analyze_cluster(
         .all()
     )
 
-    # Find pillar page URL (hub's suggested_url or existing_url)
+    project = context.config
     pillar_url = hub.suggested_url or hub.existing_url or ""
+    secondary_keywords = ", ".join(r.keyword for r in rows if not r.is_hub) or "None"
+    business_context = " | ".join(filter(None, [
+        project.business_name,
+        project.business_type,
+        project.tone_of_voice,
+        project.target_audience,
+    ])) or "Not specified"
 
-    # Build agent prompt
     openai_key = get_user_secret("openai", current_user.id, db)
-    agent = SkillAgent("seo-improve", openai_key, model="gpt-4o")
 
-    user_msg = f"""## Cluster: {body.cluster_name}
+    # ── Step 1: Analyzer (gpt-4o-mini) ───────────────────────────────────────
+    analyzer_msg = f"""## main_keyword
+{hub.keyword}
 
-## Hub Keyword
-{hub.keyword} (pos: {hub.position or 'unknown'}, impr: {hub.impressions or 0})
+## secondary_keywords
+{secondary_keywords}
 
-## Pillar Page URL
+## hub_url
 {pillar_url}
 
-## All Keywords in This Cluster
-{_cluster_keywords_block(rows)}
+## current_url
+{post_data['link']}
 
-## Page Builder
+## author
+{project.business_name or 'Site Owner'}
+
+## has_yoast
+{post_data['has_yoast']}
+
+## has_rankmath
+{post_data['has_rankmath']}
+
+## builder
 {builder}
 
-## SEO Plugin
-has_yoast: {post_data['has_yoast']}
-has_rankmath: {post_data['has_rankmath']}
+## business_context
+{business_context}
 
-## Change History
+## change_history
 {_change_history_block(history)}
 
-## Current Page Content
-Title: {post_data['title']}
-URL: {post_data['link']}
-
+## html_content (Title: {post_data['title']})
 {post_data['content']}
 """
 
-    raw = agent.run(user_msg, timeout=120, json_mode=True)
-
+    raw_analysis = SkillAgent("seo-analyzer", openai_key, model="gpt-4o-mini").run(
+        analyzer_msg, timeout=60, json_mode=True
+    )
     try:
-        result = json.loads(raw)
+        analysis = json.loads(raw_analysis)
     except json.JSONDecodeError:
-        raise HTTPException(500, "Agent returned invalid JSON. Please try again.")
+        raise HTTPException(500, "Analyzer returned invalid JSON. Please try again.")
 
-    action_needed = result.get("action_needed", False)
-    summary = result.get("summary", "")
-    changes_made = result.get("changes_made", [])
-    new_content = result.get("new_content") or post_data["content"]
-    no_action_reason = result.get("no_action_reason")
+    action_needed = analysis.get("action_needed", False)
+    summary = analysis.get("summary", "")
+    no_action_reason = analysis.get("no_action_reason")
 
-    # Store in DB
+    changes_made: list = []
+    new_content: str = post_data["content"]
+
+    if action_needed:
+        # ── Step 2: Editor (gpt-4o) ───────────────────────────────────────────
+        editor_msg = f"""## main_keyword
+{hub.keyword}
+
+## hub_url
+{pillar_url}
+
+## author
+{project.business_name or 'Site Owner'}
+
+## has_yoast
+{post_data['has_yoast']}
+
+## has_rankmath
+{post_data['has_rankmath']}
+
+## builder
+{builder}
+
+## business_context
+{business_context}
+
+## recommendations
+{json.dumps(analysis.get('recommendations', []), indent=2)}
+
+## html_content (Title: {post_data['title']})
+{post_data['content']}
+"""
+
+        raw_edit = SkillAgent("seo-editor", openai_key, model="gpt-4o").run(
+            editor_msg, timeout=120, json_mode=True
+        )
+        try:
+            edit_result = json.loads(raw_edit)
+        except json.JSONDecodeError:
+            raise HTTPException(500, "Editor returned invalid JSON. Please try again.")
+
+        changes_made = [
+            f"{c['type']}: {c['description']}"
+            for c in edit_result.get("changes_made", [])
+            if isinstance(c, dict) and c.get("status") == "applied"
+        ]
+        new_content = edit_result.get("new_content") or post_data["content"]
+
     record = PageChange(
         user_id=current_user.id,
         project_name=context.name,
@@ -212,14 +260,13 @@ URL: {post_data['link']}
         original_content=post_data["content"],
         new_content=new_content,
         change_summary=no_action_reason if not action_needed else summary,
-        changes_made=json.dumps(changes_made),
+        changes_made=changes_made,
+        statistics=analysis.get("statistics"),
         status="no_action" if not action_needed else "pending",
     )
     db.add(record)
     db.commit()
     db.refresh(record)
-
-    record.changes_made = changes_made  # type: ignore[assignment]
     return record
 
 
@@ -242,10 +289,7 @@ def apply_change(
 
     wp = _get_wp_adapter(context, current_user.id, db)
     try:
-        if record.wp_post_type == "page":
-            wp.update_page(record.wp_post_id, record.new_content)
-        else:
-            wp.update_post(record.wp_post_id, record.new_content)
+        _wp_push(wp, record, record.new_content)
     except IntegrationError as e:
         raise HTTPException(502, f"WordPress error: {e}")
 
@@ -253,11 +297,6 @@ def apply_change(
     record.approved_at = datetime.utcnow()
     db.commit()
     db.refresh(record)
-
-    try:
-        record.changes_made = json.loads(record.changes_made or "[]")  # type: ignore[assignment]
-    except Exception:
-        record.changes_made = []  # type: ignore[assignment]
     return record
 
 
@@ -280,21 +319,13 @@ def rollback_change(
 
     wp = _get_wp_adapter(context, current_user.id, db)
     try:
-        if record.wp_post_type == "page":
-            wp.update_page(record.wp_post_id, record.original_content)
-        else:
-            wp.update_post(record.wp_post_id, record.original_content)
+        _wp_push(wp, record, record.original_content)
     except IntegrationError as e:
         raise HTTPException(502, f"WordPress error: {e}")
 
     record.status = "rolled_back"
     db.commit()
     db.refresh(record)
-
-    try:
-        record.changes_made = json.loads(record.changes_made or "[]")  # type: ignore[assignment]
-    except Exception:
-        record.changes_made = []  # type: ignore[assignment]
     return record
 
 
@@ -304,7 +335,7 @@ def get_history(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    records = (
+    return (
         db.query(PageChange)
         .filter(
             PageChange.user_id == current_user.id,
@@ -313,9 +344,3 @@ def get_history(
         .order_by(PageChange.created_at.desc())
         .all()
     )
-    for r in records:
-        try:
-            r.changes_made = json.loads(r.changes_made or "[]")  # type: ignore[assignment]
-        except Exception:
-            r.changes_made = []  # type: ignore[assignment]
-    return records

@@ -161,7 +161,8 @@ class PageChange(Base):
     original_content: Mapped[str] = mapped_column(Text, nullable=False)
     new_content: Mapped[str] = mapped_column(Text, nullable=False)
     change_summary: Mapped[str] = mapped_column(Text, nullable=False)
-    changes_made: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON list of change descriptions
+    changes_made: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    statistics: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # pending / approved / rolled_back / no_action
     status: Mapped[str] = mapped_column(String, default="pending")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
