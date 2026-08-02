@@ -4,6 +4,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from api.dependencies import get_current_user, get_db, get_project_context
@@ -42,7 +43,7 @@ def _upsert_keyword_from_page(
     slug: str,
     page_type: str,
 ) -> None:
-    """Create or update a Keyword row derived from a sitemap URL."""
+    """Update existing GSC/CSV keyword rows with sitemap URL — never create new rows."""
     kw_text = _slug_to_keyword(slug)
     if not kw_text or len(kw_text) < 3:
         return
@@ -52,7 +53,7 @@ def _upsert_keyword_from_page(
         .filter(
             Keyword.user_id == user_id,
             Keyword.project_name == project_name,
-            Keyword.keyword == kw_text,
+            func.lower(Keyword.keyword) == kw_text.lower(),
         )
         .first()
     )
@@ -61,30 +62,19 @@ def _upsert_keyword_from_page(
         if not existing.existing_url:
             existing.existing_url = url
         existing.page_type = page_type
-    else:
-        intent = "informational"
-        db.add(Keyword(
-            user_id=user_id,
-            project_name=project_name,
-            keyword=kw_text,
-            keyword_type="question" if kw_text.split()[0].lower() in {
-                "how", "what", "why", "when", "where", "who", "which",
-                "can", "does", "is", "are", "will", "should", "do",
-            } else "standard",
-            intent=intent,
-            funnel_stage="tofu",
-            status="covered",
-            action="none",
-            source="sitemap",
-            existing_url=url,
-            page_type=page_type,
-        ))
 
 
 def sync_sitemap_pages(website: str, user_id: int, project_name: str, db: Session) -> int:
-    """Fetch sitemap, upsert SitePages, and reverse-extract keywords. Returns page count."""
+    """Fetch sitemap, upsert SitePages, and update matching GSC/CSV keywords. Returns page count."""
     pages = fetch_sitemap_urls(website)
     now = datetime.utcnow()
+
+    # Remove any keyword rows previously created from the sitemap
+    db.query(Keyword).filter(
+        Keyword.user_id == user_id,
+        Keyword.project_name == project_name,
+        Keyword.source == "sitemap",
+    ).delete(synchronize_session=False)
 
     for page in pages:
         existing = (
