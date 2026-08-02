@@ -60,8 +60,7 @@ def _upsert_keyword_from_page(
     if existing:
         if not existing.existing_url:
             existing.existing_url = url
-        if not existing.page_type:
-            existing.page_type = page_type
+        existing.page_type = page_type
     else:
         intent = "informational"
         db.add(Keyword(
