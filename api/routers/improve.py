@@ -319,9 +319,14 @@ def analyze_cluster(
     except (ValueError, Exception) as e:
         raise HTTPException(500, f"Hub analysis failed: {e}")
 
-    # ── Spokes (up to 5 with existing_url, skip page builders) ───────────────
-    spokes = [r for r in rows if not r.is_hub and r.existing_url][:5]
-    for spoke in spokes:
+    # ── Spokes (unique URLs only, skip if same page as hub, skip page builders)
+    seen_urls = {hub.existing_url}
+    unique_spokes: list = []
+    for r in rows:
+        if not r.is_hub and r.existing_url and r.existing_url not in seen_urls:
+            seen_urls.add(r.existing_url)
+            unique_spokes.append(r)
+    for spoke in unique_spokes[:5]:
         try:
             spoke_post_data = wp.find_post_by_url(spoke.existing_url)
             if not spoke_post_data:
