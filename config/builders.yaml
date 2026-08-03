@@ -1,0 +1,50 @@
+# Builder detection configuration
+#
+# Each entry is checked in order against the page HTML.
+# The first match wins. The last entry (classic) is the fallback.
+#
+# content_editable: true  → SEO OS can rewrite the post_content directly
+# content_editable: false → content is owned by the builder; only meta can be updated
+#
+# To add a new builder: add an entry here. No Python change, no server restart needed.
+# Changes take effect within 5 minutes (cache TTL).
+
+builders:
+  - name: gutenberg
+    detects:
+      - "<!-- wp:"
+    content_editable: true
+
+  - name: elementor
+    detects:
+      - "data-elementor"
+    content_editable: false
+
+  - name: divi
+    detects:
+      - "[et_pb_"
+      - "[divi_"
+    content_editable: false
+
+  - name: wpbakery
+    detects:
+      - "[vc_row]"
+      - "[vc_column]"
+    content_editable: false
+
+  - name: bricks
+    detects:
+      - "data-bricks"
+      - "brxe-"
+    content_editable: false
+
+  - name: oxygen
+    detects:
+      - "ct-section"
+      - "oxy-"
+    content_editable: false
+
+  - name: classic
+    detects: []
+    fallback: true
+    content_editable: true

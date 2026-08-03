@@ -1,8 +1,12 @@
 import json
 import re
+import time
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
+
+import yaml
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -39,16 +43,30 @@ def _get_wp_adapter(context: ProjectContext) -> WordPressAdapter:
         raise HTTPException(400, f"WordPress credentials error: {e}")
 
 
+_BUILDERS_CONFIG: list[dict] = []
+_BUILDERS_LOADED_AT: float = 0.0
+_BUILDERS_TTL: int = 300  # seconds — YAML changes go live within 5 minutes, no restart needed
+_BUILDERS_YAML = Path(__file__).parent.parent.parent / "config" / "builders.yaml"
+
+
+def _get_builders() -> list[dict]:
+    global _BUILDERS_CONFIG, _BUILDERS_LOADED_AT
+    if not _BUILDERS_CONFIG or time.time() - _BUILDERS_LOADED_AT > _BUILDERS_TTL:
+        with open(_BUILDERS_YAML) as f:
+            _BUILDERS_CONFIG = yaml.safe_load(f)["builders"]
+        _BUILDERS_LOADED_AT = time.time()
+    return _BUILDERS_CONFIG
+
+
 def _detect_builder(content: str) -> str:
-    if "<!-- wp:" in content:
-        return "gutenberg"
-    if "[et_pb_" in content or "[divi_" in content:
-        return "divi"
-    if "data-elementor" in content:
-        return "elementor"
-    if "[vc_row]" in content or "[vc_column]" in content:
-        return "wpbakery"
-    return "classic"
+    builders = _get_builders()
+    for b in builders:
+        if b.get("fallback"):
+            continue
+        if any(sig in content for sig in b.get("detects", [])):
+            return b["name"]
+    fallback = next((b for b in builders if b.get("fallback")), {"name": "classic"})
+    return fallback["name"]
 
 
 def _visible_word_count(html: str) -> int:
@@ -66,7 +84,8 @@ def _detect_page_profile(post_data: dict, is_hub: bool, hub_existing_url: str) -
     is_theme_controlled = is_homepage and word_count < 100
 
     builder = _detect_builder(content)
-    content_editable = builder in ("gutenberg", "classic") and not is_theme_controlled
+    builder_cfg = next((b for b in _get_builders() if b["name"] == builder), {})
+    content_editable = builder_cfg.get("content_editable", False) and not is_theme_controlled
 
     has_yoast = post_data.get("has_yoast", False)
     has_rankmath = post_data.get("has_rankmath", False)

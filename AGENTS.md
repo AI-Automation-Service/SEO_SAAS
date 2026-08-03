@@ -76,16 +76,23 @@ Empty fields are omitted. If all fields are empty, the block is omitted entirely
 
 ## Page Builder Support Matrix
 
+> **Source of truth: [`config/builders.yaml`](config/builders.yaml)**
+> Do not edit the table below directly — update the YAML instead.
+> Changes to the YAML take effect within 5 minutes on the live server (no restart needed).
+> To add a new builder: add one entry to `builders.yaml`. Zero Python changes required.
+
 | Builder | content_editable | Detection signal |
 |---|---|---|
 | Gutenberg | Yes | `<!-- wp:` in post_content |
-| Classic Editor | Yes | none of the above |
 | Elementor | No | `data-elementor` in post_content |
-| Divi | No | `[et_pb_` in post_content |
-| WPBakery | No | `[vc_row]` in post_content |
-| Theme-controlled homepage | No | `is_homepage=True` and `word_count < 100` |
+| Divi | No | `[et_pb_` or `[divi_` in post_content |
+| WPBakery | No | `[vc_row]` or `[vc_column]` in post_content |
+| Bricks | No | `data-bricks` or `brxe-` in post_content |
+| Oxygen | No | `ct-section` or `oxy-` in post_content |
+| Classic Editor | Yes | fallback — none of the above matched |
+| Theme-controlled homepage | No | `is_homepage=True` and `word_count < 100` (Python logic, not YAML) |
 
-Detected by `_detect_builder()` in `improve.py`. `_detect_page_profile()` combines builder + SEO plugin detection into a `profile` dict before any AI call.
+Detection: `_detect_builder()` in `improve.py` iterates `config/builders.yaml` in order. `_detect_page_profile()` combines builder + SEO plugin detection into a `profile` dict before any AI call.
 
 ---
 
