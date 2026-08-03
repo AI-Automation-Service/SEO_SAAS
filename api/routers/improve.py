@@ -837,3 +837,130 @@ def get_history(
         .order_by(PageChange.created_at.desc())
         .all()
     )
+
+
+class ClusterStatusOut(BaseModel):
+    last_analyzed_at: Optional[datetime]
+    days_since_analysis: Optional[int]
+    per_page: list[dict]
+    aggregate: dict
+    message: str
+
+
+@router.get("/status", response_model=ClusterStatusOut)
+def cluster_status(
+    cluster_name: str,
+    context: ProjectContext = Depends(get_project_context),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Lightweight pre-action check: returns refresh readiness for a cluster without
+    running any AI. Frontend shows this before the user clicks Analyze & Suggest.
+    """
+    history = (
+        db.query(PageChange)
+        .filter(
+            PageChange.user_id == current_user.id,
+            PageChange.project_name == context.name,
+            PageChange.cluster_name == cluster_name,
+            PageChange.status.in_(["pending", "approved", "no_action"]),
+        )
+        .order_by(PageChange.created_at.desc())
+        .limit(20)
+        .all()
+    )
+
+    if not history:
+        return ClusterStatusOut(
+            last_analyzed_at=None,
+            days_since_analysis=None,
+            per_page=[],
+            aggregate={"meta_days_remaining": 0, "content_days_remaining": 0},
+            message="This cluster has never been analyzed. Run Analyze & Suggest to get started.",
+        )
+
+    most_recent = history[0]
+    days = max(0, (datetime.utcnow() - most_recent.created_at).days)
+
+    seen: dict[int, PageChange] = {}
+    for c in history:
+        if c.wp_post_id not in seen:
+            seen[c.wp_post_id] = c
+
+    per_page = []
+    for wp_post_id, last_change in seen.items():
+        rs = _compute_refresh_status(wp_post_id, history)
+        per_page.append({
+            "wp_post_id": wp_post_id,
+            "wp_post_url": last_change.wp_post_url,
+            **rs,
+        })
+
+    worst_meta = max((p["meta"]["days_remaining"] for p in per_page), default=0)
+    worst_content = max((p["content"]["days_remaining"] for p in per_page), default=0)
+
+    if worst_content > 0:
+        msg = f"Last analyzed {days} day(s) ago. Meta ready in {worst_meta} day(s). Full content ready in {worst_content} day(s)."
+    elif worst_meta > 0:
+        msg = f"Last analyzed {days} day(s) ago. Meta refresh ready in {worst_meta} day(s). Content improvement is ready now."
+    else:
+        msg = f"Last analyzed {days} day(s) ago. All improvements ready to re-run."
+
+    return ClusterStatusOut(
+        last_analyzed_at=most_recent.created_at,
+        days_since_analysis=days,
+        per_page=per_page,
+        aggregate={"meta_days_remaining": worst_meta, "content_days_remaining": worst_content},
+        message=msg,
+    )
+
+
+class PatchMetaRequest(BaseModel):
+    suggested_meta_title: Optional[str] = None
+    suggested_meta_description: Optional[str] = None
+
+
+@router.patch("/patch/{change_id}", response_model=ChangeOut)
+def patch_meta(
+    change_id: int,
+    body: PatchMetaRequest,
+    context: ProjectContext = Depends(get_project_context),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Edit suggested meta title/description before pushing to WordPress.
+    Only allowed on pending changes that have meta_updates.
+    Title is hard-capped at 60 chars; description at 160.
+    """
+    record = db.query(PageChange).filter(
+        PageChange.id == change_id,
+        PageChange.user_id == current_user.id,
+        PageChange.project_name == context.name,
+    ).first()
+    if not record:
+        raise HTTPException(404, "Change not found.")
+    if record.status != "pending":
+        raise HTTPException(400, f"Only pending changes can be edited (current status: '{record.status}').")
+    if not record.meta_updates:
+        raise HTTPException(400, "This change has no meta updates to edit.")
+
+    mu = dict(record.meta_updates)
+
+    if body.suggested_meta_title is not None:
+        title = body.suggested_meta_title.strip()
+        if len(title) > 60:
+            title = title[:60].rsplit(" ", 1)[0].rstrip(" |—-")
+        mu["suggested_meta_title"] = title or None
+
+    if body.suggested_meta_description is not None:
+        desc = body.suggested_meta_description.strip()
+        if len(desc) > 160:
+            desc = desc[:160].rsplit(" ", 1)[0].rstrip()
+        mu["suggested_meta_description"] = desc or None
+
+    record.meta_updates = mu
+    db.commit()
+    db.refresh(record)
+    return record
