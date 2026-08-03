@@ -133,6 +133,81 @@ def _wp_push(wp: WordPressAdapter, record: PageChange, content: str) -> None:
         wp.update_post(record.wp_post_id, content)
 
 
+_REFRESH_CADENCE = {
+    "meta": 60,     # minimum days between meta title/description updates
+    "content": 90,  # minimum days between content improvements
+    "cluster": 90,  # minimum days between keyword re-clustering
+}
+
+
+def _compute_refresh_status(wp_post_id: int, history: list[PageChange]) -> dict:
+    """
+    Returns per-action readiness based on days since last improvement for this page.
+    `history` must be the pre-analysis snapshot (before the current run created new records).
+    """
+    last = next(
+        (c for c in history if c.wp_post_id == wp_post_id and c.status in ("pending", "approved")),
+        None,
+    )
+
+    if not last:
+        return {
+            "days_since_last_improvement": None,
+            "meta":    {"min_days": _REFRESH_CADENCE["meta"],    "ready": True, "days_remaining": 0},
+            "content": {"min_days": _REFRESH_CADENCE["content"], "ready": True, "days_remaining": 0},
+            "cluster": {"min_days": _REFRESH_CADENCE["cluster"], "ready": True, "days_remaining": 0},
+            "overall_action": "first_time",
+            "message": "This page has not been improved before — run freely.",
+        }
+
+    days = max(0, (datetime.utcnow() - last.created_at).days)
+    meta_rem    = max(0, _REFRESH_CADENCE["meta"]    - days)
+    content_rem = max(0, _REFRESH_CADENCE["content"] - days)
+    cluster_rem = max(0, _REFRESH_CADENCE["cluster"] - days)
+
+    if days < 30:
+        action = "too_soon"
+        message = (
+            f"Last improved {days} day(s) ago. "
+            f"Wait at least {30 - days} more day(s) before re-running any improvements."
+        )
+    elif days < _REFRESH_CADENCE["meta"]:
+        action = "too_soon"
+        message = (
+            f"Last improved {days} day(s) ago. "
+            f"Meta refresh ready in {meta_rem} day(s). "
+            "Tip: if GSC CTR drops ≥40% below the position benchmark, meta can be refreshed sooner."
+        )
+    elif days < _REFRESH_CADENCE["content"]:
+        action = "meta_ready"
+        message = (
+            f"Last improved {days} day(s) ago. "
+            f"Meta title/description ready to refresh now. "
+            f"Full content improvement ready in {content_rem} day(s)."
+        )
+    elif days < 180:
+        action = "improve_now"
+        message = (
+            f"Last improved {days} day(s) ago. "
+            "Meta + content improvements are both ready to re-run."
+        )
+    else:
+        action = "rewrite_eligible"
+        message = (
+            f"Last improved {days} day(s) ago. "
+            "Consider a full content rewrite if position is stuck at 31+ with declining impressions."
+        )
+
+    return {
+        "days_since_last_improvement": days,
+        "meta":    {"min_days": _REFRESH_CADENCE["meta"],    "ready": meta_rem == 0,    "days_remaining": meta_rem},
+        "content": {"min_days": _REFRESH_CADENCE["content"], "ready": content_rem == 0, "days_remaining": content_rem},
+        "cluster": {"min_days": _REFRESH_CADENCE["cluster"], "ready": cluster_rem == 0, "days_remaining": cluster_rem},
+        "overall_action": action,
+        "message": message,
+    }
+
+
 def _change_history_block(history: list[PageChange]) -> str:
     if not history:
         return "No previous improvements made to this page."
@@ -502,9 +577,31 @@ class ChangeOut(BaseModel):
     status: str
     created_at: datetime
     approved_at: Optional[datetime] = None
+    refresh_status: Optional[dict] = None
 
     class Config:
         from_attributes = True
+
+
+def _to_change_out(record: PageChange, history: list[PageChange]) -> ChangeOut:
+    """Build ChangeOut with computed refresh_status from pre-analysis history."""
+    return ChangeOut(
+        id=record.id,
+        cluster_name=record.cluster_name,
+        wp_post_id=record.wp_post_id,
+        wp_post_url=record.wp_post_url,
+        wp_post_type=record.wp_post_type,
+        change_summary=record.change_summary,
+        changes_made=record.changes_made,
+        statistics=record.statistics,
+        meta_updates=record.meta_updates,
+        original_content=record.original_content,
+        new_content=record.new_content,
+        status=record.status,
+        created_at=record.created_at,
+        approved_at=record.approved_at,
+        refresh_status=_compute_refresh_status(record.wp_post_id, history),
+    )
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -619,7 +716,9 @@ def analyze_cluster(
         except Exception:
             continue
 
-    return results
+    # history was fetched before this run — safe to use for refresh_status without
+    # including the records just created above
+    return [_to_change_out(r, history) for r in results]
 
 
 @router.post("/apply/{change_id}", response_model=ChangeOut)

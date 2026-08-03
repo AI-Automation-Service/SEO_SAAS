@@ -21,6 +21,7 @@ SEO OS is a multi-tenant SaaS that automates WordPress on-page SEO, keyword clus
 | Agent | Model | Skill file | Router | Output |
 |---|---|---|---|---|
 | seo-cluster | gpt-4o-mini | skills/seo-cluster/SKILL.md | keywords.py:691 | JSON |
+| seo-refresh | — (Python logic) | skills/seo-refresh/SKILL.md | improve.py:_compute_refresh_status | dict |
 | seo-analyzer | gpt-4o-mini | skills/seo-analyzer/SKILL.md | improve.py:214 | JSON |
 | seo-editor | gpt-4o | skills/seo-editor/SKILL.md | improve.py:274 | JSON |
 | seo-meta | gpt-4o-mini | skills/seo-meta/SKILL.md | improve.py:_run_meta_only | JSON |
@@ -175,6 +176,8 @@ Meta fields updated via `update_seo_meta()`:
 These skills exist but are not invoked by any current router endpoint. Available for future features:
 
 `seo-improve`, `seo-article-writer`, `seo-content`, `seo-content-brief`, `seo-dataforseo`, `seo-drift`, `seo-ecommerce`, `seo-geo`, `seo-google`, `seo-hreflang`, `seo-image-gen`, `seo-maps`, `seo-programmatic`, `seo-sitemap`, `seo-sxo`, `copy-editing`, `seo-local` (used for seo-page enrichment), `seo-schema` (used for enrichment, not direct wiring)
+
+**`seo-refresh`**: Currently implemented as pure Python in `improve.py:_compute_refresh_status`. The SKILL.md documents the framework and CTR benchmarks for future agent wiring (e.g., when GSC data is available per page). Outputs `refresh_status` in every `/analyze` response.
 
 ---
 
