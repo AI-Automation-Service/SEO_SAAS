@@ -63,6 +63,155 @@ def _change_history_block(history: list[PageChange]) -> str:
     return "\n".join(lines)
 
 
+def _run_page_pipeline(
+    keyword: str,
+    secondary_keywords: str,
+    post_data: dict,
+    pillar_url: str,
+    history: list,
+    project,
+    openai_key: str,
+    user_id: int,
+    project_name: str,
+    cluster_name: str,
+    db: Session,
+    is_hub: bool = False,
+    hub_existing_url: str = "",
+) -> PageChange:
+    is_homepage = is_hub and not urlparse(hub_existing_url).path.strip("/")
+    current_date = datetime.utcnow().strftime("%B %Y")
+
+    business_context = " | ".join(filter(None, [
+        project.business_name,
+        project.business_type,
+        project.tone_of_voice,
+        project.target_audience,
+    ])) or "Not specified"
+
+    # ── Step 1: Analyzer (gpt-4o-mini) ───────────────────────────────────────
+    analyzer_msg = f"""## main_keyword
+{keyword}
+
+## secondary_keywords
+{secondary_keywords}
+
+## hub_url
+{pillar_url}
+
+## current_url
+{post_data['link']}
+
+## is_homepage
+{str(is_homepage).lower()}
+
+## author
+{project.business_name or 'Site Owner'}
+
+## has_yoast
+{post_data['has_yoast']}
+
+## has_rankmath
+{post_data['has_rankmath']}
+
+## builder
+{_detect_builder(post_data['content'])}
+
+## business_context
+{business_context}
+
+## change_history
+{_change_history_block(history)}
+
+## html_content (Title: {post_data['title']})
+{post_data['content']}
+"""
+
+    raw_analysis = SkillAgent("seo-analyzer", openai_key, model="gpt-4o-mini").run(
+        analyzer_msg, timeout=60, json_mode=True
+    )
+    try:
+        analysis = json.loads(raw_analysis)
+    except json.JSONDecodeError:
+        raise ValueError("Analyzer returned invalid JSON.")
+
+    action_needed = analysis.get("action_needed", False)
+    summary = analysis.get("summary", "")
+    no_action_reason = analysis.get("no_action_reason")
+
+    changes_made: list = []
+    new_content: str = post_data["content"]
+
+    if action_needed:
+        # ── Step 2: Editor (gpt-4o) ───────────────────────────────────────────
+        editor_msg = f"""## main_keyword
+{keyword}
+
+## hub_url
+{pillar_url}
+
+## is_homepage
+{str(is_homepage).lower()}
+
+## author
+{project.business_name or 'Site Owner'}
+
+## current_date
+{current_date}
+
+## has_yoast
+{post_data['has_yoast']}
+
+## has_rankmath
+{post_data['has_rankmath']}
+
+## builder
+{_detect_builder(post_data['content'])}
+
+## business_context
+{business_context}
+
+## recommendations
+{json.dumps(analysis.get('recommendations', []), indent=2)}
+
+## html_content (Title: {post_data['title']})
+{post_data['content']}
+"""
+
+        raw_edit = SkillAgent("seo-editor", openai_key, model="gpt-4o").run(
+            editor_msg, timeout=120, json_mode=True
+        )
+        try:
+            edit_result = json.loads(raw_edit)
+        except json.JSONDecodeError:
+            raise ValueError("Editor returned invalid JSON.")
+
+        changes_made = [
+            f"{c['type']}: {c['description']}"
+            for c in edit_result.get("changes_made", [])
+            if isinstance(c, dict) and c.get("status") == "applied"
+        ]
+        new_content = edit_result.get("new_content") or post_data["content"]
+
+    record = PageChange(
+        user_id=user_id,
+        project_name=project_name,
+        cluster_name=cluster_name,
+        wp_post_id=post_data["id"],
+        wp_post_url=post_data["link"],
+        wp_post_type=post_data["type"],
+        original_content=post_data["content"],
+        new_content=new_content,
+        change_summary=no_action_reason if not action_needed else summary,
+        changes_made=changes_made,
+        statistics=analysis.get("statistics"),
+        status="no_action" if not action_needed else "pending",
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return record
+
+
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
 class AnalyzeRequest(BaseModel):
@@ -90,7 +239,7 @@ class ChangeOut(BaseModel):
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
-@router.post("/analyze", response_model=ChangeOut)
+@router.post("/analyze", response_model=list[ChangeOut])
 def analyze_cluster(
     body: AnalyzeRequest,
     context: ProjectContext = Depends(get_project_context),
@@ -114,20 +263,20 @@ def analyze_cluster(
         raise HTTPException(400, "Hub keyword has no existing page URL. Run GSC sync first.")
 
     wp = _get_wp_adapter(context)
+
     try:
-        post_data = wp.find_post_by_url(hub.existing_url)
+        hub_post_data = wp.find_post_by_url(hub.existing_url)
     except IntegrationError as e:
         raise HTTPException(502, f"WordPress error: {e}")
-    if not post_data:
+    if not hub_post_data:
         raise HTTPException(404, f"Page not found in WordPress for URL: {hub.existing_url}")
 
-    builder = _detect_builder(post_data["content"])
-    if builder in ("elementor", "divi"):
+    hub_builder = _detect_builder(hub_post_data["content"])
+    if hub_builder in ("elementor", "divi"):
         raise HTTPException(
             400,
-            f"This page uses {builder.title()} page builder. "
-            f"Automatic editing is not yet supported for {builder.title()}. "
-            "Check the follow-up roadmap.",
+            f"The hub page uses {hub_builder.title()} page builder. "
+            "Automatic editing is not yet supported for this builder.",
         )
 
     history = (
@@ -138,146 +287,68 @@ def analyze_cluster(
             PageChange.cluster_name == body.cluster_name,
         )
         .order_by(PageChange.created_at.desc())
-        .limit(5)
+        .limit(10)
         .all()
     )
 
     project = context.config
     pillar_url = hub.suggested_url or hub.existing_url or ""
-    secondary_keywords = ", ".join(r.keyword for r in rows if not r.is_hub) or "None"
-    business_context = " | ".join(filter(None, [
-        project.business_name,
-        project.business_type,
-        project.tone_of_voice,
-        project.target_audience,
-    ])) or "Not specified"
-
     openai_key = get_user_secret("openai", current_user.id, db)
-    is_homepage = not urlparse(hub.existing_url).path.strip("/")
-    current_date = datetime.utcnow().strftime("%B %Y")
 
-    # ── Step 1: Analyzer (gpt-4o-mini) ───────────────────────────────────────
-    analyzer_msg = f"""## main_keyword
-{hub.keyword}
+    results: list[PageChange] = []
 
-## secondary_keywords
-{secondary_keywords}
-
-## hub_url
-{pillar_url}
-
-## current_url
-{post_data['link']}
-
-## is_homepage
-{str(is_homepage).lower()}
-
-## author
-{project.business_name or 'Site Owner'}
-
-## has_yoast
-{post_data['has_yoast']}
-
-## has_rankmath
-{post_data['has_rankmath']}
-
-## builder
-{builder}
-
-## business_context
-{business_context}
-
-## change_history
-{_change_history_block(history)}
-
-## html_content (Title: {post_data['title']})
-{post_data['content']}
-"""
-
-    raw_analysis = SkillAgent("seo-analyzer", openai_key, model="gpt-4o-mini").run(
-        analyzer_msg, timeout=60, json_mode=True
-    )
+    # ── Hub ───────────────────────────────────────────────────────────────────
+    hub_secondary = ", ".join(r.keyword for r in rows if not r.is_hub) or "None"
     try:
-        analysis = json.loads(raw_analysis)
-    except json.JSONDecodeError:
-        raise HTTPException(500, "Analyzer returned invalid JSON. Please try again.")
-
-    action_needed = analysis.get("action_needed", False)
-    summary = analysis.get("summary", "")
-    no_action_reason = analysis.get("no_action_reason")
-
-    changes_made: list = []
-    new_content: str = post_data["content"]
-
-    if action_needed:
-        # ── Step 2: Editor (gpt-4o) ───────────────────────────────────────────
-        editor_msg = f"""## main_keyword
-{hub.keyword}
-
-## hub_url
-{pillar_url}
-
-## is_homepage
-{str(is_homepage).lower()}
-
-## author
-{project.business_name or 'Site Owner'}
-
-## current_date
-{current_date}
-
-## has_yoast
-{post_data['has_yoast']}
-
-## has_rankmath
-{post_data['has_rankmath']}
-
-## builder
-{builder}
-
-## business_context
-{business_context}
-
-## recommendations
-{json.dumps(analysis.get('recommendations', []), indent=2)}
-
-## html_content (Title: {post_data['title']})
-{post_data['content']}
-"""
-
-        raw_edit = SkillAgent("seo-editor", openai_key, model="gpt-4o").run(
-            editor_msg, timeout=120, json_mode=True
+        hub_record = _run_page_pipeline(
+            keyword=hub.keyword,
+            secondary_keywords=hub_secondary,
+            post_data=hub_post_data,
+            pillar_url=pillar_url,
+            history=history,
+            project=project,
+            openai_key=openai_key,
+            user_id=current_user.id,
+            project_name=context.name,
+            cluster_name=body.cluster_name,
+            db=db,
+            is_hub=True,
+            hub_existing_url=hub.existing_url,
         )
+        results.append(hub_record)
+    except (ValueError, Exception) as e:
+        raise HTTPException(500, f"Hub analysis failed: {e}")
+
+    # ── Spokes (up to 5 with existing_url, skip page builders) ───────────────
+    spokes = [r for r in rows if not r.is_hub and r.existing_url][:5]
+    for spoke in spokes:
         try:
-            edit_result = json.loads(raw_edit)
-        except json.JSONDecodeError:
-            raise HTTPException(500, "Editor returned invalid JSON. Please try again.")
+            spoke_post_data = wp.find_post_by_url(spoke.existing_url)
+            if not spoke_post_data:
+                continue
+            if _detect_builder(spoke_post_data["content"]) in ("elementor", "divi"):
+                continue
+            spoke_secondary = ", ".join(r.keyword for r in rows if r.keyword != spoke.keyword) or "None"
+            spoke_record = _run_page_pipeline(
+                keyword=spoke.keyword,
+                secondary_keywords=spoke_secondary,
+                post_data=spoke_post_data,
+                pillar_url=pillar_url,
+                history=history,
+                project=project,
+                openai_key=openai_key,
+                user_id=current_user.id,
+                project_name=context.name,
+                cluster_name=body.cluster_name,
+                db=db,
+                is_hub=False,
+                hub_existing_url=hub.existing_url,
+            )
+            results.append(spoke_record)
+        except Exception:
+            continue
 
-        changes_made = [
-            f"{c['type']}: {c['description']}"
-            for c in edit_result.get("changes_made", [])
-            if isinstance(c, dict) and c.get("status") == "applied"
-        ]
-        new_content = edit_result.get("new_content") or post_data["content"]
-
-    record = PageChange(
-        user_id=current_user.id,
-        project_name=context.name,
-        cluster_name=body.cluster_name,
-        wp_post_id=post_data["id"],
-        wp_post_url=post_data["link"],
-        wp_post_type=post_data["type"],
-        original_content=post_data["content"],
-        new_content=new_content,
-        change_summary=no_action_reason if not action_needed else summary,
-        changes_made=changes_made,
-        statistics=analysis.get("statistics"),
-        status="no_action" if not action_needed else "pending",
-    )
-    db.add(record)
-    db.commit()
-    db.refresh(record)
-    return record
+    return results
 
 
 @router.post("/apply/{change_id}", response_model=ChangeOut)

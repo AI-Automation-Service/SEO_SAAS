@@ -280,7 +280,7 @@ export const knowledgeApi = {
 // ── Page Improvement ──────────────────────────────────────────────────────────
 export const improveApi = {
   analyze: (name: string, cluster_name: string) =>
-    api.post<PageChange>(`/api/projects/${name}/improve/analyze`, { cluster_name }).then((r) => r.data),
+    api.post<PageChange[]>(`/api/projects/${name}/improve/analyze`, { cluster_name }).then((r) => r.data),
 
   apply: (name: string, changeId: number) =>
     api.post<PageChange>(`/api/projects/${name}/improve/apply/${changeId}`).then((r) => r.data),

@@ -1048,6 +1048,138 @@ function ImprovePanelDiff({ original, updated }: { original: string; updated: st
   )
 }
 
+function PageChangeCard({
+  change,
+  projectName,
+  isHub,
+  onUpdate,
+}: {
+  change: PageChange
+  projectName: string
+  isHub: boolean
+  onUpdate: (updated: PageChange) => void
+}) {
+  const qc = useQueryClient()
+
+  const applyMut = useMutation({
+    mutationFn: () => improveApi.apply(projectName, change.id),
+    onSuccess: (data) => {
+      onUpdate(data)
+      toast.success('Changes pushed to WordPress.')
+      qc.invalidateQueries({ queryKey: ['improve-history', projectName] })
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
+
+  const rollbackMut = useMutation({
+    mutationFn: () => improveApi.rollback(projectName, change.id),
+    onSuccess: (data) => {
+      onUpdate(data)
+      toast.success('Page restored to original.')
+      qc.invalidateQueries({ queryKey: ['improve-history', projectName] })
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
+
+  const isLoading = applyMut.isPending || rollbackMut.isPending
+  const slug = change.wp_post_url.replace(/^https?:\/\/[^/]+/, '') || '/'
+
+  return (
+    <div className="border border-slate-200 rounded-xl overflow-hidden">
+      {/* Card header */}
+      <div className={cn(
+        'flex items-center gap-2 px-4 py-2.5 border-b border-slate-100',
+        isHub ? 'bg-amber-50' : 'bg-slate-50',
+      )}>
+        {isHub
+          ? <Crown size={12} className="text-amber-500 shrink-0" />
+          : <ChevronRight size={12} className="text-slate-400 shrink-0" />}
+        <span className={cn('text-xs font-semibold', isHub ? 'text-amber-700' : 'text-slate-500')}>
+          {isHub ? 'Hub Page' : 'Spoke Page'}
+        </span>
+        <a
+          href={change.wp_post_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-xs text-blue-500 hover:underline truncate ml-auto"
+        >
+          <ExternalLink size={10} />
+          {slug}
+        </a>
+      </div>
+
+      {/* Card body */}
+      <div className="p-4 space-y-4">
+        {/* Status + summary */}
+        <div className={cn(
+          'flex items-start gap-2.5 p-3 rounded-lg',
+          change.status === 'no_action'   ? 'bg-slate-50 border border-slate-200' :
+          change.status === 'approved'    ? 'bg-emerald-50 border border-emerald-200' :
+          change.status === 'rolled_back' ? 'bg-amber-50 border border-amber-200' :
+          'bg-blue-50 border border-blue-200',
+        )}>
+          {change.status === 'no_action'   ? <AlertCircle size={15} className="text-slate-400 shrink-0 mt-0.5" /> :
+           change.status === 'approved'    ? <CheckCircle size={15} className="text-emerald-600 shrink-0 mt-0.5" /> :
+           <Sparkles size={15} className="text-blue-500 shrink-0 mt-0.5" />}
+          <p className="text-slate-700 leading-relaxed text-xs">{change.change_summary}</p>
+        </div>
+
+        {/* Statistics */}
+        {change.statistics && <PageStatsCard stats={change.statistics} />}
+
+        {/* Changes list */}
+        {change.changes_made && change.changes_made.length > 0 && (
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Changes</p>
+            <ul className="space-y-1">
+              {change.changes_made.map((c, i) => (
+                <li key={i} className="flex items-start gap-2 text-xs text-slate-600">
+                  <CheckCircle size={12} className="text-emerald-500 shrink-0 mt-0.5" />
+                  {c}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Diff */}
+        {change.status === 'pending' && (
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Preview</p>
+            <ImprovePanelDiff original={change.original_content} updated={change.new_content} />
+          </div>
+        )}
+
+        {/* Actions */}
+        {change.status === 'pending' && (
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              type="button"
+              disabled={isLoading}
+              onClick={() => applyMut.mutate()}
+              className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 bg-emerald-600 text-white text-xs rounded-lg hover:bg-emerald-700 disabled:opacity-50 cursor-pointer transition-colors"
+            >
+              {applyMut.isPending ? <RefreshCw size={12} className="animate-spin" /> : <CheckCircle size={12} />}
+              Approve & Push to WordPress
+            </button>
+          </div>
+        )}
+        {change.status === 'approved' && (
+          <button
+            type="button"
+            disabled={isLoading}
+            onClick={() => rollbackMut.mutate()}
+            className="inline-flex items-center gap-2 px-3 py-2 border border-amber-300 text-amber-700 text-xs rounded-lg hover:bg-amber-50 disabled:opacity-50 cursor-pointer transition-colors"
+          >
+            {rollbackMut.isPending ? <RefreshCw size={12} className="animate-spin" /> : <Rollback size={12} />}
+            Rollback to Original
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function ImprovePanel({
   projectName,
   clusterName,
@@ -1057,36 +1189,18 @@ function ImprovePanel({
   clusterName: string
   onClose: () => void
 }) {
-  const qc = useQueryClient()
-  const [change, setChange] = useState<PageChange | null>(null)
+  const [changes, setChanges] = useState<PageChange[]>([])
 
   const analyzeMut = useMutation({
     mutationFn: () => improveApi.analyze(projectName, clusterName),
-    onSuccess: (data) => setChange(data),
+    onSuccess: (data) => setChanges(data),
     onError: (err) => toast.error(getErrorMessage(err)),
   })
 
-  const applyMut = useMutation({
-    mutationFn: (id: number) => improveApi.apply(projectName, id),
-    onSuccess: (data) => {
-      setChange(data)
-      toast.success('Changes pushed to WordPress successfully.')
-      qc.invalidateQueries({ queryKey: ['improve-history', projectName] })
-    },
-    onError: (err) => toast.error(getErrorMessage(err)),
-  })
+  const updateChange = (id: number, updated: PageChange) =>
+    setChanges((prev) => prev.map((c) => (c.id === id ? updated : c)))
 
-  const rollbackMut = useMutation({
-    mutationFn: (id: number) => improveApi.rollback(projectName, id),
-    onSuccess: (data) => {
-      setChange(data)
-      toast.success('Page restored to original.')
-      qc.invalidateQueries({ queryKey: ['improve-history', projectName] })
-    },
-    onError: (err) => toast.error(getErrorMessage(err)),
-  })
-
-  const isLoading = analyzeMut.isPending || applyMut.isPending || rollbackMut.isPending
+  const pendingCount = changes.filter((c) => c.status === 'pending').length
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -1104,14 +1218,14 @@ function ImprovePanel({
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-5">
-          {!change && !analyzeMut.isPending && (
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          {changes.length === 0 && !analyzeMut.isPending && (
             <div className="flex flex-col items-center justify-center py-16 text-center gap-4">
               <Wrench size={32} className="text-slate-300" />
               <div>
-                <p className="text-sm font-medium text-slate-700">Analyze this cluster's hub page</p>
+                <p className="text-sm font-medium text-slate-700">Analyze this cluster's pages</p>
                 <p className="text-xs text-slate-400 mt-1 max-w-xs">
-                  The agent will fetch the live WordPress page, check what's missing for AEO/GEO, and suggest specific changes.
+                  The agent will analyze the hub page and all spoke pages with existing URLs — checking AEO/GEO signals and suggesting specific improvements including hub links on every spoke.
                 </p>
               </div>
               <button
@@ -1128,111 +1242,40 @@ function ImprovePanel({
           {analyzeMut.isPending && (
             <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
               <RefreshCw size={24} className="text-emerald-500 animate-spin" />
-              <p className="text-sm text-slate-500">Fetching page and analyzing with AI…</p>
-              <p className="text-xs text-slate-400">This may take 20–40 seconds</p>
+              <p className="text-sm text-slate-500">Analyzing hub and spoke pages…</p>
+              <p className="text-xs text-slate-400">This may take 1–3 minutes depending on cluster size</p>
             </div>
           )}
 
-          {change && (
-            <div className="space-y-4">
-              {/* Status badge */}
-              <div className={cn(
-                'flex items-start gap-2.5 p-3 rounded-lg text-sm',
-                change.status === 'no_action' ? 'bg-slate-50 border border-slate-200' :
-                change.status === 'approved' ? 'bg-emerald-50 border border-emerald-200' :
-                change.status === 'rolled_back' ? 'bg-amber-50 border border-amber-200' :
-                'bg-blue-50 border border-blue-200'
-              )}>
-                {change.status === 'no_action' ? <AlertCircle size={16} className="text-slate-400 shrink-0 mt-0.5" /> :
-                 change.status === 'approved' ? <CheckCircle size={16} className="text-emerald-600 shrink-0 mt-0.5" /> :
-                 <Sparkles size={16} className="text-blue-500 shrink-0 mt-0.5" />}
-                <p className="text-slate-700 leading-relaxed">{change.change_summary}</p>
-              </div>
-
-              {/* Page statistics */}
-              {change.statistics && <PageStatsCard stats={change.statistics} />}
-
-              {/* Changes list */}
-              {change.changes_made && change.changes_made.length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Changes</p>
-                  <ul className="space-y-1">
-                    {change.changes_made.map((c, i) => (
-                      <li key={i} className="flex items-start gap-2 text-xs text-slate-600">
-                        <CheckCircle size={12} className="text-emerald-500 shrink-0 mt-0.5" />
-                        {c}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Diff */}
-              {change.status === 'pending' && (
-                <div>
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Preview</p>
-                  <ImprovePanelDiff original={change.original_content} updated={change.new_content} />
-                </div>
-              )}
-
-              {/* Page link */}
-              <a
-                href={change.wp_post_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
-              >
-                <ExternalLink size={11} />
-                View page on WordPress
-              </a>
-            </div>
+          {changes.length > 0 && (
+            <>
+              <p className="text-xs text-slate-400">
+                {changes.length} page{changes.length !== 1 ? 's' : ''} analyzed
+                {pendingCount > 0 && ` · ${pendingCount} with suggested changes`}
+              </p>
+              {changes.map((change, i) => (
+                <PageChangeCard
+                  key={change.id}
+                  change={change}
+                  projectName={projectName}
+                  isHub={i === 0}
+                  onUpdate={(updated) => updateChange(change.id, updated)}
+                />
+              ))}
+            </>
           )}
         </div>
 
-        {/* Footer actions */}
-        {change && (
-          <div className="border-t border-slate-200 px-5 py-4 flex items-center gap-3">
-            {change.status === 'pending' && (
-              <>
-                <button
-                  type="button"
-                  disabled={isLoading}
-                  onClick={() => applyMut.mutate(change.id)}
-                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 disabled:opacity-50 cursor-pointer transition-colors"
-                >
-                  {applyMut.isPending ? <RefreshCw size={14} className="animate-spin" /> : <CheckCircle size={14} />}
-                  Approve & Push to WordPress
-                </button>
-                <button
-                  type="button"
-                  disabled={isLoading}
-                  onClick={() => { setChange(null); analyzeMut.reset() }}
-                  className="px-4 py-2 border border-slate-300 text-slate-600 text-sm rounded-lg hover:bg-slate-50 disabled:opacity-50 cursor-pointer transition-colors"
-                >
-                  Discard
-                </button>
-              </>
-            )}
-            {change.status === 'approved' && (
-              <button
-                type="button"
-                disabled={isLoading}
-                onClick={() => rollbackMut.mutate(change.id)}
-                className="inline-flex items-center gap-2 px-4 py-2 border border-amber-300 text-amber-700 text-sm rounded-lg hover:bg-amber-50 disabled:opacity-50 cursor-pointer transition-colors"
-              >
-                {rollbackMut.isPending ? <RefreshCw size={14} className="animate-spin" /> : <Rollback size={14} />}
-                Rollback to Original
-              </button>
-            )}
-            {(change.status === 'no_action' || change.status === 'rolled_back') && (
-              <button
-                type="button"
-                onClick={() => { setChange(null); analyzeMut.reset() }}
-                className="px-4 py-2 border border-slate-300 text-slate-600 text-sm rounded-lg hover:bg-slate-50 cursor-pointer transition-colors"
-              >
-                Re-analyze
-              </button>
-            )}
+        {/* Footer: Re-analyze only when all done */}
+        {changes.length > 0 && pendingCount === 0 && (
+          <div className="border-t border-slate-200 px-5 py-4">
+            <button
+              type="button"
+              onClick={() => { setChanges([]); analyzeMut.reset() }}
+              className="px-4 py-2 border border-slate-300 text-slate-600 text-sm rounded-lg hover:bg-slate-50 cursor-pointer transition-colors"
+            >
+              Re-analyze
+            </button>
           </div>
         )}
       </div>
