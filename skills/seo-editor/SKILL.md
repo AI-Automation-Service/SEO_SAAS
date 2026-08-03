@@ -61,9 +61,12 @@ Generate `suggested_meta_title` and `suggested_meta_description` for every page 
 ### suggested_meta_title
 - Maximum 60 characters — Google truncates beyond this.
 - `main_keyword` must appear in the first half of the title.
-- Format: "[Main Keyword] | [Brand Name]" — include brand only if it fits within 60 chars.
+- After the pipe separator, write a SHORT compelling differentiator — an outcome, a unique value, or what makes this business different. NEVER repeat the keyword or the brand name after the pipe if it is the same as or similar to the keyword.
+- Format: "[Main Keyword] | [Compelling Differentiator]"
+- Good examples: "AI Consultant Services | Custom AI Built for Your Business" / "AI Consultant Services | Automate & Scale Operations"
+- Bad example: "AI Consultant Services | AI Consultant Service" (keyword repeated — forbidden)
 - Do NOT use template variables like %%title%% or %%sitename%%.
-- If `current_meta_title` is already keyword-optimized and under 60 characters, return it unchanged.
+- If `current_meta_title` is already keyword-optimized, non-redundant, and under 60 characters, return it unchanged.
 
 ### suggested_meta_description
 - 140–155 characters — Google truncates beyond 155.
