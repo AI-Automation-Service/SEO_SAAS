@@ -136,7 +136,11 @@ def _run_page_pipeline(
     db: Session,
     is_hub: bool = False,
     hub_existing_url: str = "",
+    seo_plugin: str = "none",
 ) -> PageChange:
+    # Override per-page detection with the authoritative namespace-based result
+    post_data["has_yoast"] = seo_plugin == "yoast"
+    post_data["has_rankmath"] = seo_plugin == "rankmath"
     profile = _detect_page_profile(post_data, is_hub, hub_existing_url)
     current_date = datetime.utcnow().strftime("%B %Y")
 
@@ -416,6 +420,9 @@ def analyze_cluster(
     pillar_url = hub.suggested_url or hub.existing_url or ""
     openai_key = get_user_secret("openai", current_user.id, db)
 
+    # Detect SEO plugin once via namespace registry — reliable even when meta values are empty
+    seo_plugin = wp.detect_seo_plugin()
+
     results: list[PageChange] = []
 
     # ── Hub ───────────────────────────────────────────────────────────────────
@@ -435,6 +442,7 @@ def analyze_cluster(
             db=db,
             is_hub=True,
             hub_existing_url=hub.existing_url,
+            seo_plugin=seo_plugin,
         )
         results.append(hub_record)
     except (ValueError, Exception) as e:
@@ -468,6 +476,7 @@ def analyze_cluster(
                 db=db,
                 is_hub=False,
                 hub_existing_url=hub.existing_url,
+                seo_plugin=seo_plugin,
             )
             results.append(spoke_record)
         except Exception:

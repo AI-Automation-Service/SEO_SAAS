@@ -66,6 +66,24 @@ class WordPressAdapter(CMSAdapter):
         )
         return str(title), str(description)
 
+    def detect_seo_plugin(self) -> str:
+        """
+        Detect the active SEO plugin via the REST API namespace registry.
+        Returns 'yoast', 'rankmath', or 'none'.
+        Namespace-based detection is reliable even when no meta values have been saved yet.
+        """
+        try:
+            root_url = self._api_url.rsplit("/wp/v2", 1)[0]
+            response = httpx.get(root_url, auth=self._auth, timeout=10)
+            namespaces = response.json().get("namespaces", [])
+            if any("yoast" in ns.lower() for ns in namespaces):
+                return "yoast"
+            if any("rankmath" in ns.lower() for ns in namespaces):
+                return "rankmath"
+        except Exception:
+            pass
+        return "none"
+
     def test_connection(self) -> bool:
         self._request("GET", "/users/me")
         return True
