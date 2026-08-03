@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
 
+import httpx
 import yaml
 
 from fastapi import APIRouter, Depends, HTTPException
