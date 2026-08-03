@@ -130,7 +130,7 @@ class WordPressAdapter(CMSAdapter):
             "slug": data["slug"],
             "type": "post",
             "has_yoast": "yoast_head" in data,
-            "has_rankmath": bool(meta.get("rank_math_title") or meta.get("rank_math_description")),
+            "has_rankmath": "rank_math_title" in meta,
             "current_meta_title": current_meta_title,
             "current_meta_description": current_meta_description,
         }
@@ -148,7 +148,7 @@ class WordPressAdapter(CMSAdapter):
             "slug": data["slug"],
             "type": "page",
             "has_yoast": "yoast_head" in data,
-            "has_rankmath": bool(meta.get("rank_math_title") or meta.get("rank_math_description")),
+            "has_rankmath": "rank_math_title" in meta,
             "current_meta_title": current_meta_title,
             "current_meta_description": current_meta_description,
         }
@@ -187,7 +187,7 @@ class WordPressAdapter(CMSAdapter):
                     "slug": data["slug"],
                     "type": content_type.rstrip("s"),
                     "has_yoast": "yoast_head" in data,
-                    "has_rankmath": bool(meta.get("rank_math_title") or meta.get("rank_math_description")),
+                    "has_rankmath": "rank_math_title" in meta,
                     "current_meta_title": current_meta_title,
                     "current_meta_description": current_meta_description,
                 }
