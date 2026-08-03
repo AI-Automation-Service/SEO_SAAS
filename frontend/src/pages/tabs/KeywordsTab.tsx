@@ -1101,6 +1101,9 @@ function PageChangeCard({
         <span className={cn('text-xs font-semibold', isHub ? 'text-amber-700' : 'text-slate-500')}>
           {isHub ? 'Hub Page' : 'Spoke Page'}
         </span>
+        <span className="text-[10px] text-slate-400 ml-1">
+          · analyzed {new Date(change.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+        </span>
         <a
           href={change.wp_post_url}
           target="_blank"
