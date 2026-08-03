@@ -169,6 +169,8 @@ export interface PageStatistics {
   date_visible?: boolean
   keyword_frequency?: number
   images_missing_alt?: number
+  current_meta_title?: string
+  current_meta_description?: string
 }
 
 export interface MetaUpdates {

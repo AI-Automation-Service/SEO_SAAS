@@ -1146,7 +1146,32 @@ function PageChangeCard({
           </div>
         )}
 
-        {/* Meta preview */}
+        {/* Current meta (no_action: show what's already there) */}
+        {change.status === 'no_action' && change.statistics && (
+          change.statistics.current_meta_title || change.statistics.current_meta_description
+        ) && (
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Current SEO Meta</p>
+            <div className="space-y-2">
+              {change.statistics.current_meta_title && (
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">SEO Title · already set</p>
+                  <p className="text-xs text-slate-700 font-medium">{change.statistics.current_meta_title}</p>
+                  <p className="text-[10px] text-slate-400 mt-1">{change.statistics.current_meta_title.length}/60 chars</p>
+                </div>
+              )}
+              {change.statistics.current_meta_description && (
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Meta Description · already set</p>
+                  <p className="text-xs text-slate-600">{change.statistics.current_meta_description}</p>
+                  <p className="text-[10px] text-slate-400 mt-1">{change.statistics.current_meta_description.length}/155 chars</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Meta suggestion (pending) */}
         {change.status === 'pending' && change.meta_updates && (
           <div>
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">

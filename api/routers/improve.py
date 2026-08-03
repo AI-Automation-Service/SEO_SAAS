@@ -368,16 +368,28 @@ def _run_meta_only(
         }
         changes_made.append(f"seo_meta: SEO title and description queued for {plugin_label} update.")
 
-    if profile["is_theme_controlled"]:
-        change_summary = (
-            f"Homepage content is managed by your theme template — post_content edits are not visible on the frontend. "
-            f"SEO title and description will be updated via {plugin_label}."
-        )
+    if meta_updates:
+        if profile["is_theme_controlled"]:
+            change_summary = (
+                f"Homepage content is managed by your theme template — post_content edits are not visible on the frontend. "
+                f"New SEO title and description queued for {plugin_label}."
+            )
+        else:
+            change_summary = (
+                f"{profile['builder'].title()} page detected — content editing is not yet supported for this builder. "
+                f"New SEO title and description queued for {plugin_label}."
+            )
     else:
-        change_summary = (
-            f"{profile['builder'].title()} page detected — content editing is not yet supported for this builder. "
-            f"SEO title and description will be updated via {plugin_label}."
-        )
+        if profile["is_theme_controlled"]:
+            change_summary = (
+                f"Homepage content is managed by your theme template. "
+                f"Current {plugin_label} meta is already well-optimized — no changes suggested."
+            )
+        else:
+            change_summary = (
+                f"{profile['builder'].title()} page — content editing not supported for this builder. "
+                f"Current {plugin_label} meta is already well-optimized — no changes suggested."
+            )
 
     record = PageChange(
         user_id=user_id,
@@ -393,6 +405,8 @@ def _run_meta_only(
         statistics={
             "keyword_frequency": _count_keyword_frequency(post_data.get("content", ""), keyword),
             "images_missing_alt": _count_images_missing_alt(post_data.get("content", "")),
+            **({"current_meta_title": current_title} if current_title else {}),
+            **({"current_meta_description": current_description} if current_description else {}),
         },
         meta_updates=meta_updates,
         status="pending" if meta_updates else "no_action",
