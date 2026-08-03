@@ -439,36 +439,32 @@ def _run_page_pipeline(
     profile = _detect_page_profile(post_data, is_hub, hub_existing_url)
     current_date = datetime.utcnow().strftime("%B %Y")
 
-    # Pre-flight: shortcode/empty page — content is unreadable, skip AI
+    # Pre-flight: if post_content is very short, the page is likely built with Elementor
+    # or another builder that stores content outside post_content.
+    # Fetch the rendered public HTML to get accurate builder detection + word count.
     raw_word_count = _visible_word_count(post_data.get("content", ""))
-    if profile["content_editable"] and raw_word_count == 0:
-        record = PageChange(
-            user_id=user_id,
-            project_name=project_name,
-            cluster_name=cluster_name,
-            wp_post_id=post_data["id"],
-            wp_post_url=post_data["link"],
-            wp_post_type=post_data["type"],
-            original_content=post_data["content"],
-            new_content=post_data["content"],
-            change_summary=(
-                "This page has no readable text content — it likely uses a shortcode or page builder "
-                "that renders content outside the WordPress editor. "
-                "Add real content in the WordPress editor and re-analyze."
-            ),
-            changes_made=[],
-            statistics={
-                "word_count": 0,
-                "keyword_frequency": _count_keyword_frequency(post_data.get("content", ""), keyword),
-                "images_missing_alt": _count_images_missing_alt(post_data.get("content", "")),
-            },
-            meta_updates=None,
-            status="no_action",
-        )
-        db.add(record)
-        db.commit()
-        db.refresh(record)
-        return record
+    if raw_word_count < 30 and post_data.get("link"):
+        try:
+            rendered_resp = httpx.get(
+                post_data["link"], follow_redirects=True, timeout=10,
+                headers={"User-Agent": "Mozilla/5.0 SEO-OS/1.0"},
+            )
+            if rendered_resp.is_success:
+                rendered_html = rendered_resp.text
+                rendered_builder = _detect_builder(rendered_html)
+                builder_cfg = next((b for b in _get_builders() if b["name"] == rendered_builder), {})
+                if not builder_cfg.get("content_editable", True):
+                    # Builder detected in rendered HTML — update profile accordingly
+                    profile["builder"] = rendered_builder
+                    profile["content_editable"] = False
+                    profile["can_improve"] = profile["meta_editable"]
+                    if not profile["can_improve"]:
+                        profile["blocked_reason"] = (
+                            f"{rendered_builder.title()} page builder detected — content editing is not "
+                            "supported. Install Yoast SEO or RankMath to enable meta updates."
+                        )
+        except Exception:
+            pass  # fall through to normal handling
 
     # Pre-flight: nothing can be done — return immediately at zero AI cost
     if not profile["can_improve"]:
