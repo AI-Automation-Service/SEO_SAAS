@@ -48,6 +48,24 @@ class WordPressAdapter(CMSAdapter):
             )
         return response
 
+    def _extract_seo_meta(self, data: dict) -> tuple[str, str]:
+        """Extract current SEO title and description from Yoast or RankMath response data."""
+        yoast_json = data.get("yoast_head_json") or {}
+        meta = data.get("meta") or {}
+        title = (
+            yoast_json.get("title")
+            or meta.get("_yoast_wpseo_title")
+            or meta.get("rank_math_title")
+            or ""
+        )
+        description = (
+            yoast_json.get("description")
+            or meta.get("_yoast_wpseo_metadesc")
+            or meta.get("rank_math_description")
+            or ""
+        )
+        return str(title), str(description)
+
     def test_connection(self) -> bool:
         self._request("GET", "/users/me")
         return True
@@ -102,6 +120,8 @@ class WordPressAdapter(CMSAdapter):
     def get_post(self, post_id: int) -> dict:
         response = self._request("GET", f"/posts/{post_id}", params={"context": "edit"})
         data = response.json()
+        meta = data.get("meta") or {}
+        current_meta_title, current_meta_description = self._extract_seo_meta(data)
         return {
             "id": data["id"],
             "title": data["title"]["raw"],
@@ -110,12 +130,16 @@ class WordPressAdapter(CMSAdapter):
             "slug": data["slug"],
             "type": "post",
             "has_yoast": "yoast_head" in data,
-            "has_rankmath": bool(data.get("meta", {}).get("rank_math_title")),
+            "has_rankmath": bool(meta.get("rank_math_title") or meta.get("rank_math_description")),
+            "current_meta_title": current_meta_title,
+            "current_meta_description": current_meta_description,
         }
 
     def get_page(self, page_id: int) -> dict:
         response = self._request("GET", f"/pages/{page_id}", params={"context": "edit"})
         data = response.json()
+        meta = data.get("meta") or {}
+        current_meta_title, current_meta_description = self._extract_seo_meta(data)
         return {
             "id": data["id"],
             "title": data["title"]["raw"],
@@ -124,13 +148,15 @@ class WordPressAdapter(CMSAdapter):
             "slug": data["slug"],
             "type": "page",
             "has_yoast": "yoast_head" in data,
-            "has_rankmath": bool(data.get("meta", {}).get("rank_math_title")),
+            "has_rankmath": bool(meta.get("rank_math_title") or meta.get("rank_math_description")),
+            "current_meta_title": current_meta_title,
+            "current_meta_description": current_meta_description,
         }
 
     def find_post_by_url(self, url: str) -> dict | None:
         slug = urlparse(url).path.rstrip("/").split("/")[-1]
         if not slug:
-            # Homepage URL — fetch whichever page WordPress set as the front page
+            # Homepage — fetch whichever page WordPress set as the front page
             try:
                 settings = self._request("GET", "/settings").json()
                 page_id = settings.get("page_on_front")
@@ -142,20 +168,28 @@ class WordPressAdapter(CMSAdapter):
         for content_type in ("posts", "pages"):
             resp = self._request(
                 "GET", f"/{content_type}",
-                params={"slug": slug, "context": "edit", "_fields": "id,title,content,link,slug,meta,yoast_head"},
+                params={
+                    "slug": slug,
+                    "context": "edit",
+                    "_fields": "id,title,content,link,slug,meta,yoast_head,yoast_head_json",
+                },
             )
             results = resp.json()
             if results:
                 data = results[0]
+                meta = data.get("meta") or {}
+                current_meta_title, current_meta_description = self._extract_seo_meta(data)
                 return {
                     "id": data["id"],
                     "title": data["title"]["raw"],
                     "content": data["content"]["raw"],
                     "link": data["link"],
                     "slug": data["slug"],
-                    "type": content_type.rstrip("s"),  # "posts" → "post", "pages" → "page"
+                    "type": content_type.rstrip("s"),
                     "has_yoast": "yoast_head" in data,
-                    "has_rankmath": bool(data.get("meta", {}).get("rank_math_title")),
+                    "has_rankmath": bool(meta.get("rank_math_title") or meta.get("rank_math_description")),
+                    "current_meta_title": current_meta_title,
+                    "current_meta_description": current_meta_description,
                 }
         return None
 
@@ -164,6 +198,31 @@ class WordPressAdapter(CMSAdapter):
 
     def update_page(self, page_id: int, new_content: str) -> None:
         self._request("PUT", f"/pages/{page_id}", json={"content": new_content})
+
+    def update_seo_meta(
+        self,
+        post_id: int,
+        post_type: str,
+        plugin: str,
+        title: str | None,
+        description: str | None,
+    ) -> None:
+        """Update Yoast or RankMath SEO meta fields via WordPress REST API."""
+        meta: dict = {}
+        if plugin == "yoast":
+            if title:
+                meta["_yoast_wpseo_title"] = title
+            if description:
+                meta["_yoast_wpseo_metadesc"] = description
+        elif plugin == "rankmath":
+            if title:
+                meta["rank_math_title"] = title
+            if description:
+                meta["rank_math_description"] = description
+        if not meta:
+            return
+        endpoint = f"/pages/{post_id}" if post_type == "page" else f"/posts/{post_id}"
+        self._request("POST", endpoint, json={"meta": meta})
 
     def get_sitemap_urls(self) -> list[str]:
         urls: list[str] = []

@@ -169,6 +169,12 @@ export interface PageStatistics {
   date_visible: boolean
 }
 
+export interface MetaUpdates {
+  plugin: 'yoast' | 'rankmath'
+  suggested_meta_title: string | null
+  suggested_meta_description: string | null
+}
+
 export interface PageChange {
   id: number
   cluster_name: string
@@ -178,6 +184,7 @@ export interface PageChange {
   change_summary: string
   changes_made: string[] | null
   statistics: PageStatistics | null
+  meta_updates: MetaUpdates | null
   original_content: string
   new_content: string
   status: PageChangeStatus

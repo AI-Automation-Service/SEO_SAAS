@@ -45,7 +45,65 @@ def _detect_builder(content: str) -> str:
         return "divi"
     if "data-elementor" in content:
         return "elementor"
+    if "[vc_row]" in content or "[vc_column]" in content:
+        return "wpbakery"
     return "classic"
+
+
+def _visible_word_count(html: str) -> int:
+    return len(re.sub(r'<[^>]+>', ' ', html).split())
+
+
+def _detect_page_profile(post_data: dict, is_hub: bool, hub_existing_url: str) -> dict:
+    """
+    Build a capability profile from the WordPress page data before running any agents.
+    Determines what the system can do for this specific page at zero AI cost.
+    """
+    is_homepage = is_hub and not urlparse(hub_existing_url).path.strip("/")
+    content = post_data.get("content", "")
+    word_count = _visible_word_count(content)
+    is_theme_controlled = is_homepage and word_count < 100
+
+    builder = _detect_builder(content)
+    content_editable = builder in ("gutenberg", "classic") and not is_theme_controlled
+
+    has_yoast = post_data.get("has_yoast", False)
+    has_rankmath = post_data.get("has_rankmath", False)
+    seo_plugin = "yoast" if has_yoast else ("rankmath" if has_rankmath else "none")
+    meta_editable = seo_plugin != "none"
+
+    can_improve = content_editable or meta_editable
+
+    blocked_reason: str | None = None
+    if not can_improve:
+        if builder in ("elementor", "divi", "wpbakery"):
+            blocked_reason = (
+                f"{builder.title()} page builder detected — content editing is not yet supported for this builder. "
+                f"No Yoast SEO or RankMath plugin was found either. "
+                f"Install Yoast SEO or RankMath to enable automatic SEO title and description updates."
+            )
+        elif is_theme_controlled:
+            blocked_reason = (
+                "This homepage content is managed by your theme template — "
+                "post_content edits are not rendered on the frontend. "
+                "No Yoast SEO or RankMath plugin was found. "
+                "Install Yoast SEO or RankMath to enable automatic SEO title and description updates."
+            )
+        else:
+            blocked_reason = (
+                "No improvements possible: page content is not editable and no SEO plugin (Yoast/RankMath) is active."
+            )
+
+    return {
+        "seo_plugin": seo_plugin,
+        "builder": builder,
+        "is_homepage": is_homepage,
+        "is_theme_controlled": is_theme_controlled,
+        "content_editable": content_editable,
+        "meta_editable": meta_editable,
+        "can_improve": can_improve,
+        "blocked_reason": blocked_reason,
+    }
 
 
 def _wp_push(wp: WordPressAdapter, record: PageChange, content: str) -> None:
@@ -64,10 +122,6 @@ def _change_history_block(history: list[PageChange]) -> str:
     return "\n".join(lines)
 
 
-def _visible_word_count(html: str) -> int:
-    return len(re.sub(r'<[^>]+>', ' ', html).split())
-
-
 def _run_page_pipeline(
     keyword: str,
     secondary_keywords: str,
@@ -83,11 +137,11 @@ def _run_page_pipeline(
     is_hub: bool = False,
     hub_existing_url: str = "",
 ) -> PageChange:
-    is_homepage = is_hub and not urlparse(hub_existing_url).path.strip("/")
+    profile = _detect_page_profile(post_data, is_hub, hub_existing_url)
     current_date = datetime.utcnow().strftime("%B %Y")
 
-    # Homepage with very low word count = theme-controlled, post_content is ignored by frontend
-    if is_homepage and _visible_word_count(post_data["content"]) < 100:
+    # Pre-flight: nothing can be done — return immediately at zero AI cost
+    if not profile["can_improve"]:
         record = PageChange(
             user_id=user_id,
             project_name=project_name,
@@ -97,15 +151,10 @@ def _run_page_pipeline(
             wp_post_type=post_data["type"],
             original_content=post_data["content"],
             new_content=post_data["content"],
-            change_summary=(
-                "This homepage appears to be controlled by your theme template or page builder — "
-                "the post_content field is nearly empty, which means the visible front-end content "
-                "is rendered from template files rather than from post_content. "
-                "Automatic edits to post_content will not appear on the site. "
-                "Apply SEO improvements manually inside your WordPress editor or page builder (Elementor/Gutenberg blocks)."
-            ),
+            change_summary=profile["blocked_reason"] or "No improvements possible.",
             changes_made=[],
             statistics=None,
+            meta_updates=None,
             status="no_action",
         )
         db.add(record)
@@ -134,7 +183,7 @@ def _run_page_pipeline(
 {post_data['link']}
 
 ## is_homepage
-{str(is_homepage).lower()}
+{str(profile['is_homepage']).lower()}
 
 ## author
 {project.business_name or 'Site Owner'}
@@ -146,7 +195,7 @@ def _run_page_pipeline(
 {post_data['has_rankmath']}
 
 ## builder
-{_detect_builder(post_data['content'])}
+{profile['builder']}
 
 ## business_context
 {business_context}
@@ -167,13 +216,13 @@ def _run_page_pipeline(
         raise ValueError("Analyzer returned invalid JSON.")
 
     action_needed = analysis.get("action_needed", False)
-    summary = analysis.get("summary", "")
-    no_action_reason = analysis.get("no_action_reason")
 
     changes_made: list = []
     new_content: str = post_data["content"]
+    meta_updates: dict | None = None
 
-    if action_needed:
+    # Run editor when content needs improvement OR SEO plugin is present (for meta)
+    if action_needed or profile["meta_editable"]:
         # ── Step 2: Editor (gpt-4o) ───────────────────────────────────────────
         editor_msg = f"""## main_keyword
 {keyword}
@@ -182,7 +231,10 @@ def _run_page_pipeline(
 {pillar_url}
 
 ## is_homepage
-{str(is_homepage).lower()}
+{str(profile['is_homepage']).lower()}
+
+## is_theme_controlled
+{str(profile['is_theme_controlled']).lower()}
 
 ## author
 {project.business_name or 'Site Owner'}
@@ -197,7 +249,13 @@ def _run_page_pipeline(
 {post_data['has_rankmath']}
 
 ## builder
-{_detect_builder(post_data['content'])}
+{profile['builder']}
+
+## current_meta_title
+{post_data.get('current_meta_title', '')}
+
+## current_meta_description
+{post_data.get('current_meta_description', '')}
 
 ## business_context
 {business_context}
@@ -217,12 +275,49 @@ def _run_page_pipeline(
         except json.JSONDecodeError:
             raise ValueError("Editor returned invalid JSON.")
 
-        changes_made = [
-            f"{c['type']}: {c['description']}"
-            for c in edit_result.get("changes_made", [])
-            if isinstance(c, dict) and c.get("status") == "applied"
-        ]
-        new_content = edit_result.get("new_content") or post_data["content"]
+        # Content changes — only apply when content is actually editable
+        if profile["content_editable"] and action_needed:
+            changes_made = [
+                f"{c['type']}: {c['description']}"
+                for c in edit_result.get("changes_made", [])
+                if isinstance(c, dict) and c.get("status") == "applied"
+            ]
+            new_content = edit_result.get("new_content") or post_data["content"]
+
+        # Meta changes — only store when plugin is present
+        if profile["meta_editable"]:
+            meta_title = (edit_result.get("suggested_meta_title") or "").strip()
+            meta_description = (edit_result.get("suggested_meta_description") or "").strip()
+            if meta_title or meta_description:
+                meta_updates = {
+                    "plugin": profile["seo_plugin"],
+                    "suggested_meta_title": meta_title or None,
+                    "suggested_meta_description": meta_description or None,
+                }
+                plugin_label = "Yoast" if profile["seo_plugin"] == "yoast" else "RankMath"
+                changes_made.append(
+                    f"seo_meta: SEO title and description queued for {plugin_label} update."
+                )
+
+    # Build the human-readable summary
+    has_content_change = new_content != post_data["content"]
+    has_meta = bool(meta_updates)
+    plugin_label = "Yoast" if profile["seo_plugin"] == "yoast" else "RankMath"
+
+    if profile["is_theme_controlled"]:
+        change_summary = (
+            f"Homepage content is managed by your theme template — post_content edits are not visible on the frontend. "
+            f"SEO title and description will be updated via {plugin_label}."
+        )
+    elif not profile["content_editable"] and has_meta:
+        change_summary = (
+            f"{profile['builder'].title()} page detected — content editing is not yet supported for this builder. "
+            f"SEO title and description will be updated via {plugin_label}."
+        )
+    elif has_content_change or has_meta:
+        change_summary = analysis.get("summary", "")
+    else:
+        change_summary = analysis.get("no_action_reason") or "Page is already well-optimized — no changes needed."
 
     record = PageChange(
         user_id=user_id,
@@ -233,10 +328,11 @@ def _run_page_pipeline(
         wp_post_type=post_data["type"],
         original_content=post_data["content"],
         new_content=new_content,
-        change_summary=no_action_reason if not action_needed else summary,
+        change_summary=change_summary,
         changes_made=changes_made,
         statistics=analysis.get("statistics"),
-        status="no_action" if not action_needed else "pending",
+        meta_updates=meta_updates,
+        status="pending" if (has_content_change or has_meta) else "no_action",
     )
     db.add(record)
     db.commit()
@@ -259,6 +355,7 @@ class ChangeOut(BaseModel):
     change_summary: str
     changes_made: Optional[list[str]] = None
     statistics: Optional[dict] = None
+    meta_updates: Optional[dict] = None
     original_content: str
     new_content: str
     status: str
@@ -303,14 +400,6 @@ def analyze_cluster(
     if not hub_post_data:
         raise HTTPException(404, f"Page not found in WordPress for URL: {hub.existing_url}")
 
-    hub_builder = _detect_builder(hub_post_data["content"])
-    if hub_builder in ("elementor", "divi"):
-        raise HTTPException(
-            400,
-            f"The hub page uses {hub_builder.title()} page builder. "
-            "Automatic editing is not yet supported for this builder.",
-        )
-
     history = (
         db.query(PageChange)
         .filter(
@@ -351,19 +440,18 @@ def analyze_cluster(
     except (ValueError, Exception) as e:
         raise HTTPException(500, f"Hub analysis failed: {e}")
 
-    # ── Spokes (unique URLs only, skip if same page as hub, skip page builders)
+    # ── Spokes (unique URLs only) ─────────────────────────────────────────────
     seen_urls = {hub.existing_url}
     unique_spokes: list = []
     for r in rows:
         if not r.is_hub and r.existing_url and r.existing_url not in seen_urls:
             seen_urls.add(r.existing_url)
             unique_spokes.append(r)
+
     for spoke in unique_spokes[:5]:
         try:
             spoke_post_data = wp.find_post_by_url(spoke.existing_url)
             if not spoke_post_data:
-                continue
-            if _detect_builder(spoke_post_data["content"]) in ("elementor", "divi"):
                 continue
             spoke_secondary = ", ".join(r.keyword for r in rows if r.keyword != spoke.keyword) or "None"
             spoke_record = _run_page_pipeline(
@@ -406,10 +494,31 @@ def apply_change(
         raise HTTPException(400, f"Change is already '{record.status}'.")
 
     wp = _get_wp_adapter(context)
-    try:
-        _wp_push(wp, record, record.new_content)
-    except IntegrationError as e:
-        raise HTTPException(502, f"WordPress error: {e}")
+    content_changed = record.original_content != record.new_content
+
+    # Push content only if it actually changed
+    if content_changed:
+        try:
+            _wp_push(wp, record, record.new_content)
+        except IntegrationError as e:
+            raise HTTPException(502, f"WordPress content update error: {e}")
+
+    # Push SEO meta via Yoast or RankMath if present
+    if record.meta_updates:
+        mu = record.meta_updates
+        try:
+            wp.update_seo_meta(
+                record.wp_post_id,
+                record.wp_post_type,
+                mu["plugin"],
+                mu.get("suggested_meta_title"),
+                mu.get("suggested_meta_description"),
+            )
+        except IntegrationError as e:
+            if not content_changed:
+                # Meta-only change — surface the error
+                raise HTTPException(502, f"SEO meta update error: {e}")
+            # Content already pushed — meta failure is non-fatal
 
     record.status = "approved"
     record.approved_at = datetime.utcnow()
@@ -436,10 +545,12 @@ def rollback_change(
         raise HTTPException(400, "Only approved changes can be rolled back.")
 
     wp = _get_wp_adapter(context)
-    try:
-        _wp_push(wp, record, record.original_content)
-    except IntegrationError as e:
-        raise HTTPException(502, f"WordPress error: {e}")
+    # Rollback content only if it was changed
+    if record.original_content != record.new_content:
+        try:
+            _wp_push(wp, record, record.original_content)
+        except IntegrationError as e:
+            raise HTTPException(502, f"WordPress rollback error: {e}")
 
     record.status = "rolled_back"
     db.commit()

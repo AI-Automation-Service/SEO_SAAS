@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { keywordsApi, strategyApi, improveApi, getErrorMessage } from '@/api/client'
-import type { Keyword, KeywordStatus, KeywordType, FunnelStage, PageChange, PageStatistics } from '@/types/api'
+import type { Keyword, KeywordStatus, KeywordType, FunnelStage, PageChange, PageStatistics, MetaUpdates } from '@/types/api'
 import { cn } from '@/lib/utils'
 
 // ── Tooltip ───────────────────────────────────────────────────────────────────
@@ -1142,10 +1142,39 @@ function PageChangeCard({
           </div>
         )}
 
-        {/* Diff */}
-        {change.status === 'pending' && (
+        {/* Meta preview */}
+        {change.status === 'pending' && change.meta_updates && (
           <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Preview</p>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+              SEO Meta · {change.meta_updates.plugin === 'yoast' ? 'Yoast SEO' : 'RankMath'}
+            </p>
+            <div className="space-y-2">
+              {change.meta_updates.suggested_meta_title && (
+                <div className="bg-blue-50 border border-blue-100 rounded-lg p-3">
+                  <p className="text-[10px] font-semibold text-blue-400 uppercase tracking-wide mb-1">SEO Title</p>
+                  <p className="text-xs text-slate-700 font-medium">{change.meta_updates.suggested_meta_title}</p>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    {change.meta_updates.suggested_meta_title.length}/60 chars
+                  </p>
+                </div>
+              )}
+              {change.meta_updates.suggested_meta_description && (
+                <div className="bg-blue-50 border border-blue-100 rounded-lg p-3">
+                  <p className="text-[10px] font-semibold text-blue-400 uppercase tracking-wide mb-1">Meta Description</p>
+                  <p className="text-xs text-slate-700">{change.meta_updates.suggested_meta_description}</p>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    {change.meta_updates.suggested_meta_description.length}/155 chars
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Content diff — only when content actually changed */}
+        {change.status === 'pending' && change.original_content !== change.new_content && (
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Content Preview</p>
             <ImprovePanelDiff original={change.original_content} updated={change.new_content} />
           </div>
         )}
@@ -1160,7 +1189,11 @@ function PageChangeCard({
               className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 bg-emerald-600 text-white text-xs rounded-lg hover:bg-emerald-700 disabled:opacity-50 cursor-pointer transition-colors"
             >
               {applyMut.isPending ? <RefreshCw size={12} className="animate-spin" /> : <CheckCircle size={12} />}
-              Approve & Push to WordPress
+              {change.original_content !== change.new_content && change.meta_updates
+                ? 'Approve & Push Content + Meta'
+                : change.meta_updates
+                  ? 'Approve & Push SEO Meta'
+                  : 'Approve & Push to WordPress'}
             </button>
           </div>
         )}
