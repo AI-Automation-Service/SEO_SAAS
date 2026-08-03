@@ -242,6 +242,27 @@ class WordPressAdapter(CMSAdapter):
         endpoint = f"/pages/{post_id}" if post_type == "page" else f"/posts/{post_id}"
         self._request("PATCH", endpoint, json={"meta": meta})
 
+    def find_url_by_slug(self, slug: str) -> str | None:
+        """
+        Return the published live URL for a slug across posts and pages.
+        Returns None if not found. Does not raise on empty result.
+        Used by the broken-link scanner to find replacements for internal 404s.
+        """
+        if not slug:
+            return None
+        for content_type in ("posts", "pages"):
+            try:
+                resp = self._request(
+                    "GET", f"/{content_type}",
+                    params={"slug": slug, "_fields": "link", "status": "publish"},
+                )
+                results = resp.json()
+                if results:
+                    return results[0]["link"]
+            except IntegrationError:
+                pass
+        return None
+
     def get_sitemap_urls(self) -> list[str]:
         urls: list[str] = []
         for content_type in ("posts", "pages"):

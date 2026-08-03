@@ -232,13 +232,80 @@ def _knowledge_block(db: Session, user_id: int, project_name: str) -> str:
 
 
 _WP_COMMENT_RE = re.compile(r'<!--\s*/?wp:[^>]*?-->')
-_HTML_ATTR_RE = re.compile(r'\s+(?:class|style|data-[a-zA-Z0-9_-]+)="[^"]*"')
+_HTML_ATTR_RE  = re.compile(r'\s+(?:class|style|data-[a-zA-Z0-9_-]+)="[^"]*"')
+_IMG_TAG_RE    = re.compile(r'<img[^>]*>', re.IGNORECASE)
+_ALT_ATTR_RE   = re.compile(r'\balt\s*=\s*["\']([^"\']*)["\']', re.IGNORECASE)
+_HREF_RE       = re.compile(r'''href\s*=\s*["']([^"']+)["']''', re.IGNORECASE)
 
 
 def _strip_html_for_analysis(html: str) -> str:
     html = _WP_COMMENT_RE.sub('', html)
     html = _HTML_ATTR_RE.sub('', html)
     return html
+
+
+# ── Snapshot helpers (Python-computed, zero AI cost) ──────────────────────────
+
+def _count_keyword_frequency(html: str, keyword: str) -> int:
+    """Count how many times keyword appears in visible text (case-insensitive)."""
+    if not keyword:
+        return 0
+    text = re.sub(r'<[^>]+>', ' ', html).lower()
+    return text.count(keyword.lower())
+
+
+def _count_images_missing_alt(html: str) -> int:
+    """Count <img> tags with no alt attribute or an empty alt value."""
+    missing = 0
+    for m in _IMG_TAG_RE.finditer(html):
+        alt = _ALT_ATTR_RE.search(m.group())
+        if not alt or not alt.group(1).strip():
+            missing += 1
+    return missing
+
+
+# ── Link-scan helpers ─────────────────────────────────────────────────────────
+
+def _extract_links(html: str, page_url: str) -> list[dict]:
+    """Return unique hrefs from content, each tagged as internal or external."""
+    base = urlparse(page_url)
+    seen: set[str] = set()
+    links: list[dict] = []
+    for m in _HREF_RE.finditer(html):
+        href = m.group(1).strip()
+        if not href or href.startswith('#'):
+            continue
+        parsed = urlparse(href)
+        if parsed.scheme and parsed.scheme not in ("http", "https"):
+            continue
+        if not parsed.scheme:
+            # root-relative → absolutise
+            href = f"{base.scheme}://{base.netloc}/{href.lstrip('/')}"
+            parsed = urlparse(href)
+        if href in seen:
+            continue
+        seen.add(href)
+        is_internal = parsed.netloc == base.netloc
+        links.append({"url": href, "type": "internal" if is_internal else "external"})
+    return links
+
+
+def _check_link_status(url: str) -> int:
+    """
+    HTTP HEAD check. Falls back to GET on 405.
+    Returns status code, 0 for timeout, -1 for connection error.
+    """
+    try:
+        resp = httpx.head(url, follow_redirects=True, timeout=4,
+                          headers={"User-Agent": "SEO-OS/1.0"})
+        if resp.status_code == 405:
+            resp = httpx.get(url, follow_redirects=True, timeout=4,
+                             headers={"User-Agent": "SEO-OS/1.0"})
+        return resp.status_code
+    except httpx.TimeoutException:
+        return 0
+    except Exception:
+        return -1
 
 
 def _run_meta_only(
@@ -322,7 +389,10 @@ def _run_meta_only(
         new_content=post_data["content"],
         change_summary=change_summary,
         changes_made=changes_made,
-        statistics=None,
+        statistics={
+            "keyword_frequency": _count_keyword_frequency(post_data.get("content", ""), keyword),
+            "images_missing_alt": _count_images_missing_alt(post_data.get("content", "")),
+        },
         meta_updates=meta_updates,
         status="pending" if meta_updates else "no_action",
     )
@@ -438,6 +508,11 @@ def _run_page_pipeline(
 
     action_needed = analysis.get("action_needed", False)
 
+    py_stats = {
+        "keyword_frequency": _count_keyword_frequency(post_data["content"], keyword),
+        "images_missing_alt": _count_images_missing_alt(post_data["content"]),
+    }
+
     changes_made: list[str] = []
     new_content: str = post_data["content"]
     meta_updates: dict | None = None
@@ -546,7 +621,7 @@ def _run_page_pipeline(
         new_content=new_content,
         change_summary=change_summary,
         changes_made=changes_made,
-        statistics=analysis.get("statistics"),
+        statistics={**(analysis.get("statistics") or {}), **py_stats},
         meta_updates=meta_updates,
         status="pending" if (has_content_change or has_meta) else "no_action",
     )
@@ -916,9 +991,176 @@ def cluster_status(
     )
 
 
+class ScanLinksRequest(BaseModel):
+    cluster_name: str
+    auto_fix: bool = False
+
+
+class BrokenLinkOut(BaseModel):
+    url: str
+    type: str
+    status_code: int
+    suggested_fix: Optional[str] = None
+
+
+class ScanLinksOut(BaseModel):
+    page_url: str
+    wp_post_id: int
+    total_links: int
+    broken_links: list[BrokenLinkOut]
+    auto_fixed: list[dict]
+    report: str
+    fix_change_id: Optional[int] = None
+
+
 class PatchMetaRequest(BaseModel):
     suggested_meta_title: Optional[str] = None
     suggested_meta_description: Optional[str] = None
+
+
+@router.post("/scan-links", response_model=ScanLinksOut)
+def scan_links(
+    body: ScanLinksRequest,
+    context: ProjectContext = Depends(get_project_context),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Scan the cluster hub page for broken links.
+    Checks up to 30 internal + 10 external links.
+    With auto_fix=true, internal 404s with a found replacement are queued as a
+    pending PageChange (same approval flow as content improvements).
+    """
+    last_change = (
+        db.query(PageChange)
+        .filter(
+            PageChange.user_id == current_user.id,
+            PageChange.project_name == context.name,
+            PageChange.cluster_name == body.cluster_name,
+            PageChange.status.in_(["pending", "approved"]),
+        )
+        .order_by(PageChange.created_at.desc())
+        .first()
+    )
+    if not last_change:
+        raise HTTPException(
+            400,
+            "No analysis found for this cluster. Run Analyze & Suggest first.",
+        )
+
+    wp = _get_wp_adapter(context)
+    try:
+        if last_change.wp_post_type == "page":
+            post_data = wp.get_page(last_change.wp_post_id)
+        else:
+            post_data = wp.get_post(last_change.wp_post_id)
+    except IntegrationError as e:
+        raise HTTPException(502, f"WordPress error fetching page: {e}")
+
+    content  = post_data["content"]
+    page_url = post_data["link"]
+    all_links = _extract_links(content, page_url)
+
+    internal_links = [l for l in all_links if l["type"] == "internal"][:30]
+    external_links = [l for l in all_links if l["type"] == "external"][:10]
+    links_to_check = internal_links + external_links
+
+    broken: list[BrokenLinkOut] = []
+    for link in links_to_check:
+        status = _check_link_status(link["url"])
+        if status in (404, 410):
+            fix = None
+            if link["type"] == "internal":
+                slug = urlparse(link["url"]).path.rstrip("/").split("/")[-1]
+                try:
+                    fix = wp.find_url_by_slug(slug)
+                except IntegrationError:
+                    pass
+            broken.append(BrokenLinkOut(
+                url=link["url"],
+                type=link["type"],
+                status_code=status,
+                suggested_fix=fix,
+            ))
+
+    # Auto-fix: replace broken internal hrefs that have a known replacement.
+    # Creates a pending PageChange rather than pushing immediately.
+    auto_fixed: list[dict] = []
+    fix_change_id: int | None = None
+    if body.auto_fix and broken:
+        new_content = content
+        for b in broken:
+            if b.type == "internal" and b.suggested_fix:
+                for q in ('"', "'"):
+                    old_token = f'href={q}{b.url}{q}'
+                    new_token = f'href={q}{b.suggested_fix}{q}'
+                    if old_token in new_content:
+                        new_content = new_content.replace(old_token, new_token)
+                        auto_fixed.append({"old_url": b.url, "new_url": b.suggested_fix})
+                        break
+
+        if new_content != content:
+            fix_record = PageChange(
+                user_id=current_user.id,
+                project_name=context.name,
+                cluster_name=body.cluster_name,
+                wp_post_id=post_data["id"],
+                wp_post_url=page_url,
+                wp_post_type=post_data["type"],
+                original_content=content,
+                new_content=new_content,
+                change_summary=f"Broken link fix: {len(auto_fixed)} internal link(s) updated.",
+                changes_made=[f"link_fix: {f['old_url']} → {f['new_url']}" for f in auto_fixed],
+                statistics=None,
+                meta_updates=None,
+                status="pending",
+            )
+            db.add(fix_record)
+            db.commit()
+            db.refresh(fix_record)
+            fix_change_id = fix_record.id
+
+    # seo-technical agent produces the impact report
+    openai_key = get_user_secret("openai", current_user.id, db)
+    if broken:
+        report_msg = f"""## Broken Links Scan
+
+Page: {page_url}
+Links checked: {len(links_to_check)} ({len(internal_links)} internal, {len(external_links)} external)
+Broken: {len(broken)}
+Auto-fixed in this run: {len(auto_fixed)}
+
+## Broken link details
+{json.dumps(
+    [{"url": b.url, "type": b.type, "status_code": b.status_code, "suggested_fix": b.suggested_fix}
+     for b in broken],
+    indent=2
+)}
+
+Provide:
+1. SEO impact — which broken links hurt rankings most (internal hub/pillar links are highest priority)
+2. Fix priority (high / medium / low) for each broken link
+3. Overall link health summary in 2-3 sentences
+"""
+        report = SkillAgent("seo-technical", openai_key, model="gpt-4o-mini").run(
+            report_msg, timeout=60
+        )
+    else:
+        report = (
+            f"No broken links found. "
+            f"{len(links_to_check)} link(s) checked "
+            f"({len(internal_links)} internal, {len(external_links)} external) — all returned valid responses."
+        )
+
+    return ScanLinksOut(
+        page_url=page_url,
+        wp_post_id=post_data["id"],
+        total_links=len(all_links),
+        broken_links=broken,
+        auto_fixed=auto_fixed,
+        report=report,
+        fix_change_id=fix_change_id,
+    )
 
 
 @router.patch("/patch/{change_id}", response_model=ChangeOut)
