@@ -214,6 +214,8 @@ def _run_meta_only(
     if meta_title or meta_description:
         meta_updates = {
             "plugin": profile["seo_plugin"],
+            "original_meta_title": post_data.get("current_meta_title") or None,
+            "original_meta_description": post_data.get("current_meta_description") or None,
             "suggested_meta_title": meta_title or None,
             "suggested_meta_description": meta_description or None,
         }
@@ -431,6 +433,8 @@ def _run_page_pipeline(
             if meta_title or meta_description:
                 meta_updates = {
                     "plugin": profile["seo_plugin"],
+                    "original_meta_title": post_data.get("current_meta_title") or None,
+                    "original_meta_description": post_data.get("current_meta_description") or None,
                     "suggested_meta_title": meta_title or None,
                     "suggested_meta_description": meta_description or None,
                 }
@@ -681,12 +685,29 @@ def rollback_change(
         raise HTTPException(400, "Only approved changes can be rolled back.")
 
     wp = _get_wp_adapter(context)
-    # Rollback content only if it was changed
+
+    # Rollback content if it was changed
     if record.original_content != record.new_content:
         try:
             _wp_push(wp, record, record.original_content)
         except IntegrationError as e:
             raise HTTPException(502, f"WordPress rollback error: {e}")
+
+    # Rollback meta if it was changed
+    if record.meta_updates:
+        mu = record.meta_updates
+        orig_title = mu.get("original_meta_title")
+        orig_description = mu.get("original_meta_description")
+        try:
+            wp.update_seo_meta(
+                record.wp_post_id,
+                record.wp_post_type,
+                mu["plugin"],
+                orig_title,
+                orig_description,
+            )
+        except IntegrationError as e:
+            raise HTTPException(502, f"SEO meta rollback error: {e}")
 
     record.status = "rolled_back"
     db.commit()
