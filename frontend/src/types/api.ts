@@ -159,14 +159,16 @@ export interface KeywordSummary {
 export type PageChangeStatus = 'pending' | 'approved' | 'rolled_back' | 'no_action'
 
 export interface PageStatistics {
-  word_count: number
-  h1_count: number
-  h2_count: number
-  internal_link_count: number
-  hub_link_count: number
-  has_article_schema: boolean
-  author_visible: boolean
-  date_visible: boolean
+  word_count?: number
+  h1_count?: number
+  h2_count?: number
+  internal_link_count?: number
+  hub_link_count?: number
+  has_article_schema?: boolean
+  author_visible?: boolean
+  date_visible?: boolean
+  keyword_frequency?: number
+  images_missing_alt?: number
 }
 
 export interface MetaUpdates {

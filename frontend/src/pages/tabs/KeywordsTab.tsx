@@ -998,16 +998,20 @@ function KeywordRow({
 // ── Page stats card ───────────────────────────────────────────────────────────
 
 function PageStatsCard({ stats }: { stats: PageStatistics }) {
-  const items: { label: string; value: string | number; ok: boolean }[] = [
-    { label: 'Words',         value: stats.word_count.toLocaleString(), ok: stats.word_count >= 300 },
-    { label: 'H1',            value: stats.h1_count,                    ok: stats.h1_count === 1 },
-    { label: 'H2s',           value: stats.h2_count,                    ok: stats.h2_count >= 2 },
-    { label: 'Body links',    value: stats.internal_link_count,         ok: stats.internal_link_count >= 1 },
-    { label: 'Hub links',     value: stats.hub_link_count,              ok: stats.hub_link_count >= 1 },
-    { label: 'Schema',        value: stats.has_article_schema ? 'Yes' : 'No', ok: stats.has_article_schema },
-    { label: 'Author',        value: stats.author_visible   ? 'Yes' : 'No',   ok: stats.author_visible },
-    { label: 'Date',          value: stats.date_visible     ? 'Yes' : 'No',   ok: stats.date_visible },
-  ]
+  const items = [
+    stats.word_count          != null && { label: 'Words',       value: stats.word_count.toLocaleString(),        ok: stats.word_count >= 300 },
+    stats.h1_count            != null && { label: 'H1',          value: stats.h1_count,                           ok: stats.h1_count === 1 },
+    stats.h2_count            != null && { label: 'H2s',         value: stats.h2_count,                           ok: stats.h2_count >= 2 },
+    stats.internal_link_count != null && { label: 'Body links',  value: stats.internal_link_count,                ok: stats.internal_link_count >= 1 },
+    stats.hub_link_count      != null && { label: 'Hub links',   value: stats.hub_link_count,                     ok: stats.hub_link_count >= 1 },
+    stats.has_article_schema  != null && { label: 'Schema',      value: stats.has_article_schema ? 'Yes' : 'No', ok: stats.has_article_schema },
+    stats.author_visible      != null && { label: 'Author',      value: stats.author_visible     ? 'Yes' : 'No', ok: stats.author_visible },
+    stats.date_visible        != null && { label: 'Date',        value: stats.date_visible       ? 'Yes' : 'No', ok: stats.date_visible },
+    stats.keyword_frequency   != null && { label: 'Keyword',     value: `${stats.keyword_frequency}×`,           ok: stats.keyword_frequency >= 2 },
+    stats.images_missing_alt  != null && { label: 'Alt missing', value: stats.images_missing_alt,                ok: stats.images_missing_alt === 0 },
+  ].filter(Boolean) as { label: string; value: string | number; ok: boolean }[]
+
+  if (items.length === 0) return null
   return (
     <div>
       <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Page Snapshot</p>
