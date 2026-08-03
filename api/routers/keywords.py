@@ -472,51 +472,23 @@ def _site_url_samples(db, user_id: int, project_name: str) -> str:
 
 
 _CLUSTER_USER_MSG = """\
---------------------------------------------------
-OPTIONAL BUSINESS CONTEXT
---------------------------------------------------
-
-If business context is provided, use it ONLY to improve semantic grouping and URL suggestions.
-
+## business_context
 <<BUSINESS_CONTEXT>>
 
-Ignore this section if not provided.
-
---------------------------------------------------
-TASK
---------------------------------------------------
-
-Cluster the provided keywords into logical semantic topic groups.
-
-Each keyword may include SEO performance signals.
-
-Available signals:
-
-- clicks = Google Search Console clicks (last 90 days)
-- impr = Google Search Console impressions
-- pos = Average Google ranking position
-- ctr = Click Through Rate
-- vol = Estimated monthly search volume
-- status: quick_win / opportunity / covered / gap
-- page = Existing page URL currently ranking for this keyword
-
-Missing signals are allowed. Never invent missing values. Use only available information.
-
---------------------------------------------------
-INPUT
---------------------------------------------------
-
+## site_url_pattern
 <<SITE_URL_PATTERN>>
 
-Keywords:
+## keyword_signals
+clicks = GSC clicks (last 90 days) | impr = GSC impressions | pos = average position
+ctr = click-through rate | vol = monthly search volume | status = quick_win/opportunity/covered/gap
+page = existing URL currently ranking for this keyword
+Missing signals are allowed — never invent values.
 
+## keywords
 <<KEYWORDS>>
 
---------------------------------------------------
-OUTPUT FORMAT
---------------------------------------------------
-
-Return ONLY this JSON structure:
+## output_format
+Return ONLY this JSON — no extra fields, no explanations:
 
 {
   "clusters": [
@@ -543,134 +515,13 @@ Return ONLY this JSON structure:
   ]
 }
 
-Return no additional fields. Return no explanations.
-
---------------------------------------------------
-CLUSTERING RULES
---------------------------------------------------
-
-Priority 1
-Keywords that already share the SAME page URL MUST belong to the SAME cluster.
-Never separate them.
-
-Priority 2
-If a keyword has a UNIQUE page URL that no other keyword shares,
-it becomes its own cluster.
-
-Priority 3
-Group all remaining keywords by semantic meaning.
-Group synonyms, close variants and highly related search intents together.
-Do not group unrelated search intent.
-
---------------------------------------------------
-HOMEPAGE EXCEPTION
---------------------------------------------------
-
-If page="/", do NOT automatically force keywords into the same cluster.
-Treat homepage keywords using semantic similarity.
-Only group homepage keywords together if they clearly represent the same topic.
-
---------------------------------------------------
-HUB SELECTION
---------------------------------------------------
-
-Every cluster MUST contain exactly ONE hub keyword (is_hub: true).
-The hub_keyword in the clusters array must match the is_hub keyword in the keywords array.
-
-Choose the hub using this priority:
-
-Priority 1 - Highest impressions (impr)
-Priority 2 - Highest search volume (vol)
-Priority 3 - Best ranking position (lowest pos number)
-Priority 4 - Shortest and broadest keyword
-
---------------------------------------------------
-SEARCH INTENT
---------------------------------------------------
-
-Choose exactly one:
-
-informational - user wants information or education
-commercial - user is comparing products, services or providers
-transactional - user intends to buy, book, hire or contact
-navigational - user wants a specific company, brand or webpage
-
-Never leave intent empty.
-
---------------------------------------------------
-FUNNEL STAGE
---------------------------------------------------
-
-Choose exactly one:
-
-tofu - general educational searches
-mofu - comparison or evaluation
-bofu - purchase, booking or contact intent
-
---------------------------------------------------
-CLUSTER NAME
---------------------------------------------------
-
-2-4 words. Human readable. Title Case. Describes the shared topic.
-
---------------------------------------------------
-CLUSTER ID
---------------------------------------------------
-
-Machine-readable version of cluster name.
-lowercase, hyphen-separated, letters and numbers only.
-Example: "AI Consulting" -> "ai-consulting"
-
---------------------------------------------------
-SUGGESTED URL
---------------------------------------------------
-
-Generate ONE canonical URL per cluster.
-All keywords in the same cluster MUST share the SAME suggested_url.
-
-Analyze the existing page URLs provided to understand this site's URL structure.
-Follow the same pattern as the existing pages.
-If no clear structure exists, use /slug format.
-
-Rules: lowercase, hyphen-separated, concise, no trailing slash.
-Never generate duplicate URLs for different clusters.
-If an existing page already represents the cluster, reuse that URL.
-
---------------------------------------------------
-KEYWORD FIELD RULES
---------------------------------------------------
-
-The keyword field MUST contain ONLY the original keyword text.
-Never modify spelling, rewrite, singularize, pluralize, remove or add words.
-It must exactly match the input.
-
---------------------------------------------------
-CONFIDENCE
---------------------------------------------------
-
-high - clear semantic or existing page relationship
-medium - reasonable relationship but some ambiguity
-low - weak relationship or insufficient signals
-
---------------------------------------------------
-VALIDATION
---------------------------------------------------
-
-Before returning the JSON verify:
-
+Validation before output:
 - Every input keyword appears exactly once
-- No keyword is missing
-- No duplicate keywords exist
 - Every cluster has exactly one hub (is_hub: true)
 - hub_keyword in clusters array matches the is_hub keyword in keywords array
-- Every keyword has: cluster, cluster_id, is_hub, intent, funnel_stage, suggested_url, confidence
-- Every cluster has: cluster, cluster_id, hub_keyword, intent, funnel_stage, suggested_url
 - All keywords in the same cluster share the same cluster_id and suggested_url
-- JSON is valid
-
-If any validation fails, correct it before producing the final output.
-
-Return ONLY the JSON object."""
+- keyword field must exactly match the input — never rewrite or modify it
+- confidence: high = clear relationship, medium = some ambiguity, low = weak signals"""
 
 _BATCH_SIZE = 150
 
