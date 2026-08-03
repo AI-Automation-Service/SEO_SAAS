@@ -14,7 +14,8 @@ from sqlalchemy.orm import Session
 from agents.base import SkillAgent
 from api.dependencies import get_current_user, get_db, get_project_context, get_secret_manager
 from api.routers.api_keys import get_user_secret
-from core.db.models import Keyword, ProjectKnowledge, SitePage, User
+from api.utils.knowledge import fetch_knowledge
+from core.db.models import Keyword, SitePage, User
 from core.models.context import ProjectContext
 from core.secrets import SecretManager
 from integrations.base import IntegrationError
@@ -693,10 +694,7 @@ def run_cluster_agent(
         raise HTTPException(500, str(e))
 
     # Business context
-    kb = db.query(ProjectKnowledge).filter(
-        ProjectKnowledge.user_id == current_user.id,
-        ProjectKnowledge.project_name == context.name,
-    ).first()
+    kb = fetch_knowledge(db, current_user.id, context.name)
     if kb:
         parts = []
         if kb.about:             parts.append(f"Business: {kb.about.strip()[:300]}")

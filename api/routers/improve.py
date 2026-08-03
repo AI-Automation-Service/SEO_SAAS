@@ -11,7 +11,8 @@ from sqlalchemy.orm import Session
 from agents.base import SkillAgent
 from api.dependencies import get_current_user, get_db, get_project_context
 from api.routers.api_keys import get_user_secret
-from core.db.models import Keyword, PageChange, ProjectKnowledge, User
+from api.utils.knowledge import fetch_knowledge
+from core.db.models import Keyword, PageChange, User
 from core.models.context import ProjectContext
 from core.secrets import SecretManager
 from integrations.cms.wordpress import WordPressAdapter
@@ -123,14 +124,7 @@ def _change_history_block(history: list[PageChange]) -> str:
 
 
 def _knowledge_block(db: Session, user_id: int, project_name: str) -> str:
-    kb = (
-        db.query(ProjectKnowledge)
-        .filter(
-            ProjectKnowledge.user_id == user_id,
-            ProjectKnowledge.project_name == project_name,
-        )
-        .first()
-    )
+    kb = fetch_knowledge(db, user_id, project_name)
     if not kb:
         return ""
     parts = []
