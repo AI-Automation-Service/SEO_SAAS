@@ -640,19 +640,21 @@ def apply_change(
     # Push SEO meta via Yoast or RankMath if present
     if record.meta_updates:
         mu = record.meta_updates
+        raw_title = (mu.get("suggested_meta_title") or "").strip()
+        raw_description = (mu.get("suggested_meta_description") or "").strip()
+        # Hard-cap title at 60 chars (trim at last word boundary)
+        if len(raw_title) > 60:
+            raw_title = raw_title[:60].rsplit(" ", 1)[0].rstrip(" |—-")
         try:
             wp.update_seo_meta(
                 record.wp_post_id,
                 record.wp_post_type,
                 mu["plugin"],
-                mu.get("suggested_meta_title"),
-                mu.get("suggested_meta_description"),
+                raw_title or None,
+                raw_description or None,
             )
         except IntegrationError as e:
-            if not content_changed:
-                # Meta-only change — surface the error
-                raise HTTPException(502, f"SEO meta update error: {e}")
-            # Content already pushed — meta failure is non-fatal
+            raise HTTPException(502, f"SEO meta update error: {e}")
 
     record.status = "approved"
     record.approved_at = datetime.utcnow()

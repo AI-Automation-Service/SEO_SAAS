@@ -240,7 +240,7 @@ class WordPressAdapter(CMSAdapter):
         if not meta:
             return
         endpoint = f"/pages/{post_id}" if post_type == "page" else f"/posts/{post_id}"
-        self._request("POST", endpoint, json={"meta": meta})
+        self._request("PATCH", endpoint, json={"meta": meta})
 
     def get_sitemap_urls(self) -> list[str]:
         urls: list[str] = []
