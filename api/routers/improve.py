@@ -439,9 +439,11 @@ def _run_page_pipeline(
     profile = _detect_page_profile(post_data, is_hub, hub_existing_url)
     current_date = datetime.utcnow().strftime("%B %Y")
 
-    # Pre-flight: if post_content is very short, the page is likely built with Elementor
-    # or another builder that stores content outside post_content.
-    # Fetch the rendered public HTML to get accurate builder detection + word count.
+    # Two-pass builder detection:
+    # Pass 1 (already done in _detect_page_profile) reads post_content from the REST API.
+    # Pass 2 fetches the rendered public page when post_content is too short to be reliable
+    # (< 30 words). Elementor, SeedProd, and others store data outside post_content, so
+    # post_content is empty even though the live page has hundreds of words.
     raw_word_count = _visible_word_count(post_data.get("content", ""))
     if raw_word_count < 30 and post_data.get("link"):
         try:
@@ -454,7 +456,7 @@ def _run_page_pipeline(
                 rendered_builder = _detect_builder(rendered_html)
                 builder_cfg = next((b for b in _get_builders() if b["name"] == rendered_builder), {})
                 if not builder_cfg.get("content_editable", True):
-                    # Builder detected in rendered HTML — update profile accordingly
+                    # Known builder detected in rendered HTML — mark as non-editable
                     profile["builder"] = rendered_builder
                     profile["content_editable"] = False
                     profile["can_improve"] = profile["meta_editable"]
@@ -462,6 +464,18 @@ def _run_page_pipeline(
                         profile["blocked_reason"] = (
                             f"{rendered_builder.title()} page builder detected — content editing is not "
                             "supported. Install Yoast SEO or RankMath to enable meta updates."
+                        )
+                elif _visible_word_count(rendered_html) > 200:
+                    # Rendered page has substantial content but no known builder was identified.
+                    # Treat as unknown builder — safe default: do not touch post_content.
+                    profile["builder"] = "unknown-builder"
+                    profile["content_editable"] = False
+                    profile["can_improve"] = profile["meta_editable"]
+                    if not profile["can_improve"]:
+                        profile["blocked_reason"] = (
+                            "Page content appears to be managed by an unrecognised page builder "
+                            "(post_content is empty but the live page has content). "
+                            "Install Yoast SEO or RankMath to enable meta updates."
                         )
         except Exception:
             pass  # fall through to normal handling

@@ -85,15 +85,28 @@ Empty fields are omitted. If all fields are empty, the block is omitted entirely
 | Builder | content_editable | Detection signal |
 |---|---|---|
 | Gutenberg | Yes | `<!-- wp:` in post_content |
-| Elementor | No | `data-elementor` in post_content |
-| Divi | No | `[et_pb_` or `[divi_` in post_content |
-| WPBakery | No | `[vc_row]` or `[vc_column]` in post_content |
-| Bricks | No | `data-bricks` or `brxe-` in post_content |
-| Oxygen | No | `ct-section` or `oxy-` in post_content |
+| Elementor | No | `data-elementor-type` / `elementor elementor-` in **rendered HTML** |
+| Divi | No | `[et_pb_` in post_content OR `et_pb_section` in rendered HTML |
+| WPBakery | No | `[vc_row]` in post_content OR `wpb_wrapper` in rendered HTML |
+| Bricks | No | `data-bricks` / `brxe-` in post_content or rendered HTML |
+| Oxygen | No | `ct-section` / `oxy-` in post_content or rendered HTML |
+| Beaver Builder | No | `[fl_builder_` in post_content OR `fl-builder-content` in rendered HTML |
+| Brizy | No | `brz-` class prefix in rendered HTML |
+| Thrive Architect | No | `[tve_` in post_content OR `tve_editor_main_content` in rendered HTML |
+| Fusion Builder (Avada) | No | `[fusion_builder_` in post_content OR `fusion-builder-row` in rendered HTML |
+| SeedProd | No | `seedprod-` in rendered HTML |
+| Breakdance | No | `data-breakdance` / `bde-` in rendered HTML |
+| Zion Builder | No | `data-zionbuilder` / `zb-element` in rendered HTML |
 | Classic Editor | Yes | fallback — none of the above matched |
+| Unknown builder (safety net) | No | post_content < 30 words AND rendered page > 200 words AND no builder matched |
 | Theme-controlled homepage | No | `is_homepage=True` and `word_count < 100` (Python logic, not YAML) |
 
-Detection: `_detect_builder()` in `improve.py` iterates `config/builders.yaml` in order. `_detect_page_profile()` combines builder + SEO plugin detection into a `profile` dict before any AI call.
+**Two-pass detection** (both passes use `_detect_builder()` against `config/builders.yaml`):
+- **Pass 1** — `post_content` from REST API (`?context=edit`). Works for Gutenberg, Divi shortcodes, WPBakery shortcodes.
+- **Pass 2** — rendered public HTML (HTTP GET on the page URL). Fires only when `post_content < 30 words`. Catches Elementor (which stores data in `_elementor_data` meta, leaving `post_content` empty), Brizy, SeedProd, and others.
+- **Safety net** — if rendered HTML has > 200 words but no builder matched, treat as `unknown-builder` (non-editable) to avoid overwriting builder data.
+
+Detection: `_detect_builder()` in `improve.py` iterates `config/builders.yaml` in order. `_detect_page_profile()` + Pass 2 in `_run_page_pipeline()` combine into a final `profile` dict before any AI call.
 
 ---
 

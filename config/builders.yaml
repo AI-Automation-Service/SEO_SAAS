@@ -1,49 +1,142 @@
 # Builder detection configuration
 #
-# Each entry is checked in order against the page HTML.
-# The first match wins. The last entry (classic) is the fallback.
+# Each entry is checked in order. The first match wins.
+# The last entry (classic) is the fallback.
 #
-# content_editable: true  → SEO OS can rewrite the post_content directly
-# content_editable: false → content is owned by the builder; only meta can be updated
+# Detection happens in TWO passes (see improve.py:_detect_builder):
+#   Pass 1 — raw post_content from WordPress REST API (?context=edit)
+#   Pass 2 — rendered public HTML (fetched via HTTP when post_content < 30 words)
 #
-# To add a new builder: add an entry here. No Python change, no server restart needed.
-# Changes take effect within 5 minutes (cache TTL).
+# Signatures that only appear in raw content: shortcodes [vc_row], block comments <!-- wp: -->
+# Signatures that only appear in rendered HTML: data-elementor, fl-builder-content, brz-, etc.
+# Including both in `detects` is safe — string-contains search, no false positives.
+#
+# content_editable: true  → SEO OS can rewrite post_content via WordPress REST API
+# content_editable: false → content owned by the builder; only meta (title/description) can be updated
+#
+# To add a new builder: append one entry. No Python change. Cache TTL = 5 min.
 
 builders:
+
+  # ── Gutenberg (WordPress Block Editor) ───────────────────────────────────────
+  # Block markers appear in both raw and rendered content.
   - name: gutenberg
     detects:
       - "<!-- wp:"
     content_editable: true
 
+  # ── Elementor ────────────────────────────────────────────────────────────────
+  # Stores page data in _elementor_data post meta. post_content is usually empty.
+  # Detected from RENDERED HTML only.
   - name: elementor
     detects:
-      - "data-elementor"
+      - "data-elementor-type"
+      - "data-elementor-id"
+      - "elementor-widget-container"
+      - "elementor elementor-"
     content_editable: false
 
+  # ── Divi (Elegant Themes) ────────────────────────────────────────────────────
+  # Shortcodes visible in raw content. Rendered HTML uses et_pb_ class names.
   - name: divi
     detects:
       - "[et_pb_"
       - "[divi_"
+      - "et_pb_section"
+      - "et_pb_row"
     content_editable: false
 
+  # ── WPBakery (Visual Composer) ───────────────────────────────────────────────
+  # Shortcodes in raw; vc_ class names in rendered.
   - name: wpbakery
     detects:
       - "[vc_row]"
       - "[vc_column]"
+      - "vc_row vc_"
+      - "wpb_wrapper"
     content_editable: false
 
+  # ── Bricks Builder ───────────────────────────────────────────────────────────
+  # Detected from rendered HTML attributes and class prefixes.
   - name: bricks
     detects:
       - "data-bricks"
       - "brxe-"
+      - "bricks-layout"
     content_editable: false
 
+  # ── Oxygen Builder ───────────────────────────────────────────────────────────
   - name: oxygen
     detects:
       - "ct-section"
       - "oxy-"
+      - "oxygen-builder"
     content_editable: false
 
+  # ── Beaver Builder ───────────────────────────────────────────────────────────
+  # Shortcodes in raw; fl- class names in rendered.
+  - name: beaver-builder
+    detects:
+      - "[fl_builder_"
+      - "fl-builder-content"
+      - "fl-row fl-row-"
+      - "fl-col-content"
+    content_editable: false
+
+  # ── Brizy ────────────────────────────────────────────────────────────────────
+  # Detected from rendered HTML class prefix.
+  - name: brizy
+    detects:
+      - "brz-"
+      - "brz brz-"
+    content_editable: false
+
+  # ── Thrive Architect ─────────────────────────────────────────────────────────
+  # Shortcodes in raw; tve_ class names in rendered.
+  - name: thrive-architect
+    detects:
+      - "[tve_"
+      - "thrv_text_element"
+      - "tve_editor_main_content"
+      - "tve-leads-"
+    content_editable: false
+
+  # ── Fusion Builder (Avada theme) ─────────────────────────────────────────────
+  # Shortcodes in raw; fusion- class names in rendered.
+  - name: fusion-builder
+    detects:
+      - "[fusion_builder_"
+      - "fusion-builder-row"
+      - "fusion_builder_container"
+    content_editable: false
+
+  # ── SeedProd ─────────────────────────────────────────────────────────────────
+  # Landing page builder — stores content outside post_content.
+  - name: seedprod
+    detects:
+      - "seedprod-"
+      - "seedprod_page"
+      - "sp-page-builder"
+    content_editable: false
+
+  # ── Breakdance ───────────────────────────────────────────────────────────────
+  - name: breakdance
+    detects:
+      - "breakdance-"
+      - "bde-"
+      - "data-breakdance"
+    content_editable: false
+
+  # ── Zion Builder ─────────────────────────────────────────────────────────────
+  - name: zion-builder
+    detects:
+      - "data-zionbuilder"
+      - "zb-element"
+    content_editable: false
+
+  # ── Classic Editor (fallback) ─────────────────────────────────────────────────
+  # No signatures — matches everything that didn't match above.
+  # content_editable: true because post_content IS the page content for Classic pages.
   - name: classic
     detects: []
     fallback: true
