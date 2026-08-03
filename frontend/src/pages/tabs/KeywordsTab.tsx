@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { keywordsApi, strategyApi, improveApi, getErrorMessage } from '@/api/client'
-import type { Keyword, KeywordStatus, KeywordType, FunnelStage, PageChange, PageStatistics, MetaUpdates } from '@/types/api'
+import type { Keyword, KeywordStatus, KeywordType, FunnelStage, PageChange, PageStatistics } from '@/types/api'
 import { cn } from '@/lib/utils'
 
 // ── Tooltip ───────────────────────────────────────────────────────────────────
