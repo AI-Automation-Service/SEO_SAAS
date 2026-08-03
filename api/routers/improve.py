@@ -143,9 +143,13 @@ def _knowledge_block(db: Session, user_id: int, project_name: str) -> str:
     return "\n".join(parts) if parts else ""
 
 
+_WP_COMMENT_RE = re.compile(r'<!--\s*/?wp:[^>]*?-->')
+_HTML_ATTR_RE = re.compile(r'\s+(?:class|style|data-[a-zA-Z0-9_-]+)="[^"]*"')
+
+
 def _strip_html_for_analysis(html: str) -> str:
-    html = re.sub(r'<!--\s*/?wp:[^>]*?-->', '', html)
-    html = re.sub(r'\s+(?:class|style|data-[a-zA-Z0-9_-]+)="[^"]*"', '', html)
+    html = _WP_COMMENT_RE.sub('', html)
+    html = _HTML_ATTR_RE.sub('', html)
     return html
 
 
@@ -177,7 +181,7 @@ def _run_meta_only(
 {post_data.get('current_meta_description', '')}
 
 ## business_context
-{knowledge_block or project.business_name or 'Not specified'}
+{knowledge_block}
 """
     try:
         raw = SkillAgent("seo-meta", openai_key, model="gpt-4o-mini").run(
@@ -192,7 +196,7 @@ def _run_meta_only(
 
     plugin_label = "Yoast" if profile["seo_plugin"] == "yoast" else "RankMath"
     meta_updates = None
-    changes_made: list = []
+    changes_made: list[str] = []
 
     if meta_title or meta_description:
         meta_updates = {
@@ -340,7 +344,7 @@ def _run_page_pipeline(
 
     action_needed = analysis.get("action_needed", False)
 
-    changes_made: list = []
+    changes_made: list[str] = []
     new_content: str = post_data["content"]
     meta_updates: dict | None = None
 
@@ -425,19 +429,8 @@ def _run_page_pipeline(
     # Build the human-readable summary
     has_content_change = new_content != post_data["content"]
     has_meta = bool(meta_updates)
-    plugin_label = "Yoast" if profile["seo_plugin"] == "yoast" else "RankMath"
 
-    if profile["is_theme_controlled"]:
-        change_summary = (
-            f"Homepage content is managed by your theme template — post_content edits are not visible on the frontend. "
-            f"SEO title and description will be updated via {plugin_label}."
-        )
-    elif not profile["content_editable"] and has_meta:
-        change_summary = (
-            f"{profile['builder'].title()} page detected — content editing is not yet supported for this builder. "
-            f"SEO title and description will be updated via {plugin_label}."
-        )
-    elif has_content_change or has_meta:
+    if has_content_change or has_meta:
         change_summary = analysis.get("summary", "")
     else:
         change_summary = analysis.get("no_action_reason") or "Page is already well-optimized — no changes needed."
