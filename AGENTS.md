@@ -46,6 +46,8 @@ SEO OS is a multi-tenant SaaS that automates WordPress on-page SEO, keyword clus
 | Gutenberg or Classic, no SEO plugin | analyzer (mini) → editor (gpt-4o, content only, no meta) |
 | Builder/theme-controlled + Yoast/RankMath | **seo-meta (mini)**, NO HTML sent — zero content calls |
 | Builder/theme-controlled, no SEO plugin | Blocked — zero AI calls |
+| WordPress posts listing page + Yoast/RankMath | **seo-meta (mini)** — content is the WordPress Loop, not editable |
+| WordPress posts listing page, no SEO plugin | Blocked — zero AI calls |
 
 **Meta-only path** (Phase 3 optimization): When `not content_editable and meta_editable`, skip both analyzer and editor. Route to `_run_meta_only()` which calls `seo-meta` with keyword + business context + current meta — no HTML. Saves one gpt-4o call and one gpt-4o-mini call for every Elementor/Divi/theme page.
 
@@ -100,6 +102,7 @@ Empty fields are omitted. If all fields are empty, the block is omitted entirely
 | Classic Editor | Yes | fallback — none of the above matched |
 | Unknown builder (safety net) | No | post_content < 30 words AND rendered page > 200 words AND no builder matched |
 | Theme-controlled homepage | No | `is_homepage=True` and `word_count < 100` (Python logic, not YAML) |
+| WordPress posts listing page | No | `is_posts_page=True` from `find_post_by_url()` — page ID matches `page_for_posts` in `/wp/v2/settings` |
 
 **Two-pass detection** (both passes use `_detect_builder()` against `config/builders.yaml`):
 - **Pass 1** — `post_content` from REST API (`?context=edit`). Works for Gutenberg, Divi shortcodes, WPBakery shortcodes.

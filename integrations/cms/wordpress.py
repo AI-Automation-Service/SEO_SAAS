@@ -173,16 +173,23 @@ class WordPressAdapter(CMSAdapter):
 
     def find_post_by_url(self, url: str) -> dict | None:
         slug = urlparse(url).path.rstrip("/").split("/")[-1]
+
+        # Fetch reading settings once — used for both homepage and posts-page detection
+        page_on_front: int | None = None
+        page_for_posts: int | None = None
+        try:
+            settings = self._request("GET", "/settings").json()
+            page_on_front = settings.get("page_on_front") or None
+            page_for_posts = settings.get("page_for_posts") or None
+        except Exception:
+            pass
+
         if not slug:
             # Homepage — fetch whichever page WordPress set as the front page
-            try:
-                settings = self._request("GET", "/settings").json()
-                page_id = settings.get("page_on_front")
-                if page_id:
-                    return self.get_page(int(page_id))
-            except Exception:
-                pass
+            if page_on_front:
+                return self.get_page(int(page_on_front))
             return None
+
         for content_type in ("posts", "pages"):
             resp = self._request(
                 "GET", f"/{content_type}",
@@ -208,6 +215,10 @@ class WordPressAdapter(CMSAdapter):
                     "has_rankmath": "rank_math_title" in meta,
                     "current_meta_title": current_meta_title,
                     "current_meta_description": current_meta_description,
+                    # True when this page is configured as the WordPress blog listing
+                    # page (Settings → Reading → "Posts page"). Its post_content is
+                    # always empty — WordPress generates the listing via The Loop.
+                    "is_posts_page": bool(page_for_posts and data["id"] == int(page_for_posts)),
                 }
         return None
 
