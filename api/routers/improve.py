@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from agents.base import SkillAgent
 from api.dependencies import get_current_user, get_db, get_project_context
 from api.routers.api_keys import get_user_secret
-from core.db.models import Keyword, PageChange, User
+from core.db.models import Keyword, PageChange, ProjectKnowledge, User
 from core.models.context import ProjectContext
 from core.secrets import SecretManager
 from integrations.cms.wordpress import WordPressAdapter
@@ -122,6 +122,118 @@ def _change_history_block(history: list[PageChange]) -> str:
     return "\n".join(lines)
 
 
+def _knowledge_block(db: Session, user_id: int, project_name: str) -> str:
+    kb = (
+        db.query(ProjectKnowledge)
+        .filter(
+            ProjectKnowledge.user_id == user_id,
+            ProjectKnowledge.project_name == project_name,
+        )
+        .first()
+    )
+    if not kb:
+        return ""
+    parts = []
+    if kb.about:             parts.append(f"About: {kb.about.strip()}")
+    if kb.products_services: parts.append(f"Products/Services: {kb.products_services.strip()}")
+    if kb.target_audience:   parts.append(f"Target Audience: {kb.target_audience.strip()}")
+    if kb.brand_voice:       parts.append(f"Brand Voice: {kb.brand_voice.strip()}")
+    if kb.competitors_notes: parts.append(f"Competitors: {kb.competitors_notes.strip()}")
+    if kb.seo_context:       parts.append(f"SEO Context: {kb.seo_context.strip()}")
+    return "\n".join(parts) if parts else ""
+
+
+def _strip_html_for_analysis(html: str) -> str:
+    html = re.sub(r'<!--\s*/?wp:[^>]*?-->', '', html)
+    html = re.sub(r'\s+(?:class|style|data-[a-zA-Z0-9_-]+)="[^"]*"', '', html)
+    return html
+
+
+def _run_meta_only(
+    keyword: str,
+    post_data: dict,
+    profile: dict,
+    knowledge_block: str,
+    openai_key: str,
+    user_id: int,
+    project_name: str,
+    cluster_name: str,
+    project,
+    db: Session,
+) -> PageChange:
+    meta_msg = f"""## main_keyword
+{keyword}
+
+## page_title
+{post_data['title']}
+
+## is_homepage
+{str(profile['is_homepage']).lower()}
+
+## current_meta_title
+{post_data.get('current_meta_title', '')}
+
+## current_meta_description
+{post_data.get('current_meta_description', '')}
+
+## business_context
+{knowledge_block or project.business_name or 'Not specified'}
+"""
+    try:
+        raw = SkillAgent("seo-meta", openai_key, model="gpt-4o-mini").run(
+            meta_msg, timeout=60, json_mode=True
+        )
+        result = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"seo-meta agent returned invalid JSON: {e}")
+
+    meta_title = (result.get("suggested_meta_title") or "").strip()
+    meta_description = (result.get("suggested_meta_description") or "").strip()
+
+    plugin_label = "Yoast" if profile["seo_plugin"] == "yoast" else "RankMath"
+    meta_updates = None
+    changes_made: list = []
+
+    if meta_title or meta_description:
+        meta_updates = {
+            "plugin": profile["seo_plugin"],
+            "suggested_meta_title": meta_title or None,
+            "suggested_meta_description": meta_description or None,
+        }
+        changes_made.append(f"seo_meta: SEO title and description queued for {plugin_label} update.")
+
+    if profile["is_theme_controlled"]:
+        change_summary = (
+            f"Homepage content is managed by your theme template — post_content edits are not visible on the frontend. "
+            f"SEO title and description will be updated via {plugin_label}."
+        )
+    else:
+        change_summary = (
+            f"{profile['builder'].title()} page detected — content editing is not yet supported for this builder. "
+            f"SEO title and description will be updated via {plugin_label}."
+        )
+
+    record = PageChange(
+        user_id=user_id,
+        project_name=project_name,
+        cluster_name=cluster_name,
+        wp_post_id=post_data["id"],
+        wp_post_url=post_data["link"],
+        wp_post_type=post_data["type"],
+        original_content=post_data["content"],
+        new_content=post_data["content"],
+        change_summary=change_summary,
+        changes_made=changes_made,
+        statistics=None,
+        meta_updates=meta_updates,
+        status="pending" if meta_updates else "no_action",
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return record
+
+
 def _run_page_pipeline(
     keyword: str,
     secondary_keywords: str,
@@ -166,12 +278,19 @@ def _run_page_pipeline(
         db.refresh(record)
         return record
 
-    business_context = " | ".join(filter(None, [
+    knowledge_block = _knowledge_block(db, user_id, project_name) or " | ".join(filter(None, [
         project.business_name,
         project.business_type,
         project.tone_of_voice,
         project.target_audience,
     ])) or "Not specified"
+
+    # Meta-only path: builder/theme pages with a plugin skip analyzer + editor
+    if not profile["content_editable"] and profile["meta_editable"]:
+        return _run_meta_only(
+            keyword, post_data, profile, knowledge_block,
+            openai_key, user_id, project_name, cluster_name, project, db,
+        )
 
     # ── Step 1: Analyzer (gpt-4o-mini) ───────────────────────────────────────
     analyzer_msg = f"""## main_keyword
@@ -202,13 +321,13 @@ def _run_page_pipeline(
 {profile['builder']}
 
 ## business_context
-{business_context}
+{knowledge_block}
 
 ## change_history
 {_change_history_block(history)}
 
 ## html_content (Title: {post_data['title']})
-{post_data['content']}
+{_strip_html_for_analysis(post_data['content'])}
 """
 
     raw_analysis = SkillAgent("seo-analyzer", openai_key, model="gpt-4o-mini").run(
@@ -262,7 +381,7 @@ def _run_page_pipeline(
 {post_data.get('current_meta_description', '')}
 
 ## business_context
-{business_context}
+{knowledge_block}
 
 ## recommendations
 {json.dumps(analysis.get('recommendations', []), indent=2)}

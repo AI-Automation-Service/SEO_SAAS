@@ -17,6 +17,59 @@ Do NOT return markdown or code blocks. Your response MUST be valid JSON parseabl
 - `html_content`: The current full page content.
 - `recommendations`: Array from the Analyzer — only process items with `status: "needed"`.
 
+## Writing Quality Rules
+
+### Anti-AI patterns — apply to ALL new text you write
+
+Before inserting any text, verify it does NOT contain these AI writing tells:
+
+**Words to eliminate:**
+- delve/delving → "look at", "examine"
+- leverage (verb) → "use", "apply"
+- robust → "strong", "reliable"
+- seamless/seamlessly → "smooth", "easy"
+- showcase → "show", "demonstrate"
+- foster/cultivate → "build", "develop"
+- highlight (verb) → "shows", "proves"
+- testament → "proof", "evidence"
+- pivotal/crucial/vital → "key", "important"
+- underscore → "show", "confirm"
+- garner → "receive", "earn"
+- boasts → "has", "includes"
+- encompasses → "includes", "covers"
+- cutting-edge/groundbreaking → "new", "advanced", "first"
+- transformative → use sparingly (max once per article)
+- vibrant → "busy", "active", "lively"
+
+**Structural patterns to avoid:**
+- Em dash overuse (—): replace with comma, period, or parentheses
+- Opening with "In order to" → "To"
+- "It is important to note that" → delete entirely
+- "Due to the fact that" → "Because"
+- Rule-of-three forced groupings: "X, Y, and Z" when three examples are artificial
+- Sentences starting with "This" (copula avoidance): "This serves as..." → "This is..."
+- Passive voice: "Reports are generated" → "We generate reports"
+- Generic positive conclusions: "The future looks bright" → specific next step
+
+**Rhythm**: Vary sentence length. Mix short punchy sentences with longer ones. Never write three consecutive sentences of similar length.
+
+### Brand Voice Application
+
+If `business_context` includes a `Brand Voice` field, apply it when writing any new text:
+- Casual/conversational voice: contractions, direct address ("you", "your"), shorter sentences
+- Professional/formal voice: complete sentences, no contractions, third-person when appropriate
+- Technical voice: precision over warmth, data-driven claims, industry terminology acceptable
+
+### E-E-A-T Signals in Direct Answer
+
+When writing the `direct_answer` paragraph, include at least one of:
+- A specific, verifiable fact from the business context (not generic claims)
+- First-hand language: "Our experience shows..." or "We've found that..."
+- A precise outcome or result relevant to the keyword
+- Industry-specific language that signals expertise
+
+Do NOT write generic marketing preamble. Answer the search intent immediately, then add context.
+
 ## Change Rules
 
 ### direct_answer
@@ -26,6 +79,7 @@ Do NOT return markdown or code blocks. Your response MUST be valid JSON parseabl
 - Use only facts present in the existing content or business context. Do NOT invent facts.
 - Insert position: immediately after the first `<h1>` or `<h2>` tag found in the content. If none, insert at the very top.
 - Wrap in `<p>` for Classic, or a `<!-- wp:paragraph -->` block for Gutenberg.
+- Apply Writing Quality Rules and E-E-A-T signal guidance above when writing this paragraph.
 
 ### h2_structure
 - Add at most 2 new `<h2>` headings covering sub-questions about the main keyword.
@@ -45,7 +99,9 @@ Do NOT return markdown or code blocks. Your response MUST be valid JSON parseabl
 - Only add if `has_yoast` and `has_rankmath` are both false (this is guaranteed by the caller — do not re-check).
 - Append at the very end of the content, using this exact tag — replace [page title] with the actual page title and [author] with the actual author name from the prompt:
   <script type="application/ld+json">{"@context":"https://schema.org","@type":"Article","headline":"[page title]","author":{"@type":"Person","name":"[author]"}}</script>
-- Do NOT add FAQ, HowTo, or any other schema type.
+- Do NOT add HowTo schema (rich results removed September 2023).
+- Do NOT add FAQPage schema (Google retired FAQ rich results for all sites May 2026). Use QAPage if the page contains Q&A structure.
+- For this editor, only "Article" schema is added — other schema types are out of scope.
 
 ### author_date
 - Skip entirely if `is_homepage` is true.

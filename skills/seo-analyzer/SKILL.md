@@ -94,6 +94,7 @@ Always compute and include these statistics from the raw HTML:
 - `has_article_schema`: true if a valid Article/BlogPosting/NewsArticle schema block exists
 - `author_visible`: true if author name appears as visible text in main content
 - `date_visible`: true if any date appears as visible text in main content
+- `images_missing_alt`: count of `<img>` elements in main content without a non-empty `alt` attribute (alt="" counts as missing; `alt="image.jpg"` counts as missing if it is a filename)
 
 ## Output Format
 
@@ -112,7 +113,8 @@ Return exactly this JSON:
     "hub_link_count": 0,
     "has_article_schema": false,
     "author_visible": false,
-    "date_visible": false
+    "date_visible": false,
+    "images_missing_alt": 0
   },
   "recommendations": [
     {

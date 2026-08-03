@@ -699,9 +699,12 @@ def run_cluster_agent(
     ).first()
     if kb:
         parts = []
-        if kb.about: parts.append(f"Business: {kb.about.strip()[:300]}")
-        if kb.products_services: parts.append(f"Products / Services: {kb.products_services.strip()[:200]}")
-        if kb.target_audience: parts.append(f"Target Audience: {kb.target_audience.strip()[:200]}")
+        if kb.about:             parts.append(f"Business: {kb.about.strip()[:300]}")
+        if kb.products_services: parts.append(f"Products/Services: {kb.products_services.strip()[:200]}")
+        if kb.target_audience:   parts.append(f"Target Audience: {kb.target_audience.strip()[:200]}")
+        if kb.brand_voice:       parts.append(f"Brand Voice: {kb.brand_voice.strip()[:150]}")
+        if kb.competitors_notes: parts.append(f"Competitors: {kb.competitors_notes.strip()[:200]}")
+        if kb.seo_context:       parts.append(f"SEO Context: {kb.seo_context.strip()[:200]}")
         business_context = "\n".join(parts) if parts else "Not provided."
     else:
         business_context = "Not provided."
