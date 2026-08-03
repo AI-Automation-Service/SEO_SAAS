@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import datetime
 from typing import Optional
 from urllib.parse import urlparse
@@ -63,6 +64,10 @@ def _change_history_block(history: list[PageChange]) -> str:
     return "\n".join(lines)
 
 
+def _visible_word_count(html: str) -> int:
+    return len(re.sub(r'<[^>]+>', ' ', html).split())
+
+
 def _run_page_pipeline(
     keyword: str,
     secondary_keywords: str,
@@ -80,6 +85,33 @@ def _run_page_pipeline(
 ) -> PageChange:
     is_homepage = is_hub and not urlparse(hub_existing_url).path.strip("/")
     current_date = datetime.utcnow().strftime("%B %Y")
+
+    # Homepage with very low word count = theme-controlled, post_content is ignored by frontend
+    if is_homepage and _visible_word_count(post_data["content"]) < 100:
+        record = PageChange(
+            user_id=user_id,
+            project_name=project_name,
+            cluster_name=cluster_name,
+            wp_post_id=post_data["id"],
+            wp_post_url=post_data["link"],
+            wp_post_type=post_data["type"],
+            original_content=post_data["content"],
+            new_content=post_data["content"],
+            change_summary=(
+                "This homepage appears to be controlled by your theme template or page builder — "
+                "the post_content field is nearly empty, which means the visible front-end content "
+                "is rendered from template files rather than from post_content. "
+                "Automatic edits to post_content will not appear on the site. "
+                "Apply SEO improvements manually inside your WordPress editor or page builder (Elementor/Gutenberg blocks)."
+            ),
+            changes_made=[],
+            statistics=None,
+            status="no_action",
+        )
+        db.add(record)
+        db.commit()
+        db.refresh(record)
+        return record
 
     business_context = " | ".join(filter(None, [
         project.business_name,
