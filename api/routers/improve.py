@@ -206,18 +206,22 @@ def _run_meta_only(
 
     meta_title = (result.get("suggested_meta_title") or "").strip()
     meta_description = (result.get("suggested_meta_description") or "").strip()
+    current_title = (post_data.get("current_meta_title") or "").strip()
+    current_description = (post_data.get("current_meta_description") or "").strip()
+    title_changed = meta_title and meta_title != current_title
+    desc_changed = meta_description and meta_description != current_description
 
     plugin_label = "Yoast" if profile["seo_plugin"] == "yoast" else "RankMath"
     meta_updates = None
     changes_made: list[str] = []
 
-    if meta_title or meta_description:
+    if title_changed or desc_changed:
         meta_updates = {
             "plugin": profile["seo_plugin"],
-            "original_meta_title": post_data.get("current_meta_title") or None,
-            "original_meta_description": post_data.get("current_meta_description") or None,
-            "suggested_meta_title": meta_title or None,
-            "suggested_meta_description": meta_description or None,
+            "original_meta_title": current_title or None,
+            "original_meta_description": current_description or None,
+            "suggested_meta_title": meta_title if title_changed else None,
+            "suggested_meta_description": meta_description if desc_changed else None,
         }
         changes_made.append(f"seo_meta: SEO title and description queued for {plugin_label} update.")
 
@@ -426,17 +430,21 @@ def _run_page_pipeline(
             ]
             new_content = edit_result.get("new_content") or post_data["content"]
 
-        # Meta changes — only store when plugin is present
+        # Meta changes — only store when plugin is present and values actually changed
         if profile["meta_editable"]:
             meta_title = (edit_result.get("suggested_meta_title") or "").strip()
             meta_description = (edit_result.get("suggested_meta_description") or "").strip()
-            if meta_title or meta_description:
+            current_title = (post_data.get("current_meta_title") or "").strip()
+            current_description = (post_data.get("current_meta_description") or "").strip()
+            title_changed = meta_title and meta_title != current_title
+            desc_changed = meta_description and meta_description != current_description
+            if title_changed or desc_changed:
                 meta_updates = {
                     "plugin": profile["seo_plugin"],
-                    "original_meta_title": post_data.get("current_meta_title") or None,
-                    "original_meta_description": post_data.get("current_meta_description") or None,
-                    "suggested_meta_title": meta_title or None,
-                    "suggested_meta_description": meta_description or None,
+                    "original_meta_title": current_title or None,
+                    "original_meta_description": current_description or None,
+                    "suggested_meta_title": meta_title if title_changed else None,
+                    "suggested_meta_description": meta_description if desc_changed else None,
                 }
                 plugin_label = "Yoast" if profile["seo_plugin"] == "yoast" else "RankMath"
                 changes_made.append(
