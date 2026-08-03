@@ -8,6 +8,8 @@ Do NOT return markdown or code blocks. Your response MUST be valid JSON parseabl
 - `main_keyword`: The primary keyword this page targets.
 - `hub_url`: The URL of the pillar/hub page for this cluster. Only use this as the `href` for internal links — never invent other URLs.
 - `author`: The site owner's name for author attribution.
+- `current_date`: Today's date in "Month YYYY" format. Use this exactly for author_date — never guess or invent a date.
+- `is_homepage`: true or false. If true, skip schema and author_date even if the analyzer marked them needed — those signals do not apply to homepages.
 - `builder`: "gutenberg" (uses `<!-- wp:` blocks) or "classic" (plain HTML).
 - `html_content`: The current full page content.
 - `recommendations`: Array from the Analyzer — only process items with `status: "needed"`.
@@ -15,8 +17,10 @@ Do NOT return markdown or code blocks. Your response MUST be valid JSON parseabl
 ## Change Rules
 
 ### direct_answer
-- Write 40–80 words that directly answer what `main_keyword` means or does, from the business's perspective.
-- Use only facts provided in the existing content or the business context. Do NOT invent facts.
+- If the very first paragraph after the H1 already answers what `main_keyword` is (40–80 words, on-topic), set status to "skipped" — do NOT add a duplicate.
+- Otherwise write 40–80 words that directly answer what `main_keyword` means or does, from the business's perspective.
+- NEVER copy sentences verbatim from the existing content. The text must be new, original writing.
+- Use only facts present in the existing content or business context. Do NOT invent facts.
 - Insert position: immediately after the first `<h1>` or `<h2>` tag found in the content. If none, insert at the very top.
 - Wrap in `<p>` for Classic, or a `<!-- wp:paragraph -->` block for Gutenberg.
 
@@ -34,19 +38,17 @@ Do NOT return markdown or code blocks. Your response MUST be valid JSON parseabl
 - Add at most 1 internal link per run. If 3 or more internal links already exist in the content, skip this change.
 
 ### schema
+- Skip entirely if `is_homepage` is true.
 - Only add if `has_yoast` and `has_rankmath` are both false (this is guaranteed by the caller — do not re-check).
-- Append at the end of the content:
-  ```
+- Append at the very end of the content, using this exact tag — replace [page title] with the actual page title and [author] with the actual author name from the prompt:
   <script type="application/ld+json">{"@context":"https://schema.org","@type":"Article","headline":"[page title]","author":{"@type":"Person","name":"[author]"}}</script>
-  ```
 - Do NOT add FAQ, HowTo, or any other schema type.
 
 ### author_date
-- Append to the very end of the content (before any schema block):
-  ```
-  <p><em>By [author] · Last updated: [current month and year in format "Month YYYY"]</em></p>
-  ```
-- For Gutenberg: wrap in `<!-- wp:paragraph -->` block.
+- Skip entirely if `is_homepage` is true.
+- Append to the very end of the content (before any schema block), replacing [author] with the actual author name and [current_date] with the exact value from the `current_date` field in the prompt:
+  <p><em>By [author] · Last updated: [current_date]</em></p>
+- For Gutenberg: wrap in a <!-- wp:paragraph --> block.
 - Do NOT add this if the author name already appears anywhere in the content.
 
 ## Validation (run before returning)

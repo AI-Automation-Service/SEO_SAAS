@@ -1,6 +1,7 @@
 import json
 from datetime import datetime
 from typing import Optional
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -152,6 +153,8 @@ def analyze_cluster(
     ])) or "Not specified"
 
     openai_key = get_user_secret("openai", current_user.id, db)
+    is_homepage = not urlparse(hub.existing_url).path.strip("/")
+    current_date = datetime.utcnow().strftime("%B %Y")
 
     # ── Step 1: Analyzer (gpt-4o-mini) ───────────────────────────────────────
     analyzer_msg = f"""## main_keyword
@@ -165,6 +168,9 @@ def analyze_cluster(
 
 ## current_url
 {post_data['link']}
+
+## is_homepage
+{str(is_homepage).lower()}
 
 ## author
 {project.business_name or 'Site Owner'}
@@ -211,8 +217,14 @@ def analyze_cluster(
 ## hub_url
 {pillar_url}
 
+## is_homepage
+{str(is_homepage).lower()}
+
 ## author
 {project.business_name or 'Site Owner'}
+
+## current_date
+{current_date}
 
 ## has_yoast
 {post_data['has_yoast']}
