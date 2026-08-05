@@ -242,17 +242,19 @@ Output a JSON object with EXACTLY these keys:
   "h1": "Article headline (matches meta title closely)",
   "schema_type": "Article|BlogPosting|NewsArticle",
   "author_name": "suggested author name",
-  "sections_outline": ["H2 heading 1", "H2 heading 2", ...],
+  "sections_outline": ["Section heading text", "Section heading text", ...],
   "content_phase1": "Full HTML/Markdown of: Introduction + first 3-4 H2 sections. ~{half} words.",
   "word_count_phase1": <integer>,
-  "sections_remaining": ["H2 heading 4", "H2 heading 5", "FAQ", "Conclusion"]
+  "sections_remaining": ["Section heading text", "Section heading text", "FAQ", "Conclusion"]
 }}
 
 Rules for content_phase1:
 - H1 as # heading
-- H2 sections as ## headings
+- H2 sections as ## heading — NEVER write "## H2: Title". Just "## Title".
+- sections_outline and sections_remaining must be plain heading text — no "H2:", "H3:", or any prefix
 - Start EACH section with a 40-80 word direct answer paragraph (AEO/AI Overview target)
 - Minimum 2 meaningful H2 sections with substantive content
+- NEVER output bracket placeholders like [Author Name], [Your Business Name], [date] — use real values from Business Context
 - No placeholder text. Write the full content now.
 - {_ANTI_AI_RULE}
 """
@@ -295,10 +297,10 @@ Sections to write:
 {chr(10).join(f"- {s}" for s in sections)}
 
 Include:
-- Remaining H2 body sections
+- Remaining H2 body sections (NEVER prefix headings with "H2:" or "H3:" — use "## Heading" and "### Heading" only)
 - FAQ section (3-5 H3 questions using ONLY information from the article — never invent answers)
-- Conclusion (75-100 words + CTA relevant to the business)
-- Author block: "By [author] · Last updated: {datetime.utcnow().strftime('%B %Y')}"
+- Conclusion (75-100 words + CTA using the REAL business name from Business Context above)
+- Author block: "By {phase1.get("author_name", "the author")} · Last updated: {datetime.utcnow().strftime('%B %Y')}"
 - JSON-LD schema snippet for {phase1.get("schema_type", "Article")}
 
 Output a JSON object with EXACTLY these keys:
@@ -310,6 +312,8 @@ Output a JSON object with EXACTLY these keys:
 
 Rules:
 - Continue naturally from where Phase 1 left off
+- NEVER write "## H2: Title" or "### H3: Title" — write "## Title" and "### Title" only
+- NEVER output bracket placeholders like [Author Name], [Your Business Name], [date] — use real values from the Business Context
 - FAQ: questions must come from natural reader follow-ups — never invent facts
 - {_ANTI_AI_RULE}
 """
