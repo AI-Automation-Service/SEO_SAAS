@@ -28,18 +28,49 @@ from shared.exceptions import SecretNotFoundError
 
 router = APIRouter(prefix="/projects/{name}/article", tags=["article"])
 
-# Anti-AI phrase list — applied to both phases
-_BANNED_PHRASES = [
-    "delve into", "tapestry", "it's worth noting", "furthermore", "in conclusion, it's clear",
-    "navigate", "in the realm of", "at the end of the day", "game-changer", "dive deep",
-    "shed light", "in today's fast-paced", "revolutionize", "leverage", "utilize",
-]
+# ── Global style rules — injected once into Phase 1, referenced by name in Phase 2 ──
+_GLOBAL_RULES = """
+════════════════════════════════════════
+GLOBAL RULES — apply to every word you write
+════════════════════════════════════════
 
-_ANTI_AI_RULE = (
-    "BANNED WORDS/PHRASES — never use any of these: "
-    + ", ".join(f'"{p}"' for p in _BANNED_PHRASES)
-    + ". Write like a knowledgeable human, not an AI assistant."
-)
+VOICE & TONE
+• Write as a knowledgeable human practitioner — direct, specific, authoritative
+• Match the tone of voice from Business Context
+• Address the reader as "you" — not "businesses" or "organizations"
+
+SENTENCE & PARAGRAPH VARIETY (required — do not write walls of uniform paragraphs)
+• Vary sentence length: mix short punchy sentences (8-15 words) with longer ones (25-35 words)
+• Vary paragraph format within each H2 section — use at least 2 of:
+    - Short prose paragraphs (2-4 sentences)
+    - Bullet list (4-6 items)
+    - Numbered steps (when order matters)
+    - Comparison table (when comparing options)
+    - Bold callout: **Key insight:** followed by 1-2 sentences
+
+E-E-A-T SIGNAL (required in every H2 section — choose one or more)
+• A concrete real-world example ("For instance, a manufacturing company in Cairo...")
+• A specific statistic with its source placeholder: [Citation: describe source]
+• A realistic scenario showing the concept in practice
+• A named case study or known industry event (only if genuinely known — do not invent)
+
+STYLE DON'TS
+• No AI giveaway phrases: "delve into", "it's worth noting", "in today's fast-paced world",
+  "game-changer", "at the end of the day", "in the realm of", "tapestry", "shed light on"
+• No corporate clichés: "leverage", "utilize", "synergy", "holistic", "robust", "seamless", "cutting-edge"
+• No filler openers: never start a paragraph with "Furthermore,", "Moreover,", "Additionally,"
+• No inflated adjectives: "innovative", "transformative", "revolutionary", "groundbreaking"
+• No repetitive sentence starters across consecutive paragraphs
+
+CITATIONS
+• Do NOT invent URLs — real links are often hallucinated and break trust
+• Instead use citation placeholders: [Citation: brief description, e.g. "World Bank data on MENA outsourcing 2024"]
+• These will be resolved by the editorial team before publishing
+
+PLACEHOLDERS
+• NEVER output bracket content like [Author Name], [Your Business Name], [date]
+• Use real values from Business Context — if a value is missing, write around it naturally
+"""
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -231,72 +262,94 @@ def _phase1_message(
     target_wc: int,
 ) -> str:
     half = target_wc // 2
-    return f"""You are running PHASE 1 of a two-phase SEO article writing task.
+    ymyl_note = (
+        "YES — every factual claim must include a citation placeholder. "
+        "Add health/legal/financial disclaimers where relevant."
+        if ymyl else "No"
+    )
+    return f"""You are running PHASE 1 of a two-phase SEO article writing pipeline.
 
-## Primary Keyword
-{keyword}
+{_GLOBAL_RULES}
 
-## Business Context
+════════════════════════════════════════
+BUSINESS CONTEXT
+════════════════════════════════════════
 {business_block}
+{f"{chr(10)}Brand & Strategy Notes:{chr(10)}{knowledge_block}" if knowledge_block else ""}
 
-{f"## Business Knowledge\\n{knowledge_block}" if knowledge_block else ""}
+════════════════════════════════════════
+SEO SPECIFICATION
+════════════════════════════════════════
+Primary keyword : {keyword}
+Search intent   : {intent}
+YMYL            : {ymyl_note}
 
-## Intent
-{intent}
+Semantic coverage — weave these naturally throughout the article (do not list them):
+• 3-5 semantic variations of the primary keyword
+• 3-5 related entities (people, organisations, concepts, tools) relevant to the topic
+• 2-3 "People Also Ask" questions Google shows for this keyword (answer them inside the article body)
 
-## YMYL
-{"Yes — extra scrutiny required: every factual claim must cite a source, include disclaimers where relevant" if ymyl else "No"}
+════════════════════════════════════════
+ARTICLE STRUCTURE — Phase 1 (first {half}+ words)
+════════════════════════════════════════
+Write the FIRST HALF of a {target_wc}-word article. Produce exactly 4 H2 sections.
 
-## {_ANTI_AI_RULE}
+STEP 1 — Introduction (100-150 words)
+• Hook sentence that addresses the reader's primary problem
+• 60-80 word direct answer to the primary keyword query (AI Overview / AEO target)
+• Brief preview of what the article covers
+• End the introduction block with: <!-- Image: [describe the ideal image for this topic] -->
 
-## Your Task (Phase 1)
-Produce the FIRST HALF of a {target_wc}-word SEO article.
-HARD REQUIREMENT: content_phase1 MUST contain at least {half} words. You will not stop writing until you reach {half} words.
+STEP 2 — H2 Section 1 (250-400 words)
+• Open with a 60-80 word direct answer paragraph
+• Follow with 3-4 paragraphs OR a mix of prose + bullet list + example
+• Include 1 E-E-A-T signal (concrete example, statistic with [Citation: …], or real scenario)
+• Include 1 citation placeholder: [Citation: describe source needed]
+• Include 1 internal link: [{website}/relevant-page/](descriptive anchor text)
 
-Output a JSON object with EXACTLY these keys:
+STEP 3 — H2 Section 2 (250-400 words)
+• Same depth requirements as Section 1
+• End the section with: <!-- Image: [describe supporting image] -->
+• Include 1 E-E-A-T signal, 1 citation placeholder
+
+STEP 4 — H2 Section 3 (250-400 words)
+• Use a different content format than Section 2 (e.g. numbered steps or comparison table)
+• Include 1 E-E-A-T signal, 1 citation placeholder
+
+STEP 5 — H2 Section 4 (250-400 words)
+• Include 1 E-E-A-T signal, 1 citation placeholder
+
+Formatting rules:
+• H1 as # heading; H2 as ## heading — write "## Title", never "## H2: Title"
+• sections_outline and sections_remaining: plain heading text — no "H2:", "H3:", or numbering prefix
+
+════════════════════════════════════════
+INTERNAL SEO SELF-CHECK (do not output — verify before submitting)
+════════════════════════════════════════
+✓ Primary keyword appears in H1
+✓ Primary keyword appears in meta_title and meta_description
+✓ Primary keyword appears in the first paragraph of the introduction
+✓ Semantic variations used naturally (not stuffed)
+✓ Each H2 section has at least one E-E-A-T signal
+✓ At least 2 citation placeholders present
+✓ At least 1 internal link present
+✓ Image placeholder after introduction
+✓ No banned phrases, no placeholder brackets, no invented URLs
+
+════════════════════════════════════════
+OUTPUT FORMAT
+════════════════════════════════════════
+Return a single JSON object with EXACTLY these keys — no extra keys, no markdown fences:
 {{
   "meta_title": "50-60 char meta title containing primary keyword",
-  "meta_description": "140-160 char meta description with primary keyword and clear value proposition",
+  "meta_description": "140-160 char meta description — keyword + clear value proposition",
   "slug": "url-slug-lowercase-hyphens",
-  "h1": "Article headline (matches meta title closely, contains primary keyword)",
-  "schema_type": "Article|BlogPosting|NewsArticle",
-  "sections_outline": ["Section heading text", "Section heading text", ...],
-  "content_phase1": "Full Markdown content — see writing process below",
-  "sections_remaining": ["Section heading text", "Section heading text", "FAQ", "Conclusion"]
+  "h1": "Article headline — contains primary keyword, matches meta_title closely",
+  "schema_type": "Article or BlogPosting or NewsArticle",
+  "sections_outline": ["Section 1 heading", "Section 2 heading", "Section 3 heading", "Section 4 heading"],
+  "content_phase1": "<full Markdown content — introduction + 4 H2 sections — target {half}+ words>",
+  "sections_remaining": ["Section 5 heading", "Section 6 heading", "FAQ", "Conclusion"]
 }}
-
-## Mandatory Writing Process for content_phase1 (execute in order):
-
-STEP 1 — Introduction (100-150 words):
-Write a compelling introduction. End with: <!-- Image: [describe what image should show here] -->
-
-STEP 2 — H2 Section 1 (MINIMUM 300 words):
-Write 5-6 paragraphs. First paragraph: 60-80 word direct answer for AI search.
-Include at least 1 external citation link to an authoritative source (government, academic, Forbes, McKinsey, Harvard Business Review, or major industry publication). Format: [Source Name](https://url).
-Include 1 internal link to a relevant page: [{website}/relevant-path/](anchor text).
-Do NOT start Section 2 until Section 1 is at least 300 words.
-
-STEP 3 — H2 Section 2 (MINIMUM 300 words):
-Same format as Section 1. Add 1 external citation. End with: <!-- Image: [describe image] -->
-Do NOT start Section 3 until Section 2 is at least 300 words.
-
-STEP 4 — H2 Section 3 (MINIMUM 300 words):
-Same format. Add 1 external citation.
-Do NOT start Section 4 until Section 3 is at least 300 words.
-
-STEP 5 — H2 Section 4 (MINIMUM 300 words):
-Same format. Add 1 external citation.
-
-STEP 6 — Verify:
-Count words in content_phase1. If total is under {half} words, add 2 more paragraphs to the shortest section before outputting.
-
-## Additional Rules:
-- H1 as # heading; H2 as ## heading — NEVER write "## H2: Title", just "## Title"
-- sections_outline and sections_remaining: plain heading text only — no "H2:", "H3:", or any prefix
-- External citations: only government (.gov), educational (.edu), or established publications — NOT Wikipedia, Reddit, or unknown blogs
-- Internal links: use realistic URL patterns for {website} — do not invent external URLs
-- NEVER output bracket placeholders like [Author Name], [Your Business Name], [date] — use real values from Business Context
-- {_ANTI_AI_RULE}
 """
 
 
@@ -313,59 +366,67 @@ def _phase2_message(
     sections = phase1.get("sections_remaining", [])
     body_sections = [s for s in sections if s not in ("FAQ", "Conclusion")]
     p1_tail = (phase1.get("content_phase1", "") or "")[-600:]
-    return f"""You are running PHASE 2 of a two-phase SEO article writing task.
+    section_steps = "".join(
+        f"STEP {i + 1} — H2: {s} (250-400 words)\n"
+        f"• Open with a direct answer paragraph (60-80 words)\n"
+        f"• Include 1 E-E-A-T signal (concrete example, statistic, or real scenario)\n"
+        f"• Include 1 citation placeholder: [Citation: describe source needed]\n"
+        f"• Mix content formats (prose + list or prose + table) — avoid uniform paragraphs\n\n"
+        for i, s in enumerate(body_sections)
+    )
+    return f"""You are running PHASE 2 of a two-phase SEO article writing pipeline.
 
-## Primary Keyword
-{keyword}
+The GLOBAL RULES from Phase 1 apply in full — voice, variety, E-E-A-T, citation placeholders, no banned phrases, no invented URLs, no bracket placeholders.
 
-## Business Context
+════════════════════════════════════════
+BUSINESS CONTEXT
+════════════════════════════════════════
 {business_block}
 
-## Phase 1 Summary
-- H1: {phase1.get("h1")}
-- Phase 1 covered: {", ".join(phase1.get("sections_outline", [])[:4])}
-- Phase 1 word count (measured): {actual_p1_wc} words
-- Sections to complete now: {", ".join(sections)}
+════════════════════════════════════════
+PHASE 1 HANDOFF
+════════════════════════════════════════
+Primary keyword : {keyword}
+H1              : {phase1.get("h1")}
+Phase 1 covered : {", ".join(phase1.get("sections_outline", [])[:4])}
+Phase 1 length  : {actual_p1_wc} words (measured by backend)
+Still to write  : {", ".join(sections)}
 
-## End of Phase 1 (last lines — DO NOT repeat, continue naturally from here)
-...{p1_tail}
+Continuation point — pick up naturally from here, do NOT repeat:
+…{p1_tail}
 
-## {_ANTI_AI_RULE}
+════════════════════════════════════════
+ARTICLE STRUCTURE — Phase 2 (remaining {remaining_wc}+ words)
+════════════════════════════════════════
+{section_steps}STEP {len(body_sections) + 1} — FAQ Section (~350 words)
+• Write exactly 5 H3 questions that readers genuinely ask about this topic on Google
+• Each answer: 60-80 words — direct, specific, no filler
+• Use only facts already established in the article — do not introduce new claims here
 
-## Your Task (Phase 2)
-Write the REMAINING content to complete the article.
-HARD REQUIREMENT: content_phase2 MUST contain at least {remaining_wc} words. You will not stop writing until you reach {remaining_wc} words.
+STEP {len(body_sections) + 2} — Conclusion (100-150 words)
+• Summarise 3 key takeaways in 1-2 sentences each
+• Close with a CTA that names "{business_name}" specifically
+• Do NOT write "Your Business Name" or any placeholder
 
-## Mandatory Writing Process for content_phase2 (execute in order):
+════════════════════════════════════════
+INTERNAL SEO SELF-CHECK (do not output — verify before submitting)
+════════════════════════════════════════
+✓ Primary keyword "{keyword}" appears naturally in at least 2 Phase 2 sections
+✓ Each H2 has at least 1 E-E-A-T signal
+✓ At least 2 more citation placeholders present
+✓ 1-2 internal links to {website} included
+✓ FAQ answers do not contradict Phase 1 content
+✓ CTA names the real business, not a placeholder
+✓ No heading prefixes (H2: / H3:), no invented URLs, no banned phrases
 
-{"".join(
-    f"STEP {i+1} — H2 Section: {s} (MINIMUM 300 words):\\n"
-    f"Write 5-6 paragraphs. Include 1 external citation link (government, academic, or established publication). "
-    f"Do NOT start the next section until this one is at least 300 words.\\n\\n"
-    for i, s in enumerate(body_sections)
-)}
-STEP {len(body_sections)+1} — FAQ Section (~350 words):
-Write exactly 5 H3 questions with 60-80 word answers each. Questions must be natural reader follow-ups — do not invent facts not covered in the article.
-
-STEP {len(body_sections)+2} — Conclusion (100-150 words):
-Summarize key takeaways. End with a CTA that mentions "{business_name}" by name. Do NOT write "Your Business Name" or any placeholder.
-
-STEP {len(body_sections)+3} — Verify:
-Count words in content_phase2. If under {remaining_wc} words, expand the shortest section by 2 paragraphs before outputting.
-
-Output a JSON object with EXACTLY these keys:
+════════════════════════════════════════
+OUTPUT FORMAT
+════════════════════════════════════════
+Return a single JSON object with EXACTLY these keys — no extra keys, no markdown fences:
 {{
-  "content_phase2": "Full Markdown of all remaining sections. MUST exceed {remaining_wc} words.",
-  "schema_json_ld": "<script type=\\"application/ld+json\\">...</script>"
+  "content_phase2": "<full Markdown — all remaining H2 sections + FAQ + Conclusion — target {remaining_wc}+ words>",
+  "schema_json_ld": "<script type=\\"application/ld+json\\">{{...valid JSON-LD for {phase1.get("schema_type", "Article")}...}}</script>"
 }}
-
-Rules:
-- Continue naturally — do NOT repeat any Phase 1 content
-- NEVER write "## H2: Title" or "### H3: Title" — write "## Title" and "### Title" only
-- External citations: [Source Name](https://url) — only .gov, .edu, or established publications
-- Include 1-2 more internal links to {website} where relevant
-- NEVER output bracket placeholders — use real values from Business Context
-- {_ANTI_AI_RULE}
 """
 
 
