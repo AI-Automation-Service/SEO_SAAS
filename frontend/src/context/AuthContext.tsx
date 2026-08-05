@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { authApi } from '@/api/client'
+import { queryClient } from '@/App'
 import type { AuthUser } from '@/types/api'
 
 interface AuthContextValue {
@@ -50,6 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   function logout() {
     localStorage.removeItem('access_token')
     localStorage.removeItem('refresh_token')
+    queryClient.clear()
     setUser(null)
   }
 
