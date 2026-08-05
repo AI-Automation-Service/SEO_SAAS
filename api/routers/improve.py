@@ -1390,7 +1390,7 @@ Provide:
 2. Fix priority (high / medium / low) for each broken link
 3. Overall link health summary in 2-3 sentences
 """
-        report = SkillAgent("seo-technical", openai_key, model="gpt-4o-mini").run(
+        report = SkillAgent("seo-technical", openai_key, model="gpt-4o").run(
             report_msg, timeout=60
         )
     else:

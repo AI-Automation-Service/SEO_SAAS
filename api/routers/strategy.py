@@ -272,7 +272,7 @@ def _build_execution_plan_json(
     )
 
     try:
-        raw = SkillAgent("seo-plan", openai_key, model="gpt-4o-mini").run(
+        raw = SkillAgent("seo-plan", openai_key, model="gpt-4o").run(
             prompt, timeout=90, json_mode=True
         )
         return json.loads(raw)

@@ -70,26 +70,11 @@ def _distill_preferences(
             + (f" | Subscriber note: {fb.comment}" if fb.comment else "")
         )
 
-    prompt = f"""You are analyzing subscriber feedback on AI-generated SEO content changes.
-Based on the approval/rejection patterns below, extract up to 10 concrete, actionable rules
-that future AI agents should follow when generating content for this subscriber.
-
-Rules must be:
-- Specific and actionable (not vague like "be better")
-- About content style, tone, structure, or SEO approach
-- Based on observed patterns in the feedback
-- Written as instructions for an AI (e.g. "Always include a direct answer in the first paragraph")
-
-Feedback history (newest first):
-{chr(10).join(lines)}
-
-Output a JSON object: {{"rules": ["rule 1", "rule 2", ...]}}
-Maximum 10 rules. If no clear patterns emerge, return fewer rules or an empty list.
-Only include rules you can confidently derive from the feedback."""
+    feedback_data = f"Feedback history (newest first):\n{chr(10).join(lines)}"
 
     try:
-        raw = SkillAgent("seo-analyzer", openai_key, model="gpt-4o-mini").run(
-            prompt, timeout=60, json_mode=True
+        raw = SkillAgent("feedback-distiller", openai_key, model="gpt-4o-mini").run(
+            feedback_data, timeout=60, json_mode=True
         )
         data = json.loads(raw)
         rules = data.get("rules", [])
