@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  FileText, Sparkles, RefreshCw, CheckCircle, ShieldAlert, Shield,
-  ChevronDown, ExternalLink, Wand2,
+  FileText, RefreshCw, CheckCircle, ShieldAlert, Shield,
+  ChevronDown, Wand2,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { keywordsApi, articleApi, improveApi, getErrorMessage } from '@/api/client'
