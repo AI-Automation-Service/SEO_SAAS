@@ -13,28 +13,57 @@ from integrations.cms.base import CMSAdapter, PostDraft, PublishedPost
 
 
 class WordPressAdapter(CMSAdapter):
-    def __init__(self, url: str, username: str, password: str):
+    def __init__(
+        self,
+        url: str,
+        username: str = "",
+        password: str = "",
+        *,
+        site_token: str = "",
+    ):
+        """
+        Accepts either username + app-password (Basic auth) or a site_token
+        from the SEO OS WordPress Plugin (Bearer auth, Phase 3 §21).
+        At least one credential method must be provided.
+        """
         if not url:
             raise IntegrationConfigError("WordPress URL is required.")
-        if not username or not password:
-            raise IntegrationConfigError("WordPress username and application password are required.")
+        if not site_token and (not username or not password):
+            raise IntegrationConfigError(
+                "Either a site_token or username + application password is required."
+            )
 
         self._api_url = url.rstrip("/") + "/wp-json/wp/v2"
-        self._auth = (username, password)
+        if site_token:
+            self._auth = None
+            self._bearer = site_token
+        else:
+            self._auth = (username, password)
+            self._bearer = ""
 
     def _request(self, method: str, path: str, **kwargs) -> httpx.Response:
         url = f"{self._api_url}{path}"
+        headers = kwargs.pop("headers", {})
+        if self._bearer:
+            headers["Authorization"] = f"Bearer {self._bearer}"
         try:
-            response = httpx.request(method, url, auth=self._auth, timeout=30, **kwargs)
+            response = httpx.request(
+                method,
+                url,
+                auth=self._auth,
+                headers=headers,
+                timeout=30,
+                **kwargs,
+            )
         except httpx.ConnectError as e:
             raise IntegrationConnectionError(f"Cannot reach WordPress at {self._api_url}: {e}") from e
         except httpx.TimeoutException as e:
             raise IntegrationConnectionError(f"WordPress request timed out: {e}") from e
 
         if response.status_code in (401, 403):
+            hint = "Check your site token." if self._bearer else "Check your username and application password."
             raise IntegrationAuthError(
-                f"WordPress authentication failed (HTTP {response.status_code}). "
-                "Check your username and application password."
+                f"WordPress authentication failed (HTTP {response.status_code}). {hint}"
             )
         if response.status_code == 429:
             retry_after = int(response.headers.get("Retry-After", 60))
@@ -74,7 +103,8 @@ class WordPressAdapter(CMSAdapter):
         """
         try:
             root_url = self._api_url.rsplit("/wp/v2", 1)[0]
-            response = httpx.get(root_url, auth=self._auth, timeout=10)
+            headers = {"Authorization": f"Bearer {self._bearer}"} if self._bearer else {}
+            response = httpx.get(root_url, auth=self._auth, headers=headers, timeout=10)
             namespaces = response.json().get("namespaces", [])
             if any("yoast" in ns.lower() for ns in namespaces):
                 return "yoast"

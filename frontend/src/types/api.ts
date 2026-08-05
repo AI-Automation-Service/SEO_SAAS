@@ -372,3 +372,22 @@ export interface SpeedResult {
   opportunities: SpeedOpportunity[]
   diagnostics: SpeedDiagnostic[]
 }
+
+// Observability
+export interface PlagiarismBreakdown {
+  clean: number
+  flagged: number
+  rewritten: number
+  skipped: number
+}
+
+export interface ProjectMetrics {
+  ai_credits_used: number
+  articles_created: number
+  pages_improved: number
+  changes_pending: number
+  approval_rate: number
+  cron_success_rate: number
+  plagiarism: PlagiarismBreakdown
+  period_days: number
+}

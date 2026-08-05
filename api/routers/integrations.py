@@ -3,8 +3,11 @@ import re
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
-from api.dependencies import get_project_context, get_secret_manager
+from api.dependencies import get_current_user, get_db, get_project_context, get_secret_manager
+from core.config import load_config
+from core.db.models import User
 from core.models.context import ProjectContext
 from core.project_writer import update_project_yaml
 from core.secrets import SecretManager, write_secret
@@ -43,52 +46,115 @@ def _resolve_google_creds(
         return None, str(e)
 
 
-def _check_wordpress(context: ProjectContext, secrets: SecretManager) -> IntegrationStatusItem:
+def _check_wordpress(
+    context: ProjectContext,
+    secrets: SecretManager,
+    *,
+    user_id: int | None = None,
+    db: Session | None = None,
+) -> IntegrationStatusItem:
     cfg = context.config.integrations.wordpress
     if not cfg.enabled:
         return IntegrationStatusItem(name="wordpress", connected=False, error="Not enabled in project.yaml")
     try:
-        adapter = WordPressAdapter(
-            url=cfg.url,
-            username=secrets.get(cfg.username_env),
-            password=secrets.get(cfg.password_env),
-        )
+        if cfg.token_env:
+            adapter = WordPressAdapter(url=cfg.url, site_token=secrets.get(cfg.token_env))
+        else:
+            adapter = WordPressAdapter(
+                url=cfg.url,
+                username=secrets.get(cfg.username_env),
+                password=secrets.get(cfg.password_env),
+            )
         adapter.test_connection()
         return IntegrationStatusItem(name="wordpress", connected=True)
     except (IntegrationError, SecretNotFoundError) as e:
         return IntegrationStatusItem(name="wordpress", connected=False, error=str(e))
 
 
-def _check_gsc(context: ProjectContext, secrets: SecretManager) -> IntegrationStatusItem:
-    creds_file, err = _resolve_google_creds(context, secrets)
-    if err:
-        return IntegrationStatusItem(name="google_search_console", connected=False, error=err)
-    cfg = context.config.integrations.google
-    if not cfg.gsc_site_url:
-        return IntegrationStatusItem(
-            name="google_search_console", connected=False, error="gsc_site_url not configured"
-        )
+def _get_oauth_refresh_token(user_id: int, db: Session) -> str | None:
+    """Return the subscriber's Google OAuth refresh token, or None if not stored."""
     try:
-        SearchConsoleAdapter(credentials_file=creds_file, site_url=cfg.gsc_site_url).test_connection()
-        return IntegrationStatusItem(name="google_search_console", connected=True)
-    except IntegrationError as e:
-        return IntegrationStatusItem(name="google_search_console", connected=False, error=str(e))
+        from api.routers.api_keys import get_user_secret
+        return get_user_secret("google_refresh_token", user_id, db)
+    except HTTPException:
+        return None
 
 
-def _check_ga4(context: ProjectContext, secrets: SecretManager) -> IntegrationStatusItem:
+def _build_google_status(
+    name: str,
+    prop_value: str,
+    prop_label: str,
+    AdapterClass,
+    context: ProjectContext,
+    secrets: SecretManager,
+    *,
+    user_id: int | None = None,
+    db: Session | None = None,
+) -> IntegrationStatusItem:
+    if not prop_value:
+        return IntegrationStatusItem(name=name, connected=False, error=f"{prop_label} not configured")
+    if user_id and db:
+        refresh_token = _get_oauth_refresh_token(user_id, db)
+        if refresh_token:
+            try:
+                app_cfg = load_config()
+                AdapterClass(
+                    prop_value,
+                    refresh_token=refresh_token,
+                    client_id=app_cfg.google_oauth_client_id,
+                    client_secret=app_cfg.google_oauth_client_secret,
+                ).test_connection()
+                return IntegrationStatusItem(name=name, connected=True)
+            except IntegrationError as e:
+                return IntegrationStatusItem(name=name, connected=False, error=str(e))
     creds_file, err = _resolve_google_creds(context, secrets)
     if err:
-        return IntegrationStatusItem(name="google_analytics", connected=False, error=err)
-    cfg = context.config.integrations.google
-    if not cfg.ga4_property_id:
-        return IntegrationStatusItem(
-            name="google_analytics", connected=False, error="ga4_property_id not configured"
-        )
+        return IntegrationStatusItem(name=name, connected=False, error=err)
     try:
-        AnalyticsAdapter(credentials_file=creds_file, property_id=cfg.ga4_property_id).test_connection()
-        return IntegrationStatusItem(name="google_analytics", connected=True)
+        AdapterClass(prop_value, credentials_file=creds_file).test_connection()
+        return IntegrationStatusItem(name=name, connected=True)
     except IntegrationError as e:
-        return IntegrationStatusItem(name="google_analytics", connected=False, error=str(e))
+        return IntegrationStatusItem(name=name, connected=False, error=str(e))
+
+
+def _check_gsc(
+    context: ProjectContext,
+    secrets: SecretManager,
+    *,
+    user_id: int | None = None,
+    db: Session | None = None,
+) -> IntegrationStatusItem:
+    cfg = context.config.integrations.google
+    return _build_google_status(
+        "google_search_console",
+        cfg.gsc_site_url if cfg else "",
+        "gsc_site_url",
+        SearchConsoleAdapter,
+        context,
+        secrets,
+        user_id=user_id,
+        db=db,
+    )
+
+
+def _check_ga4(
+    context: ProjectContext,
+    secrets: SecretManager,
+    *,
+    user_id: int | None = None,
+    db: Session | None = None,
+) -> IntegrationStatusItem:
+    cfg = context.config.integrations.google
+    return _build_google_status(
+        "google_analytics",
+        cfg.ga4_property_id if cfg else "",
+        "ga4_property_id",
+        AnalyticsAdapter,
+        context,
+        secrets,
+        user_id=user_id,
+        db=db,
+    )
 
 
 _CHECKERS = {
@@ -102,10 +168,15 @@ _CHECKERS = {
 def integration_status(
     context: ProjectContext = Depends(get_project_context),
     secrets: SecretManager = Depends(get_secret_manager),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     return IntegrationStatusResponse(
         project=context.name,
-        integrations=[checker(context, secrets) for checker in _CHECKERS.values()],
+        integrations=[
+            checker(context, secrets, user_id=current_user.id, db=db)
+            for checker in _CHECKERS.values()
+        ],
     )
 
 
@@ -114,6 +185,8 @@ def test_integration(
     integration: str,
     context: ProjectContext = Depends(get_project_context),
     secrets: SecretManager = Depends(get_secret_manager),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     checker = _CHECKERS.get(integration)
     if checker is None:
@@ -121,7 +194,7 @@ def test_integration(
             status_code=400,
             detail=f"Unknown integration '{integration}'. Valid: {list(_CHECKERS.keys())}",
         )
-    return checker(context, secrets)
+    return checker(context, secrets, user_id=current_user.id, db=db)
 
 
 # ---------------------------------------------------------------------------

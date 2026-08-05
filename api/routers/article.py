@@ -444,17 +444,18 @@ def generate_article(
     except Exception:
         pass
 
-    # Auto-trigger content-rewriter when similarity is 20–40%
-    if plagiarism_flag and plagiarism_score is not None and plagiarism_score <= 40:
+    # Trigger content-rewriter for ALL flagged content — both 20–40% and above 40% (§24)
+    original_plagiarism_score = plagiarism_score
+    if plagiarism_flag and plagiarism_score is not None:
         try:
             from agents.content_rewriter import rewrite_flagged_paragraphs
             record = rewrite_flagged_paragraphs(record, openai_key, db, article_job_id)
         except Exception:
             pass  # rewrite failure is non-fatal — article still enters queue
 
-    # Autopilot blocked if score > 40% after rewrite
-    if plagiarism_flag and plagiarism_score is not None and plagiarism_score > 40:
-        record.status = "pending"  # stays pending — autopilot cannot apply this
+    # For originally >40% scores: keep autopilot blocked even after a successful rewrite (§24)
+    if plagiarism_flag and original_plagiarism_score is not None and original_plagiarism_score > 40:
+        record.plagiarism_status = "flagged"
         db.commit()
 
     db.refresh(record)

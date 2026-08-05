@@ -7,6 +7,7 @@ class WordPressConfig(BaseModel):
     url: str = ""
     username_env: Optional[str] = None   # env var name for WP username
     password_env: Optional[str] = None   # env var name for WP application password
+    token_env: Optional[str] = None      # env var name for WP Plugin site token (Phase 3 §21)
 
 
 class GoogleConfig(BaseModel):

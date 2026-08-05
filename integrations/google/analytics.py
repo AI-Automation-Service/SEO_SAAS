@@ -1,4 +1,3 @@
-import os
 from dataclasses import dataclass
 
 from integrations.base import (
@@ -7,6 +6,7 @@ from integrations.base import (
     IntegrationConnectionError,
     IntegrationError,
 )
+from integrations.google._auth import build_google_credentials
 
 _SCOPES = ["https://www.googleapis.com/auth/analytics.readonly"]
 
@@ -20,22 +20,29 @@ class PageTraffic:
 
 
 class AnalyticsAdapter:
-    def __init__(self, credentials_file: str, property_id: str):
-        if not credentials_file:
-            raise IntegrationConfigError("Google credentials file path is required.")
+    def __init__(
+        self,
+        property_id: str,
+        *,
+        credentials_file: str | None = None,
+        refresh_token: str | None = None,
+        client_id: str = "",
+        client_secret: str = "",
+    ):
+        """
+        Accepts either a service-account file (legacy) or an OAuth refresh token (Phase 3).
+        Exactly one of credentials_file / refresh_token must be provided.
+        """
         if not property_id:
             raise IntegrationConfigError("GA4 property ID is required.")
-        if not os.path.exists(credentials_file):
+        if not credentials_file and not refresh_token:
             raise IntegrationConfigError(
-                f"Google credentials file not found: {credentials_file}"
+                "Either credentials_file or refresh_token must be provided."
             )
 
         self._property = f"properties/{property_id}"
 
-        # Lazy imports so the app starts without the library installed.
-        # Types stored as instance attrs to avoid re-importing on every method call.
         try:
-            from google.oauth2 import service_account as _sa
             from google.analytics.data_v1beta import BetaAnalyticsDataClient
             from google.analytics.data_v1beta.types import DateRange, Dimension, Metric, RunReportRequest
             from google.api_core.exceptions import GoogleAPIError, PermissionDenied, Unauthenticated
@@ -54,14 +61,20 @@ class AnalyticsAdapter:
         self._Unauthenticated = Unauthenticated
 
         try:
-            credentials = _sa.Credentials.from_service_account_file(
-                credentials_file, scopes=_SCOPES
+            credentials = build_google_credentials(
+                _SCOPES,
+                credentials_file=credentials_file,
+                refresh_token=refresh_token,
+                client_id=client_id,
+                client_secret=client_secret,
             )
             self._client = BetaAnalyticsDataClient(credentials=credentials)
         except (PermissionDenied, Unauthenticated) as e:
             raise IntegrationAuthError(
                 f"GA4 credential authentication failed: {e}"
             ) from e
+        except IntegrationConfigError:
+            raise
         except GoogleAPIError as e:
             raise IntegrationError(f"Failed to initialise GA4 client: {e}") from e
 

@@ -29,6 +29,7 @@ import type {
   AccountUsage,
   AdminUser,
   AdminStats,
+  ProjectMetrics,
 } from '@/types/api'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? ''
@@ -355,6 +356,26 @@ export const adminApi = {
     api.put(`/api/admin/users/${userId}/plan`, { plan }).then((r) => r.data),
   deleteUser: (userId: number) =>
     api.delete(`/api/admin/users/${userId}`).then((r) => r.data),
+}
+
+// ── OAuth flows (Phase 3) ─────────────────────────────────────────────────────
+export const oauthApi = {
+  googleStart: () =>
+    api.get<{ url: string }>('/api/oauth/google/start').then((r) => r.data),
+  googleCallback: (code: string) =>
+    api.post<{ ok: boolean }>('/api/oauth/google/callback', { code }).then((r) => r.data),
+  shopifyStart: (name: string, shop: string) =>
+    api
+      .get<{ url: string }>(`/api/projects/${name}/oauth/shopify/start`, { params: { shop } })
+      .then((r) => r.data),
+}
+
+// ── Observability ─────────────────────────────────────────────────────────────
+export const metricsApi = {
+  get: (name: string, period_days = 30) =>
+    api
+      .get<ProjectMetrics>(`/api/projects/${name}/metrics`, { params: { period_days } })
+      .then((r) => r.data),
 }
 
 // ── Health ────────────────────────────────────────────────────────────────────

@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from api.dependencies import get_current_user, get_db, get_project_context
-from api.routers.api_keys import get_user_secret
+from core.config import load_config
 from core.db.models import User
 from core.models.context import ProjectContext
 from core.pagespeed import fetch_pagespeed
@@ -19,12 +19,8 @@ def get_speed(
     db: Session = Depends(get_db),
 ):
     url = str(context.config.website)
-
-    # Use user's Google API key if stored; fall back to unauthenticated (rate-limited)
-    try:
-        api_key = get_user_secret("google_api_key", current_user.id, db)
-    except HTTPException:
-        api_key = None
+    # PSI key is server-side only — never per-user (§17)
+    api_key = load_config().google_api_key or None
 
     try:
         return fetch_pagespeed(url, strategy=strategy, api_key=api_key)

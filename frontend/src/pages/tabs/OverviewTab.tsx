@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
-import { Globe, RefreshCw, FileSearch, Pencil, Check, X, Settings2, Plus } from 'lucide-react'
+import { Globe, RefreshCw, FileSearch, Pencil, Check, X, Settings2, Plus, BarChart2 } from 'lucide-react'
 import { StatusBadge } from '@/components/StatusBadge'
-import { projectsApi, integrationsApi, sitemapApi, getErrorMessage } from '@/api/client'
+import { projectsApi, integrationsApi, sitemapApi, metricsApi, getErrorMessage } from '@/api/client'
 import type { Project } from '@/types/api'
 import { cn } from '@/lib/utils'
 
@@ -473,6 +473,93 @@ function ProjectSettingsCard({ project }: { project: Project }) {
   )
 }
 
+// ── Project Metrics Card ──────────────────────────────────────────────────────
+
+function MetricTile({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
+  return (
+    <div className="bg-slate-50 rounded-lg p-3 flex flex-col gap-0.5">
+      <p className="text-[11px] text-slate-500 uppercase tracking-wide">{label}</p>
+      <p className="text-xl font-bold text-slate-900 leading-tight">{value}</p>
+      {sub && <p className="text-[11px] text-slate-400">{sub}</p>}
+    </div>
+  )
+}
+
+function ProjectMetricsCard({ projectName }: { projectName: string }) {
+  const [period, setPeriod] = useState(30)
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['metrics', projectName, period],
+    queryFn: () => metricsApi.get(projectName, period),
+  })
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-5">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <BarChart2 size={15} className="text-slate-400" />
+          <h3 className="font-display font-semibold text-slate-900">Performance Metrics</h3>
+        </div>
+        <select
+          value={period}
+          onChange={(e) => setPeriod(Number(e.target.value))}
+          className="text-xs border border-slate-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+        >
+          <option value={7}>Last 7 days</option>
+          <option value={30}>Last 30 days</option>
+          <option value={90}>Last 90 days</option>
+        </select>
+      </div>
+
+      {isLoading && <p className="text-slate-400 text-sm">Loading metrics...</p>}
+
+      {data && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-3 gap-3">
+            <MetricTile label="AI Credits" value={`$${data.ai_credits_used.toFixed(4)}`} />
+            <MetricTile label="Articles Created" value={data.articles_created} />
+            <MetricTile label="Pages Improved" value={data.pages_improved} />
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <MetricTile label="Pending Changes" value={data.changes_pending} />
+            <MetricTile
+              label="Approval Rate"
+              value={`${data.approval_rate}%`}
+              sub={data.approval_rate === 0 ? 'No decisions yet' : undefined}
+            />
+            <MetricTile
+              label="Cron Success"
+              value={`${data.cron_success_rate}%`}
+              sub={data.cron_success_rate === 0 ? 'No runs yet' : undefined}
+            />
+          </div>
+          <div className="border-t border-slate-100 pt-3">
+            <p className="text-[11px] text-slate-500 uppercase tracking-wide mb-2">Plagiarism Breakdown</p>
+            <div className="grid grid-cols-4 gap-2">
+              <div className="text-center">
+                <p className="text-sm font-bold text-emerald-600">{data.plagiarism.clean}</p>
+                <p className="text-[10px] text-slate-400">Clean</p>
+              </div>
+              <div className="text-center">
+                <p className="text-sm font-bold text-amber-500">{data.plagiarism.rewritten}</p>
+                <p className="text-[10px] text-slate-400">Rewritten</p>
+              </div>
+              <div className="text-center">
+                <p className="text-sm font-bold text-red-500">{data.plagiarism.flagged}</p>
+                <p className="text-[10px] text-slate-400">Flagged</p>
+              </div>
+              <div className="text-center">
+                <p className="text-sm font-bold text-slate-400">{data.plagiarism.skipped}</p>
+                <p className="text-[10px] text-slate-400">Skipped</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main OverviewTab ──────────────────────────────────────────────────────────
 
 export function OverviewTab({ project }: { project: Project }) {
@@ -621,6 +708,9 @@ export function OverviewTab({ project }: { project: Project }) {
           </p>
         )}
       </div>
+
+      {/* Metrics */}
+      <ProjectMetricsCard projectName={project.name} />
 
       {/* Config errors */}
       {validation && !validation.valid && validation.errors.length > 0 && (

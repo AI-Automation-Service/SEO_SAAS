@@ -1,4 +1,3 @@
-import os
 from dataclasses import dataclass
 from datetime import date, timedelta
 
@@ -9,6 +8,7 @@ from integrations.base import (
     IntegrationError,
     IntegrationRateLimitError,
 )
+from integrations.google._auth import build_google_credentials
 
 _SCOPES = ["https://www.googleapis.com/auth/webmasters.readonly"]
 
@@ -32,22 +32,29 @@ class PagePerformance:
 
 
 class SearchConsoleAdapter:
-    def __init__(self, credentials_file: str, site_url: str):
-        if not credentials_file:
-            raise IntegrationConfigError("Google credentials file path is required.")
+    def __init__(
+        self,
+        site_url: str,
+        *,
+        credentials_file: str | None = None,
+        refresh_token: str | None = None,
+        client_id: str = "",
+        client_secret: str = "",
+    ):
+        """
+        Accepts either a service-account file (legacy) or an OAuth refresh token (Phase 3).
+        Exactly one of credentials_file / refresh_token must be provided.
+        """
         if not site_url:
             raise IntegrationConfigError("GSC site URL is required.")
-        if not os.path.exists(credentials_file):
+        if not credentials_file and not refresh_token:
             raise IntegrationConfigError(
-                f"Google credentials file not found: {credentials_file}"
+                "Either credentials_file or refresh_token must be provided."
             )
 
         self._site_url = site_url
 
-        # Lazy imports so the app starts without the library installed.
-        # HttpError stored as instance attr to avoid re-importing in error handler.
         try:
-            from google.oauth2 import service_account as _sa
             from googleapiclient.discovery import build as _build
             from googleapiclient.errors import HttpError
         except ImportError as e:
@@ -59,8 +66,12 @@ class SearchConsoleAdapter:
         self._HttpError = HttpError
 
         try:
-            credentials = _sa.Credentials.from_service_account_file(
-                credentials_file, scopes=_SCOPES
+            credentials = build_google_credentials(
+                _SCOPES,
+                credentials_file=credentials_file,
+                refresh_token=refresh_token,
+                client_id=client_id,
+                client_secret=client_secret,
             )
             self._service = _build(
                 "searchconsole", "v1", credentials=credentials, cache_discovery=False
@@ -69,6 +80,8 @@ class SearchConsoleAdapter:
             raise IntegrationAuthError(
                 f"GSC credential authentication failed (HTTP {e.resp.status}): {e.reason}"
             ) from e
+        except IntegrationConfigError:
+            raise
         except Exception as e:
             raise IntegrationError(f"Failed to initialise GSC client: {e}") from e
 

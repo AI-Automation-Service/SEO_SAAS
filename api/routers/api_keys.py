@@ -10,7 +10,18 @@ from core.db.models import User, UserApiKey
 
 router = APIRouter(prefix="/keys", tags=["api-keys"])
 
-ALLOWED_SERVICES = {"openai", "google_api_key", "dataforseo_login", "dataforseo_password", "wp_url", "wp_app_password", "gsc_credentials", "ga4_credentials", "copyscape_user", "copyscape_key"}
+ALLOWED_SERVICES = {
+    "openai",
+    "dataforseo_login", "dataforseo_password",
+    "wp_url", "wp_app_password",
+    "gsc_credentials", "ga4_credentials",
+    "copyscape_user", "copyscape_key",
+    "semrush_key",
+    "ahrefs_key",
+    "moz_access_id", "moz_secret_key",
+    # Phase 3 — OAuth tokens (§17)
+    "google_refresh_token",   # per-subscriber; covers GSC + GA4 via single Google OAuth flow
+}
 
 
 class StoreKeyRequest(BaseModel):
@@ -47,22 +58,9 @@ def store_key(
     if not body.value.strip():
         raise HTTPException(422, "Value must not be empty")
 
-    encrypted = encrypt_secret(body.value.strip())
-
-    existing = (
-        db.query(UserApiKey)
-        .filter(UserApiKey.user_id == current_user.id, UserApiKey.service == service)
-        .first()
-    )
-    if existing:
-        existing.encrypted_value = encrypted
-    else:
-        db.add(UserApiKey(user_id=current_user.id, service=service, encrypted_value=encrypted))
-
     try:
-        db.commit()
+        _save_key(db, current_user.id, service, body.value.strip())
     except IntegrityError:
-        db.rollback()
         raise HTTPException(500, "Failed to store key — database error")
 
 
@@ -108,26 +106,29 @@ def test_key(body: TestKeyRequest, _: User = Depends(get_current_user)):
         except httpx.RequestError as e:
             raise HTTPException(502, f"Could not reach OpenAI: {e}")
 
-    elif body.service == "google_api_key":
-        try:
-            with httpx.Client(timeout=30) as client:
-                r = client.get(
-                    "https://www.googleapis.com/pagespeedonline/v5/runPagespeed",
-                    params={"url": "https://www.google.com", "strategy": "mobile", "key": body.value.strip()},
-                )
-            if r.status_code == 400:
-                raise HTTPException(400, "Invalid Google API key")
-            if r.status_code == 403:
-                raise HTTPException(400, "Google API key rejected — check API restrictions are set to None")
-            if r.status_code not in (200, 429):
-                raise HTTPException(400, f"Google API returned {r.status_code}")
-        except httpx.RequestError as e:
-            raise HTTPException(502, f"Could not reach Google API: {e}")
-
     else:
         raise HTTPException(400, f"No test available for service '{body.service}'")
 
     return {"ok": True, "service": body.service}
+
+
+def _save_key(db: Session, user_id: int, service: str, value: str) -> None:
+    """Encrypt and upsert a service key. Re-raises IntegrityError on concurrent writes."""
+    encrypted = encrypt_secret(value)
+    existing = (
+        db.query(UserApiKey)
+        .filter(UserApiKey.user_id == user_id, UserApiKey.service == service)
+        .first()
+    )
+    if existing:
+        existing.encrypted_value = encrypted
+    else:
+        db.add(UserApiKey(user_id=user_id, service=service, encrypted_value=encrypted))
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise
 
 
 def get_user_secret(service: str, user_id: int, db: Session) -> str:

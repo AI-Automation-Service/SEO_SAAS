@@ -6,7 +6,7 @@ import { z } from 'zod'
 import toast from 'react-hot-toast'
 import { Check, ChevronDown, ChevronUp, Eye, EyeOff, Loader2, Pencil, Trash2, X } from 'lucide-react'
 import { StatusBadge } from '@/components/StatusBadge'
-import { integrationsApi, keysApi, getErrorMessage } from '@/api/client'
+import { integrationsApi, keysApi, oauthApi, getErrorMessage } from '@/api/client'
 import type { IntegrationStatusItem } from '@/types/api'
 import { cn } from '@/lib/utils'
 
@@ -321,77 +321,6 @@ function CopyscapeSection({ isConnected }: { isConnected: boolean }) {
   )
 }
 
-// ── Google API Key ────────────────────────────────────────────────────────────
-
-function GoogleAPIKeySection({ isConnected }: { isConnected: boolean }) {
-  const qc = useQueryClient()
-  const [value, setValue] = useState('')
-  const [editing, setEditing] = useState(!isConnected)
-
-  const saveMut = useMutation({
-    mutationFn: async () => {
-      await keysApi.test('google_api_key', value)
-      await keysApi.save('google_api_key', value)
-    },
-    onSuccess: () => {
-      toast.success('Google API key saved and verified')
-      setValue('')
-      setEditing(false)
-      qc.invalidateQueries({ queryKey: ['user-keys'] })
-    },
-    onError: (err) => toast.error(getErrorMessage(err)),
-  })
-
-  const deleteMut = useMutation({
-    mutationFn: () => keysApi.delete('google_api_key'),
-    onSuccess: () => {
-      toast.success('Google API key removed')
-      setEditing(true)
-      qc.invalidateQueries({ queryKey: ['user-keys'] })
-    },
-    onError: (err) => toast.error(getErrorMessage(err)),
-  })
-
-  const status: IntegrationStatusItem = { name: 'google_api_key', connected: isConnected, error: isConnected ? null : 'Not connected' }
-
-  return (
-    <SectionWrapper title="Google API Key (PageSpeed)" status={status}>
-      <p className="text-xs text-slate-500 -mt-1">
-        Required for Core Web Vitals and PageSpeed audits. Free — create one in{' '}
-        <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="text-emerald-600 underline hover:text-emerald-700">
-          Google Cloud Console
-        </a>
-        {' '}with PageSpeed Insights API enabled.
-      </p>
-      {!editing && isConnected ? (
-        <ConnectedRow label="Key stored securely" onEdit={() => setEditing(true)} onDelete={() => deleteMut.mutate()} deleteLoading={deleteMut.isPending} />
-      ) : (
-        <div className="space-y-3">
-          <Field label="API Key" error={undefined}>
-            <PasswordInput value={value} onChange={(e) => setValue(e.target.value)} placeholder="AIza..." autoComplete="off" />
-          </Field>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => saveMut.mutate()}
-              disabled={!value.trim() || saveMut.isPending}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white text-sm font-medium rounded-lg hover:bg-emerald-600 disabled:opacity-50 transition-colors cursor-pointer"
-            >
-              {saveMut.isPending && <Loader2 size={14} className="animate-spin" />}
-              {saveMut.isPending ? 'Testing & Saving…' : 'Test & Save'}
-            </button>
-            {isConnected && (
-              <button type="button" onClick={() => { setEditing(false); setValue('') }} className="flex items-center gap-1.5 px-3 py-2 text-slate-500 text-sm rounded-lg hover:bg-slate-100 transition-colors cursor-pointer">
-                <X size={13} /> Cancel
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-    </SectionWrapper>
-  )
-}
-
 // ── DataForSEO ────────────────────────────────────────────────────────────────
 
 const dataForSEOSchema = z.object({
@@ -461,80 +390,192 @@ function DataForSEOSection({ isConnected }: { isConnected: boolean }) {
   )
 }
 
-// ── Shopify ───────────────────────────────────────────────────────────────────
+// ── SEMrush ───────────────────────────────────────────────────────────────────
 
-const shopifySchema = z.object({
-  store_url: z.string().url('Must be a valid URL, e.g. https://mystore.myshopify.com'),
-  access_token: z.string().min(1, 'Access token is required'),
-})
-type ShopifyForm = z.infer<typeof shopifySchema>
-
-function ShopifySection({
-  projectName,
-  status,
-}: {
-  projectName: string
-  status?: IntegrationStatusItem
-}) {
-  const isConnected = status?.connected === true
-  const [editing, setEditing] = useState(!isConnected)
+function SEMrushSection({ isConnected }: { isConnected: boolean }) {
   const qc = useQueryClient()
-
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<ShopifyForm>({
-    resolver: zodResolver(shopifySchema),
-  })
+  const [value, setValue] = useState('')
+  const [editing, setEditing] = useState(!isConnected)
 
   const saveMut = useMutation({
-    mutationFn: async (data: ShopifyForm) => {
-      const envKey = projectName.toUpperCase().replace(/-/g, '_')
-      await integrationsApi.updateConfig(projectName, {
-        shopify: {
-          enabled: true,
-          store_url: data.store_url,
-          token_env: `SHOPIFY_${envKey}_TOKEN`,
-        },
-      })
-      await integrationsApi.setSecret(projectName, {
-        key: `SHOPIFY_${envKey}_TOKEN`,
-        value: data.access_token,
-      })
-    },
+    mutationFn: () => keysApi.save('semrush_key', value),
     onSuccess: () => {
-      toast.success('Shopify connected')
+      toast.success('SEMrush API key saved')
+      setValue('')
       setEditing(false)
-      reset()
-      qc.invalidateQueries({ queryKey: ['integrations-status', projectName] })
+      qc.invalidateQueries({ queryKey: ['user-keys'] })
     },
     onError: (err) => toast.error(getErrorMessage(err)),
   })
 
+  const deleteMut = useMutation({
+    mutationFn: () => keysApi.delete('semrush_key'),
+    onSuccess: () => {
+      toast.success('SEMrush key removed')
+      setEditing(true)
+      qc.invalidateQueries({ queryKey: ['user-keys'] })
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
+
+  const status: IntegrationStatusItem = { name: 'semrush', connected: isConnected, error: isConnected ? null : 'Not connected' }
+
   return (
-    <SectionWrapper title="Shopify" status={status}>
+    <SectionWrapper title="SEMrush (Optional)" status={status}>
       <p className="text-xs text-slate-500 -mt-1">
-        Connect your Shopify store to enable AI-powered SEO improvements for products, collections, pages, and articles.
+        Optional — enriches keyword clustering and competitor gap analysis with SEMrush data.
       </p>
       {!editing && isConnected ? (
-        <ConnectedRow label="Store connected" editLabel="Edit" onEdit={() => setEditing(true)} />
+        <ConnectedRow label="API key stored" onEdit={() => setEditing(true)} onDelete={() => deleteMut.mutate()} deleteLoading={deleteMut.isPending} />
       ) : (
-        <form onSubmit={handleSubmit((d) => saveMut.mutate(d))} className="space-y-3">
-          <Field label="Store URL" error={errors.store_url?.message}>
-            <Input {...register('store_url')} placeholder="https://mystore.myshopify.com" />
-            <p className="text-slate-400 text-xs mt-1">Use your .myshopify.com URL, not a custom domain</p>
-          </Field>
-          <Field label="Admin API Access Token" error={errors.access_token?.message}>
-            <PasswordInput {...register('access_token')} placeholder="shpat_..." autoComplete="new-password" />
-            <p className="text-slate-400 text-xs mt-1">
-              Create in Shopify Admin → Apps → Develop apps → Create an app → Admin API access token
-            </p>
+        <div className="space-y-3">
+          <Field label="API Key" error={undefined}>
+            <PasswordInput value={value} onChange={(e) => setValue(e.target.value)} placeholder="••••••••••••••••" autoComplete="off" />
           </Field>
           <div className="flex items-center gap-2">
-            <SaveButton loading={saveMut.isPending} label="Connect Shopify" />
+            <button
+              type="button"
+              onClick={() => saveMut.mutate()}
+              disabled={!value.trim() || saveMut.isPending}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white text-sm font-medium rounded-lg hover:bg-emerald-600 disabled:opacity-50 transition-colors cursor-pointer"
+            >
+              {saveMut.isPending && <Loader2 size={14} className="animate-spin" />}
+              Save Key
+            </button>
             {isConnected && (
-              <button
-                type="button"
-                onClick={() => { setEditing(false); reset() }}
-                className="flex items-center gap-1.5 px-3 py-2 text-slate-500 text-sm rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
-              >
+              <button type="button" onClick={() => { setEditing(false); setValue('') }} className="flex items-center gap-1.5 px-3 py-2 text-slate-500 text-sm rounded-lg hover:bg-slate-100 transition-colors cursor-pointer">
+                <X size={13} /> Cancel
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </SectionWrapper>
+  )
+}
+
+// ── Ahrefs ────────────────────────────────────────────────────────────────────
+
+function AhrefsSection({ isConnected }: { isConnected: boolean }) {
+  const qc = useQueryClient()
+  const [value, setValue] = useState('')
+  const [editing, setEditing] = useState(!isConnected)
+
+  const saveMut = useMutation({
+    mutationFn: () => keysApi.save('ahrefs_key', value),
+    onSuccess: () => {
+      toast.success('Ahrefs API key saved')
+      setValue('')
+      setEditing(false)
+      qc.invalidateQueries({ queryKey: ['user-keys'] })
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
+
+  const deleteMut = useMutation({
+    mutationFn: () => keysApi.delete('ahrefs_key'),
+    onSuccess: () => {
+      toast.success('Ahrefs key removed')
+      setEditing(true)
+      qc.invalidateQueries({ queryKey: ['user-keys'] })
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
+
+  const status: IntegrationStatusItem = { name: 'ahrefs', connected: isConnected, error: isConnected ? null : 'Not connected' }
+
+  return (
+    <SectionWrapper title="Ahrefs (Optional)" status={status}>
+      <p className="text-xs text-slate-500 -mt-1">
+        Optional — adds backlink signals and keyword data from Ahrefs to competitor analysis and clustering.
+      </p>
+      {!editing && isConnected ? (
+        <ConnectedRow label="API key stored" onEdit={() => setEditing(true)} onDelete={() => deleteMut.mutate()} deleteLoading={deleteMut.isPending} />
+      ) : (
+        <div className="space-y-3">
+          <Field label="API Key" error={undefined}>
+            <PasswordInput value={value} onChange={(e) => setValue(e.target.value)} placeholder="••••••••••••••••" autoComplete="off" />
+          </Field>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => saveMut.mutate()}
+              disabled={!value.trim() || saveMut.isPending}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white text-sm font-medium rounded-lg hover:bg-emerald-600 disabled:opacity-50 transition-colors cursor-pointer"
+            >
+              {saveMut.isPending && <Loader2 size={14} className="animate-spin" />}
+              Save Key
+            </button>
+            {isConnected && (
+              <button type="button" onClick={() => { setEditing(false); setValue('') }} className="flex items-center gap-1.5 px-3 py-2 text-slate-500 text-sm rounded-lg hover:bg-slate-100 transition-colors cursor-pointer">
+                <X size={13} /> Cancel
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </SectionWrapper>
+  )
+}
+
+// ── Moz ───────────────────────────────────────────────────────────────────────
+
+const mozSchema = z.object({
+  access_id: z.string().min(1, 'Access ID is required'),
+  secret_key: z.string().min(1, 'Secret key is required'),
+})
+type MozForm = z.infer<typeof mozSchema>
+
+function MozSection({ isConnected }: { isConnected: boolean }) {
+  const qc = useQueryClient()
+  const [editing, setEditing] = useState(!isConnected)
+  const { register, handleSubmit, reset, formState: { errors } } = useForm<MozForm>({
+    resolver: zodResolver(mozSchema),
+  })
+
+  const saveMut = useMutation({
+    mutationFn: (data: MozForm) =>
+      Promise.all([keysApi.save('moz_access_id', data.access_id), keysApi.save('moz_secret_key', data.secret_key)]),
+    onSuccess: () => {
+      toast.success('Moz credentials saved')
+      setEditing(false)
+      reset()
+      qc.invalidateQueries({ queryKey: ['user-keys'] })
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
+
+  const deleteMut = useMutation({
+    mutationFn: () => Promise.all([keysApi.delete('moz_access_id'), keysApi.delete('moz_secret_key')]),
+    onSuccess: () => {
+      toast.success('Moz credentials removed')
+      setEditing(true)
+      qc.invalidateQueries({ queryKey: ['user-keys'] })
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
+
+  const status: IntegrationStatusItem = { name: 'moz', connected: isConnected, error: isConnected ? null : 'Not connected' }
+
+  return (
+    <SectionWrapper title="Moz (Optional)" status={status}>
+      <p className="text-xs text-slate-500 -mt-1">
+        Optional — provides Domain Authority scores used by the SEO Technical audit.
+      </p>
+      {!editing && isConnected ? (
+        <ConnectedRow label="Access ID + Secret key stored" onEdit={() => setEditing(true)} onDelete={() => deleteMut.mutate()} deleteLoading={deleteMut.isPending} />
+      ) : (
+        <form onSubmit={handleSubmit((d) => saveMut.mutate(d))} className="space-y-3">
+          <Field label="Access ID" error={errors.access_id?.message}>
+            <Input {...register('access_id')} placeholder="mozscape-..." autoComplete="off" />
+          </Field>
+          <Field label="Secret Key" error={errors.secret_key?.message}>
+            <PasswordInput {...register('secret_key')} placeholder="••••••••••••••••" autoComplete="new-password" />
+          </Field>
+          <div className="flex items-center gap-2">
+            <SaveButton loading={saveMut.isPending} label="Save Credentials" />
+            {isConnected && (
+              <button type="button" onClick={() => { setEditing(false); reset() }} className="flex items-center gap-1.5 px-3 py-2 text-slate-500 text-sm rounded-lg hover:bg-slate-100 transition-colors cursor-pointer">
                 <X size={13} /> Cancel
               </button>
             )}
@@ -545,14 +586,144 @@ function ShopifySection({
   )
 }
 
+// ── Shopify ───────────────────────────────────────────────────────────────────
+
+const shopifyManualSchema = z.object({
+  store_url: z.string().url('Must be a valid URL, e.g. https://mystore.myshopify.com'),
+  access_token: z.string().min(1, 'Access token is required'),
+})
+type ShopifyManualForm = z.infer<typeof shopifyManualSchema>
+
+function ShopifySection({
+  projectName,
+  status,
+}: {
+  projectName: string
+  status?: IntegrationStatusItem
+}) {
+  const isConnected = status?.connected === true
+  const [editing, setEditing] = useState(!isConnected)
+  const [mode, setMode] = useState<'manual' | 'oauth'>('manual')
+  const [shopDomain, setShopDomain] = useState('')
+  const qc = useQueryClient()
+
+  const { register, handleSubmit, reset, formState: { errors } } = useForm<ShopifyManualForm>({
+    resolver: zodResolver(shopifyManualSchema),
+  })
+
+  const saveMut = useMutation({
+    mutationFn: async (data: ShopifyManualForm) => {
+      const envKey = projectName.toUpperCase().replace(/-/g, '_')
+      await integrationsApi.updateConfig(projectName, {
+        shopify: { enabled: true, store_url: data.store_url, token_env: `SHOPIFY_${envKey}_TOKEN` },
+      })
+      await integrationsApi.setSecret(projectName, { key: `SHOPIFY_${envKey}_TOKEN`, value: data.access_token })
+    },
+    onSuccess: () => {
+      toast.success('Shopify connected')
+      setEditing(false)
+      reset()
+      qc.invalidateQueries({ queryKey: ['integrations-status', projectName] })
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
+
+  const oauthMut = useMutation({
+    mutationFn: () => oauthApi.shopifyStart(projectName, shopDomain),
+    onSuccess: ({ url }) => {
+      window.open(url, '_blank', 'noopener')
+      toast.success('Complete the Shopify authorisation in the new tab, then refresh this page.')
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
+
+  return (
+    <SectionWrapper title="Shopify" status={status}>
+      <p className="text-xs text-slate-500 -mt-1">
+        Connect your Shopify store to enable AI-powered SEO improvements for products, collections, pages, and articles.
+      </p>
+
+      {!editing && isConnected ? (
+        <ConnectedRow label="Store connected" editLabel="Edit" onEdit={() => setEditing(true)} />
+      ) : (
+        <div className="space-y-4">
+          {/* Mode tabs */}
+          <div className="flex gap-1 p-1 bg-slate-100 rounded-lg w-fit">
+            {(['manual', 'oauth'] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMode(m)}
+                className={cn(
+                  'px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer',
+                  mode === m ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'
+                )}
+              >
+                {m === 'manual' ? 'Access Token (Manual)' : 'Partner App OAuth'}
+              </button>
+            ))}
+          </div>
+
+          {mode === 'manual' ? (
+            <form onSubmit={handleSubmit((d) => saveMut.mutate(d))} className="space-y-3">
+              <Field label="Store URL" error={errors.store_url?.message}>
+                <Input {...register('store_url')} placeholder="https://mystore.myshopify.com" />
+                <p className="text-slate-400 text-xs mt-1">Use your .myshopify.com URL, not a custom domain</p>
+              </Field>
+              <Field label="Admin API Access Token" error={errors.access_token?.message}>
+                <PasswordInput {...register('access_token')} placeholder="shpat_..." autoComplete="new-password" />
+                <p className="text-slate-400 text-xs mt-1">Shopify Admin → Apps → Develop apps → Create an app → Admin API access token</p>
+              </Field>
+              <div className="flex items-center gap-2">
+                <SaveButton loading={saveMut.isPending} label="Connect Shopify" />
+                {isConnected && (
+                  <button type="button" onClick={() => { setEditing(false); reset() }} className="flex items-center gap-1.5 px-3 py-2 text-slate-500 text-sm rounded-lg hover:bg-slate-100 transition-colors cursor-pointer">
+                    <X size={13} /> Cancel
+                  </button>
+                )}
+              </div>
+            </form>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-xs text-slate-500">Enter your .myshopify.com domain to start the Shopify Partner App OAuth flow.</p>
+              <Field label="Shop Domain" error={undefined}>
+                <Input
+                  value={shopDomain}
+                  onChange={(e) => setShopDomain(e.target.value)}
+                  placeholder="mystore.myshopify.com"
+                />
+              </Field>
+              <button
+                type="button"
+                onClick={() => oauthMut.mutate()}
+                disabled={!shopDomain.trim() || oauthMut.isPending}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white text-sm font-medium rounded-lg hover:bg-emerald-600 disabled:opacity-50 transition-colors cursor-pointer"
+              >
+                {oauthMut.isPending && <Loader2 size={14} className="animate-spin" />}
+                Connect via OAuth
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </SectionWrapper>
+  )
+}
+
 // ── WordPress ─────────────────────────────────────────────────────────────────
 
-const wpSchema = z.object({
+const wpAppPasswordSchema = z.object({
   url: z.string().url('Must be a valid URL'),
   username: z.string().min(1, 'Username is required'),
   password: z.string().min(1, 'App password is required'),
 })
-type WpForm = z.infer<typeof wpSchema>
+type WpAppPasswordForm = z.infer<typeof wpAppPasswordSchema>
+
+const wpTokenSchema = z.object({
+  url: z.string().url('Must be a valid URL'),
+  token: z.string().min(10, 'Site token is required'),
+})
+type WpTokenForm = z.infer<typeof wpTokenSchema>
 
 function WordPressSection({
   projectName,
@@ -563,258 +734,329 @@ function WordPressSection({
 }) {
   const isConnected = status?.connected === true
   const [isEditing, setIsEditing] = useState(false)
+  const [authMode, setAuthMode] = useState<'app_password' | 'plugin_token'>('app_password')
   const locked = isConnected && !isEditing
 
   const qc = useQueryClient()
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<WpForm>({
-    resolver: zodResolver(wpSchema),
-  })
+  const pwForm = useForm<WpAppPasswordForm>({ resolver: zodResolver(wpAppPasswordSchema) })
+  const tokenForm = useForm<WpTokenForm>({ resolver: zodResolver(wpTokenSchema) })
 
-  const { mutate, isPending } = useMutation({
-    mutationFn: async (data: WpForm) => {
+  const pwMut = useMutation({
+    mutationFn: async (data: WpAppPasswordForm) => {
       const envKey = projectName.toUpperCase().replace(/-/g, '_')
       await integrationsApi.updateConfig(projectName, {
-        wordpress: {
-          enabled: true,
-          url: data.url,
-          username_env: `WP_${envKey}_USERNAME`,
-          password_env: `WP_${envKey}_APP_PASSWORD`,
-        },
+        wordpress: { enabled: true, url: data.url, username_env: `WP_${envKey}_USERNAME`, password_env: `WP_${envKey}_APP_PASSWORD` },
       })
-      await integrationsApi.setSecret(projectName, {
-        key: `WP_${envKey}_USERNAME`,
-        value: data.username,
-      })
-      await integrationsApi.setSecret(projectName, {
-        key: `WP_${envKey}_APP_PASSWORD`,
-        value: data.password,
-      })
+      await Promise.all([
+        integrationsApi.setSecret(projectName, { key: `WP_${envKey}_USERNAME`, value: data.username }),
+        integrationsApi.setSecret(projectName, { key: `WP_${envKey}_APP_PASSWORD`, value: data.password }),
+      ])
       return integrationsApi.test(projectName, 'wordpress')
     },
     onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ['integrations-status', projectName] })
-      if (result.connected) {
-        toast.success('WordPress connected successfully')
-        setIsEditing(false)
-        reset()
-      } else {
-        toast.error(`WordPress error: ${result.error}`)
-      }
+      if (result.connected) { toast.success('WordPress connected'); setIsEditing(false); pwForm.reset() }
+      else toast.error(`WordPress error: ${result.error}`)
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
+
+  const tokenMut = useMutation({
+    mutationFn: async (data: WpTokenForm) => {
+      const envKey = projectName.toUpperCase().replace(/-/g, '_')
+      await integrationsApi.updateConfig(projectName, {
+        wordpress: { enabled: true, url: data.url, token_env: `WP_${envKey}_SITE_TOKEN` },
+      })
+      await integrationsApi.setSecret(projectName, { key: `WP_${envKey}_SITE_TOKEN`, value: data.token })
+      return integrationsApi.test(projectName, 'wordpress')
+    },
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ['integrations-status', projectName] })
+      if (result.connected) { toast.success('WordPress connected via site token'); setIsEditing(false); tokenForm.reset() }
+      else toast.error(`WordPress error: ${result.error}`)
     },
     onError: (err) => toast.error(getErrorMessage(err)),
   })
 
   return (
     <SectionWrapper title="WordPress" status={status}>
-      <form onSubmit={handleSubmit((d) => mutate(d))} className="space-y-4">
-        <Field label="Site URL" error={errors.url?.message}>
-          <Input
-            {...register('url')}
-            placeholder="https://example.com"
-            disabled={locked}
-          />
-        </Field>
-        <Field label="Username" error={errors.username?.message}>
-          <Input
-            {...register('username')}
-            placeholder={locked ? '••••••••' : 'admin'}
-            autoComplete="off"
-            disabled={locked}
-          />
-        </Field>
-        <Field label="Application Password" error={errors.password?.message}>
-          <Input
-            {...register('password')}
-            type="password"
-            placeholder={locked ? '••••••••••••••••' : 'xxxx xxxx xxxx xxxx'}
-            autoComplete="new-password"
-            disabled={locked}
-          />
-          {!locked && (
-            <p className="text-slate-400 text-xs mt-1">
-              Generate in WordPress → Users → Profile → Application Passwords
-            </p>
-          )}
-        </Field>
-
-        <div className="flex items-center gap-3">
-          {locked ? (
+      {/* Auth mode tabs — only when editing */}
+      {(!locked) && (
+        <div className="flex gap-1 p-1 bg-slate-100 rounded-lg mb-4 w-fit">
+          {(['app_password', 'plugin_token'] as const).map((m) => (
             <button
+              key={m}
               type="button"
-              onClick={() => setIsEditing(true)}
-              className="flex items-center gap-2 px-4 py-2 border border-slate-300 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
-            >
-              <Pencil size={13} />
-              Edit credentials
-            </button>
-          ) : (
-            <>
-              <SaveButton loading={isPending} />
-              {isConnected && (
-                <button
-                  type="button"
-                  onClick={() => { setIsEditing(false); reset() }}
-                  className="flex items-center gap-2 px-4 py-2 text-slate-500 text-sm font-medium rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
-                >
-                  <X size={13} />
-                  Cancel
-                </button>
+              onClick={() => setAuthMode(m)}
+              className={cn(
+                'px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer',
+                authMode === m ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'
               )}
-            </>
-          )}
+            >
+              {m === 'app_password' ? 'App Password' : 'Plugin Token (Phase 3)'}
+            </button>
+          ))}
         </div>
-      </form>
+      )}
+
+      {/* Locked / connected view */}
+      {locked ? (
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setIsEditing(true)}
+            className="flex items-center gap-2 px-4 py-2 border border-slate-300 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
+          >
+            <Pencil size={13} />
+            Edit credentials
+          </button>
+        </div>
+      ) : authMode === 'app_password' ? (
+        <form onSubmit={pwForm.handleSubmit((d) => pwMut.mutate(d))} className="space-y-4">
+          <Field label="Site URL" error={pwForm.formState.errors.url?.message}>
+            <Input {...pwForm.register('url')} placeholder="https://example.com" />
+          </Field>
+          <Field label="Username" error={pwForm.formState.errors.username?.message}>
+            <Input {...pwForm.register('username')} placeholder="admin" autoComplete="off" />
+          </Field>
+          <Field label="Application Password" error={pwForm.formState.errors.password?.message}>
+            <Input {...pwForm.register('password')} type="password" placeholder="xxxx xxxx xxxx xxxx" autoComplete="new-password" />
+            <p className="text-slate-400 text-xs mt-1">Generate in WordPress → Users → Profile → Application Passwords</p>
+          </Field>
+          <div className="flex items-center gap-3">
+            <SaveButton loading={pwMut.isPending} />
+            {isConnected && (
+              <button type="button" onClick={() => { setIsEditing(false); pwForm.reset() }} className="flex items-center gap-2 px-4 py-2 text-slate-500 text-sm font-medium rounded-lg hover:bg-slate-100 transition-colors cursor-pointer">
+                <X size={13} /> Cancel
+              </button>
+            )}
+          </div>
+        </form>
+      ) : (
+        <form onSubmit={tokenForm.handleSubmit((d) => tokenMut.mutate(d))} className="space-y-4">
+          <p className="text-xs text-slate-500 -mt-1">
+            Install the SEO OS WordPress Plugin on your site. It generates a site token you paste here.
+          </p>
+          <Field label="Site URL" error={tokenForm.formState.errors.url?.message}>
+            <Input {...tokenForm.register('url')} placeholder="https://example.com" />
+          </Field>
+          <Field label="Site Token" error={tokenForm.formState.errors.token?.message}>
+            <PasswordInput {...tokenForm.register('token')} placeholder="seo-os-token-..." autoComplete="new-password" />
+            <p className="text-slate-400 text-xs mt-1">Found in WordPress → SEO OS Plugin → Settings → Site Token</p>
+          </Field>
+          <div className="flex items-center gap-3">
+            <SaveButton loading={tokenMut.isPending} label="Save & Test Token" />
+            {isConnected && (
+              <button type="button" onClick={() => { setIsEditing(false); tokenForm.reset() }} className="flex items-center gap-2 px-4 py-2 text-slate-500 text-sm font-medium rounded-lg hover:bg-slate-100 transition-colors cursor-pointer">
+                <X size={13} /> Cancel
+              </button>
+            )}
+          </div>
+        </form>
+      )}
     </SectionWrapper>
   )
 }
 
 // ── Google ────────────────────────────────────────────────────────────────────
 
-const googleSchema = z.object({
+const googleSiteSchema = z.object({
+  gsc_site_url: z.string().url('Must be a valid URL'),
+  ga4_property_id: z.string().optional(),
+})
+type GoogleSiteForm = z.infer<typeof googleSiteSchema>
+
+const googleServiceAccountSchema = z.object({
   gsc_site_url: z.string().url('Must be a valid URL'),
   ga4_property_id: z.string().optional(),
   credentials_json: z.string().min(10, 'Paste the full service account JSON'),
 })
-type GoogleForm = z.infer<typeof googleSchema>
+type GoogleServiceAccountForm = z.infer<typeof googleServiceAccountSchema>
 
 function GoogleSection({
   projectName,
   gscStatus,
   ga4Status,
+  isOAuthConnected,
 }: {
   projectName: string
   gscStatus?: IntegrationStatusItem
   ga4Status?: IntegrationStatusItem
+  isOAuthConnected: boolean
 }) {
-  const isConnected = gscStatus?.connected === true
+  const isConnected = gscStatus?.connected === true || isOAuthConnected
+  const [mode, setMode] = useState<'oauth' | 'service_account'>('oauth')
   const [isEditing, setIsEditing] = useState(false)
   const locked = isConnected && !isEditing
 
   const qc = useQueryClient()
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<GoogleForm>({
-    resolver: zodResolver(googleSchema),
+
+  // Site URL / property config form (used after OAuth connect)
+  const siteForm = useForm<GoogleSiteForm>({ resolver: zodResolver(googleSiteSchema) })
+
+  // Service account form (legacy)
+  const saForm = useForm<GoogleServiceAccountForm>({ resolver: zodResolver(googleServiceAccountSchema) })
+
+  // Google OAuth flow
+  const oauthMut = useMutation({
+    mutationFn: () => oauthApi.googleStart(),
+    onSuccess: ({ url }) => {
+      window.open(url, '_blank', 'width=600,height=700,noopener')
+      toast.success('Complete the Google sign-in in the new window, then refresh this page.')
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
   })
 
-  const { mutate, isPending } = useMutation({
-    mutationFn: async (data: GoogleForm) => {
-      try {
-        const parsed = JSON.parse(data.credentials_json)
-        if (parsed.type !== 'service_account') {
-          throw new Error('Expected a Google service account JSON (type: service_account)')
-        }
-      } catch (e) {
-        throw new Error(e instanceof Error ? e.message : 'Invalid JSON')
-      }
-
-      await integrationsApi.updateConfig(projectName, {
+  // Save site URL / property config after OAuth
+  const siteMut = useMutation({
+    mutationFn: (data: GoogleSiteForm) =>
+      integrationsApi.updateConfig(projectName, {
         google: {
           enabled: true,
           gsc_site_url: data.gsc_site_url,
           ga4_property_id: data.ga4_property_id || '',
         },
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['integrations-status', projectName] })
+      toast.success('Google site config saved')
+      setIsEditing(false)
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
+
+  // Service account (legacy) save
+  const saMut = useMutation({
+    mutationFn: async (data: GoogleServiceAccountForm) => {
+      try {
+        const parsed = JSON.parse(data.credentials_json)
+        if (parsed.type !== 'service_account') throw new Error('Expected type: service_account')
+      } catch (e) {
+        throw new Error(e instanceof Error ? e.message : 'Invalid JSON')
+      }
+      await integrationsApi.updateConfig(projectName, {
+        google: { enabled: true, gsc_site_url: data.gsc_site_url, ga4_property_id: data.ga4_property_id || '' },
       })
-      await integrationsApi.uploadGoogleCredentials(projectName, {
-        credentials_json: data.credentials_json,
-      })
+      await integrationsApi.uploadGoogleCredentials(projectName, { credentials_json: data.credentials_json })
       const [gsc, ga4] = await Promise.all([
         integrationsApi.test(projectName, 'google_search_console'),
-        data.ga4_property_id
-          ? integrationsApi.test(projectName, 'google_analytics')
-          : Promise.resolve(null),
+        data.ga4_property_id ? integrationsApi.test(projectName, 'google_analytics') : Promise.resolve(null),
       ])
       return { gsc, ga4 }
     },
     onSuccess: ({ gsc, ga4 }) => {
       qc.invalidateQueries({ queryKey: ['integrations-status', projectName] })
-      if (gsc.connected) {
-        toast.success('Google Search Console connected')
-        setIsEditing(false)
-        reset()
-      } else {
-        toast.error(`GSC error: ${gsc.error}`)
-      }
-      if (ga4) {
-        if (ga4.connected) toast.success('Google Analytics connected')
-        else toast.error(`GA4 error: ${ga4.error}`)
-      }
+      if (gsc.connected) { toast.success('Google Search Console connected'); setIsEditing(false); saForm.reset() }
+      else toast.error(`GSC error: ${gsc.error}`)
+      if (ga4) { if (ga4.connected) toast.success('Google Analytics connected'); else toast.error(`GA4 error: ${ga4.error}`) }
     },
     onError: (err) => toast.error(getErrorMessage(err)),
   })
 
   return (
     <div className="space-y-0">
-      <SectionWrapper title="Google Search Console" status={gscStatus}>
-        <form onSubmit={handleSubmit((d) => mutate(d))} className="space-y-4">
-          <Field label="GSC Site URL" error={errors.gsc_site_url?.message}>
-            <Input
-              {...register('gsc_site_url')}
-              placeholder="https://example.com/"
-              disabled={locked}
-            />
-            {!locked && (
-              <p className="text-slate-400 text-xs mt-1">
-                Must match exactly as verified in Google Search Console
-              </p>
-            )}
-          </Field>
-          <Field label="GA4 Property ID (optional)" error={errors.ga4_property_id?.message}>
-            <Input
-              {...register('ga4_property_id')}
-              placeholder={locked ? '••••••••' : '123456789'}
-              disabled={locked}
-            />
-          </Field>
-          <Field label="Service Account JSON" error={errors.credentials_json?.message}>
-            <Textarea
-              {...register('credentials_json')}
-              rows={locked ? 3 : 8}
-              placeholder={
-                locked
-                  ? '{ "type": "service_account", ... } — saved'
-                  : '{\n  "type": "service_account",\n  "project_id": "...",\n  ...\n}'
-              }
-              disabled={locked}
-            />
-            {!locked && (
-              <p className="text-slate-400 text-xs mt-1">
-                Paste the full contents of your Google service account JSON file
-              </p>
-            )}
-          </Field>
-
-          <div className="flex items-center gap-3">
-            {locked ? (
+      <SectionWrapper title="Google (GSC + GA4)" status={gscStatus}>
+        {/* Mode tabs */}
+        {!isConnected && (
+          <div className="flex gap-1 p-1 bg-slate-100 rounded-lg mb-4 w-fit">
+            {(['oauth', 'service_account'] as const).map((m) => (
               <button
+                key={m}
                 type="button"
-                onClick={() => setIsEditing(true)}
-                className="flex items-center gap-2 px-4 py-2 border border-slate-300 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
-              >
-                <Pencil size={13} />
-                Edit credentials
-              </button>
-            ) : (
-              <>
-                <SaveButton loading={isPending} label="Save & Test All Google" />
-                {isConnected && (
-                  <button
-                    type="button"
-                    onClick={() => { setIsEditing(false); reset() }}
-                    className="flex items-center gap-2 px-4 py-2 text-slate-500 text-sm font-medium rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
-                  >
-                    <X size={13} />
-                    Cancel
-                  </button>
+                onClick={() => setMode(m)}
+                className={cn(
+                  'px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer',
+                  mode === m ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'
                 )}
-              </>
-            )}
+              >
+                {m === 'oauth' ? 'Google OAuth (Recommended)' : 'Service Account (Legacy)'}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* OAuth connected state */}
+        {isOAuthConnected && !isEditing && (
+          <div className="space-y-3">
+            <ConnectedRow
+              label="Connected via Google OAuth"
+              onEdit={() => setIsEditing(true)}
+            />
             {ga4Status && ga4Status.error !== 'Not enabled in project.yaml' && (
-              <StatusBadge
-                status={ga4Status.connected ? 'connected' : 'error'}
-                label={`GA4: ${ga4Status.connected ? 'OK' : 'Error'}`}
-              />
+              <StatusBadge status={ga4Status.connected ? 'connected' : 'error'} label={`GA4: ${ga4Status.connected ? 'OK' : 'Error'}`} />
             )}
           </div>
-        </form>
+        )}
+
+        {/* OAuth connected — edit site config */}
+        {isOAuthConnected && isEditing && (
+          <form onSubmit={siteForm.handleSubmit((d) => siteMut.mutate(d))} className="space-y-4">
+            <Field label="GSC Site URL" error={siteForm.formState.errors.gsc_site_url?.message}>
+              <Input {...siteForm.register('gsc_site_url')} placeholder="https://example.com/" />
+              <p className="text-slate-400 text-xs mt-1">Must match exactly as verified in Google Search Console</p>
+            </Field>
+            <Field label="GA4 Property ID (optional)" error={siteForm.formState.errors.ga4_property_id?.message}>
+              <Input {...siteForm.register('ga4_property_id')} placeholder="123456789" />
+            </Field>
+            <div className="flex gap-2">
+              <SaveButton loading={siteMut.isPending} label="Save Config" />
+              <button type="button" onClick={() => setIsEditing(false)} className="flex items-center gap-1.5 px-3 py-2 text-slate-500 text-sm rounded-lg hover:bg-slate-100 transition-colors cursor-pointer">
+                <X size={13} /> Cancel
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* Service account connected state (legacy) */}
+        {!isOAuthConnected && isConnected && !isEditing && (
+          <ConnectedRow label="Service account credentials saved" onEdit={() => setIsEditing(true)} />
+        )}
+
+        {/* OAuth connect button */}
+        {!isConnected && mode === 'oauth' && (
+          <div className="space-y-3">
+            <p className="text-xs text-slate-500">
+              Grant SEO OS read-only access to your Google Search Console and Google Analytics 4. One sign-in covers both.
+            </p>
+            <button
+              type="button"
+              onClick={() => oauthMut.mutate()}
+              disabled={oauthMut.isPending}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors cursor-pointer"
+            >
+              {oauthMut.isPending && <Loader2 size={14} className="animate-spin" />}
+              Connect with Google
+            </button>
+          </div>
+        )}
+
+        {/* Service account form (legacy / not connected) */}
+        {!isOAuthConnected && (!isConnected || isEditing) && mode === 'service_account' && (
+          <form onSubmit={saForm.handleSubmit((d) => saMut.mutate(d))} className="space-y-4">
+            <Field label="GSC Site URL" error={saForm.formState.errors.gsc_site_url?.message}>
+              <Input {...saForm.register('gsc_site_url')} placeholder="https://example.com/" />
+              <p className="text-slate-400 text-xs mt-1">Must match exactly as verified in Google Search Console</p>
+            </Field>
+            <Field label="GA4 Property ID (optional)" error={saForm.formState.errors.ga4_property_id?.message}>
+              <Input {...saForm.register('ga4_property_id')} placeholder="123456789" />
+            </Field>
+            <Field label="Service Account JSON" error={saForm.formState.errors.credentials_json?.message}>
+              <Textarea {...saForm.register('credentials_json')} rows={8} placeholder={'{\n  "type": "service_account",\n  "project_id": "...",\n  ...\n}'} />
+              <p className="text-slate-400 text-xs mt-1">Paste the full contents of your Google service account JSON file</p>
+            </Field>
+            <div className="flex items-center gap-3">
+              <SaveButton loading={saMut.isPending} label="Save & Test" />
+              {isConnected && (
+                <button type="button" onClick={() => { setIsEditing(false); saForm.reset() }} className="flex items-center gap-2 px-4 py-2 text-slate-500 text-sm font-medium rounded-lg hover:bg-slate-100 transition-colors cursor-pointer">
+                  <X size={13} /> Cancel
+                </button>
+              )}
+              {ga4Status && ga4Status.error !== 'Not enabled in project.yaml' && (
+                <StatusBadge status={ga4Status.connected ? 'connected' : 'error'} label={`GA4: ${ga4Status.connected ? 'OK' : 'Error'}`} />
+              )}
+            </div>
+          </form>
+        )}
       </SectionWrapper>
     </div>
   )
@@ -855,9 +1097,11 @@ export function IntegrationsTab({ projectName }: { projectName: string }) {
         <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Account-level Keys</h3>
         <div className="space-y-4">
           <OpenAISection isConnected={keyConnected('openai')} />
-          <GoogleAPIKeySection isConnected={keyConnected('google_api_key')} />
           <CopyscapeSection isConnected={keyConnected('copyscape_user') && keyConnected('copyscape_key')} />
           <DataForSEOSection isConnected={keyConnected('dataforseo_login') && keyConnected('dataforseo_password')} />
+          <SEMrushSection isConnected={keyConnected('semrush_key')} />
+          <AhrefsSection isConnected={keyConnected('ahrefs_key')} />
+          <MozSection isConnected={keyConnected('moz_access_id') && keyConnected('moz_secret_key')} />
         </div>
       </div>
       <div>
@@ -869,6 +1113,7 @@ export function IntegrationsTab({ projectName }: { projectName: string }) {
             projectName={projectName}
             gscStatus={getStatus('google_search_console')}
             ga4Status={getStatus('google_analytics')}
+            isOAuthConnected={keyConnected('google_refresh_token')}
           />
         </div>
       </div>

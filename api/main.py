@@ -28,6 +28,9 @@ from api.routers.feedback import router as feedback_router
 from api.routers.shopify_improve import router as shopify_improve_router
 from api.routers.account import router as account_router
 from api.routers.admin import router as admin_router
+from api.routers.observability import router as observability_router
+from api.routers.oauth_google import router as oauth_google_router
+from api.routers.oauth_shopify import router as oauth_shopify_router
 from core.db.base import create_tables
 
 
@@ -74,6 +77,9 @@ app.include_router(feedback_router, prefix="/api")
 app.include_router(shopify_improve_router, prefix="/api")
 app.include_router(account_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
+app.include_router(observability_router, prefix="/api")
+app.include_router(oauth_google_router, prefix="/api")
+app.include_router(oauth_shopify_router, prefix="/api")
 
 
 @app.get("/health", response_model=HealthResponse, tags=["health"])
