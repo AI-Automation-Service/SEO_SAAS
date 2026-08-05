@@ -103,6 +103,48 @@ def _word_count(text: str) -> int:
     return len(text.split())
 
 
+def _md_to_html(text: str) -> str:
+    """
+    Fallback converter: if GPT outputs Markdown despite instructions, convert
+    the most common patterns to HTML. Leaves already-valid HTML untouched.
+    """
+    if not text:
+        return text
+    # Only run if markdown headings are detected
+    if not re.search(r'^#{1,3} ', text, re.MULTILINE):
+        return text
+    lines = text.split('\n')
+    out = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        # Headings
+        if re.match(r'^### ', line):
+            out.append(f"<h3>{line[4:].strip()}</h3>")
+        elif re.match(r'^## ', line):
+            out.append(f"<h2>{line[3:].strip()}</h2>")
+        elif re.match(r'^# ', line):
+            out.append(f"<h1>{line[2:].strip()}</h1>")
+        # Unordered list items (-, *, –)
+        elif re.match(r'^[-*–] ', line):
+            out.append(f"<li>{line[2:].strip()}</li>")
+        # Numbered list items
+        elif re.match(r'^\d+\. ', line):
+            out.append(f"<li>{re.sub(r'^\d+\. ', '', line).strip()}</li>")
+        # Blank line
+        elif line.strip() == '':
+            out.append('')
+        else:
+            out.append(f"<p>{line.strip()}</p>" if line.strip() else '')
+        i += 1
+    html = '\n'.join(out)
+    # inline bold
+    html = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', html)
+    # wrap consecutive <li> in <ul>
+    html = re.sub(r'(<li>.*?</li>\n?)+', lambda m: f"<ul>{m.group(0)}</ul>", html, flags=re.DOTALL)
+    return html
+
+
 def _project_context_block(ctx: ProjectContext) -> str:
     cfg = ctx.config
     return (
@@ -305,7 +347,7 @@ STEP 2 — H2 Section 1 (250-400 words)
 • Follow with 3-4 paragraphs OR a mix of prose + bullet list + example
 • Include 1 E-E-A-T signal (concrete example, statistic with [Citation: …], or real scenario)
 • Include 1 citation placeholder: [Citation: describe source needed]
-• Include 1 internal link: [{website}/relevant-page/](descriptive anchor text)
+• Include 1 internal link using HTML: <a href="{website}/relevant-page/">descriptive anchor text</a>
 
 STEP 3 — H2 Section 2 (250-400 words)
 • Same depth requirements as Section 1
@@ -319,9 +361,15 @@ STEP 4 — H2 Section 3 (250-400 words)
 STEP 5 — H2 Section 4 (250-400 words)
 • Include 1 E-E-A-T signal, 1 citation placeholder
 
-Formatting rules:
-• H1 as # heading; H2 as ## heading — write "## Title", never "## H2: Title"
-• sections_outline and sections_remaining: plain heading text — no "H2:", "H3:", or numbering prefix
+HTML formatting rules (STRICT — no Markdown syntax allowed):
+• Headings: <h1>Title</h1>, <h2>Section</h2>, <h3>Subsection</h3>
+• Paragraphs: <p>text</p>
+• Bold: <strong>text</strong>
+• Bullet lists: <ul><li>item</li><li>item</li></ul>
+• Numbered lists: <ol><li>step</li><li>step</li></ol>
+• Links: <a href="url">anchor text</a>
+• Do NOT use #, ##, **, *, –, or any other Markdown syntax
+• sections_outline and sections_remaining: plain heading text only — no tags, no prefixes
 
 ════════════════════════════════════════
 INTERNAL SEO SELF-CHECK (do not output — verify before submitting)
@@ -347,7 +395,7 @@ Return a single JSON object with EXACTLY these keys — no extra keys, no markdo
   "h1": "Article headline — contains primary keyword, matches meta_title closely",
   "schema_type": "Article or BlogPosting or NewsArticle",
   "sections_outline": ["Section 1 heading", "Section 2 heading", "Section 3 heading", "Section 4 heading"],
-  "content_phase1": "<full Markdown content — introduction + 4 H2 sections — target {half}+ words>",
+  "content_phase1": "<full HTML content — introduction + 4 H2 sections — target {half}+ words — use HTML tags only, no Markdown>",
   "sections_remaining": ["Section 5 heading", "Section 6 heading", "FAQ", "Conclusion"]
 }}
 """
@@ -424,7 +472,7 @@ OUTPUT FORMAT
 ════════════════════════════════════════
 Return a single JSON object with EXACTLY these keys — no extra keys, no markdown fences:
 {{
-  "content_phase2": "<full Markdown — all remaining H2 sections + FAQ + Conclusion — target {remaining_wc}+ words>",
+  "content_phase2": "<full HTML — all remaining H2 sections + FAQ + Conclusion — target {remaining_wc}+ words — use HTML tags only, no Markdown>",
   "schema_json_ld": "<script type=\\"application/ld+json\\">{{...valid JSON-LD for {phase1.get("schema_type", "Article")}...}}</script>"
 }}
 """
@@ -553,8 +601,8 @@ def generate_article(
         schema_block = phase2.get("schema_json_ld", "")
 
     # ── Assemble final article ─────────────────────────────────────────────────
-    p1_content = phase1.get("content_phase1", "")
-    p2_content = phase2.get("content_phase2", "")
+    p1_content = _md_to_html(phase1.get("content_phase1", ""))
+    p2_content = _md_to_html(phase2.get("content_phase2", ""))
 
     full_article = "\n\n".join(filter(None, [p1_content, p2_content, schema_block]))
     full_article = _strip_placeholders(full_article, business_name)
