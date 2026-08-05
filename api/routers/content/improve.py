@@ -1043,6 +1043,7 @@ def apply_change(
 
         # ── Image generation (DALL-E 3) ─────────────────────────────────────
         article_content = record.new_content or ""
+        focus_keyword = (record.statistics or {}).get("focus_keyword", "") if record.statistics else ""
         image_placeholders = re.findall(r'<!--\s*Image:\s*([^>]{5,200}?)\s*-->', article_content)
         if image_placeholders:
             try:
@@ -1071,11 +1072,12 @@ def apply_change(
                         mime_type="image/png",
                     )
                     if media.get("url"):
-                        # Replace placeholder with a WordPress image block
+                        # First image alt = focus keyword; subsequent = description
+                        alt_text = focus_keyword if (idx == 0 and focus_keyword) else description[:120]
                         wp_img_block = (
                             f'\n<!-- wp:image {{"id":{media["id"]}}} -->\n'
                             f'<figure class="wp-block-image">'
-                            f'<img src="{media["url"]}" alt="{description[:120]}" class="wp-image-{media["id"]}"/>'
+                            f'<img src="{media["url"]}" alt="{alt_text}" class="wp-image-{media["id"]}"/>'
                             f'</figure>\n<!-- /wp:image -->\n'
                         )
                         placeholder_pattern = re.compile(

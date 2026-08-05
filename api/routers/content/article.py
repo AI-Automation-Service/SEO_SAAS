@@ -337,22 +337,25 @@ ARTICLE STRUCTURE — Phase 1 (first {half}+ words)
 Write the FIRST HALF of a {target_wc}-word article. Produce exactly 4 H2 sections.
 
 STEP 1 — Introduction (100-150 words)
-• Hook sentence that addresses the reader's primary problem
-• 60-80 word direct answer to the primary keyword query (AI Overview / AEO target)
+• FIRST SENTENCE must contain the exact primary keyword: "{keyword}"
+• 60-80 word direct answer paragraph — use the exact keyword phrase naturally in this paragraph
 • Brief preview of what the article covers
-• End the introduction block with: <!-- Image: [describe the ideal image for this topic] -->
+• After the intro paragraphs, output this HTML comment on its own line: <!-- Image: professional photo showing {keyword} -->
 
 STEP 2 — H2 Section 1 (250-400 words)
+• The H2 heading MUST contain the primary keyword or a variation within 1-2 words (e.g. "Why {keyword}?" or "How to {keyword}")
 • Open with a 60-80 word direct answer paragraph
 • Follow with 3-4 paragraphs OR a mix of prose + bullet list + example
 • Include 1 E-E-A-T signal (concrete example, statistic with [Citation: …], or real scenario)
 • Include 1 citation placeholder: [Citation: describe source needed]
-• Include 1 internal link using HTML: <a href="{website}/relevant-page/">descriptive anchor text</a>
+• Include 1 internal link: choose a logical URL path on {website} based on the business services (e.g. {website}/services/ or {website}/contact/ or {website}/about/) — do NOT use /relevant-page/ as a URL path
+• Include 1 external link to a real authoritative source (e.g. a government site, .edu, or major publication like Forbes or Harvard Business Review) — use the actual known URL
 
 STEP 3 — H2 Section 2 (250-400 words)
 • Same depth requirements as Section 1
-• End the section with: <!-- Image: [describe supporting image] -->
+• After the last paragraph of this section, output: <!-- Image: detailed illustration of {keyword} process -->
 • Include 1 E-E-A-T signal, 1 citation placeholder
+• Include 1 external link to a real authoritative source
 
 STEP 4 — H2 Section 3 (250-400 words)
 • Use a different content format than Section 2 (e.g. numbered steps or comparison table)
@@ -368,21 +371,23 @@ HTML formatting rules (STRICT — no Markdown syntax allowed):
 • Bullet lists: <ul><li>item</li><li>item</li></ul>
 • Numbered lists: <ol><li>step</li><li>step</li></ol>
 • Links: <a href="url">anchor text</a>
+• HTML comments like <!-- Image: ... --> are valid — include them exactly as shown
 • Do NOT use #, ##, **, *, –, or any other Markdown syntax
 • sections_outline and sections_remaining: plain heading text only — no tags, no prefixes
 
 ════════════════════════════════════════
 INTERNAL SEO SELF-CHECK (do not output — verify before submitting)
 ════════════════════════════════════════
-✓ Primary keyword appears in H1
+✓ Exact keyword "{keyword}" appears in the very first sentence
+✓ Exact keyword "{keyword}" appears in at least one H2 heading
 ✓ Primary keyword appears in meta_title and meta_description
-✓ Primary keyword appears in the first paragraph of the introduction
 ✓ Semantic variations used naturally (not stuffed)
 ✓ Each H2 section has at least one E-E-A-T signal
 ✓ At least 2 citation placeholders present
-✓ At least 1 internal link present
-✓ Image placeholder after introduction
-✓ No banned phrases, no placeholder brackets, no invented URLs
+✓ At least 1 internal link to a real page on {website} (NOT /relevant-page/)
+✓ At least 2 external links to real authoritative URLs
+✓ 2 image placeholders included (after intro, after Section 2)
+✓ No banned phrases, no bracket placeholders, no invented URLs
 
 ════════════════════════════════════════
 OUTPUT FORMAT
@@ -599,6 +604,8 @@ def generate_article(
     # Fall back to Phase 2's inline schema if dedicated call fails
     if not schema_block:
         schema_block = phase2.get("schema_json_ld", "")
+    # Strip "Your Business Name" placeholders from schema
+    schema_block = _strip_placeholders(schema_block, business_name)
 
     # ── Assemble final article ─────────────────────────────────────────────────
     p1_content = _md_to_html(phase1.get("content_phase1", ""))
