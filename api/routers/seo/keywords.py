@@ -1,6 +1,5 @@
 ﻿import csv
 import io
-import json
 import re
 from datetime import datetime
 from typing import Optional
@@ -8,8 +7,10 @@ from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
+
+from contracts.cluster import ClusterGroup, ClusterKeyword, ClusterResponse
 
 from agents.base import SkillAgent
 from api.dependencies import get_current_user, get_db, get_project_context, get_secret_manager
@@ -583,8 +584,8 @@ def run_cluster_agent(
     # Site URL pattern from sitemap
     site_url_pattern = _site_url_samples(db, current_user.id, context.name)
 
-    all_results: list[dict] = []
-    all_clusters: list[dict] = []
+    all_results: list[ClusterKeyword] = []
+    all_clusters: list[ClusterGroup] = []
 
     for i in range(0, len(rows), _BATCH_SIZE):
         batch_rows = rows[i : i + _BATCH_SIZE]
@@ -597,49 +598,39 @@ def run_cluster_agent(
         )
 
         try:
-            raw = agent.run(user_msg, timeout=120, json_mode=True)
+            raw = agent.run(user_msg, timeout=120, output_mode="structured", contract=ClusterResponse)
         except Exception as e:
             raise HTTPException(502, f"OpenAI error: {e}")
 
         try:
-            parsed = json.loads(raw)
-        except json.JSONDecodeError as e:
-            raise HTTPException(502, f"OpenAI returned invalid JSON: {e}. Response: {raw[:300]}")
+            batch_response = ClusterResponse.model_validate_json(raw)
+        except ValidationError as e:
+            raise HTTPException(502, f"Cluster agent returned invalid output: {e}")
 
-        if isinstance(parsed, dict):
-            all_results.extend(parsed.get("keywords", []))
-            all_clusters.extend(parsed.get("clusters", []))
-        elif isinstance(parsed, list):
-            all_results.extend(parsed)
+        all_results.extend(batch_response.keywords)
+        all_clusters.extend(batch_response.clusters)
 
     # Build hub map from clusters array: cluster_id -> hub_keyword
-    hub_map: dict[str, str] = {}
-    for c in all_clusters:
-        if isinstance(c, dict) and "cluster_id" in c and "hub_keyword" in c:
-            hub_map[c["cluster_id"]] = c["hub_keyword"].strip().lower()
+    hub_map: dict[str, str] = {c.cluster_id: c.hub_keyword.strip().lower() for c in all_clusters}
 
-    results_map = {
-        r["keyword"].lower(): r
-        for r in all_results
-        if isinstance(r, dict) and "keyword" in r
-    }
+    results_map = {kw.keyword.lower(): kw for kw in all_results}
 
     updated = 0
     for row in rows:
         data = results_map.get(row.keyword.lower())
         if not data:
             continue
-        row.cluster = data.get("cluster") or row.cluster
-        row.intent = data.get("intent") or row.intent
-        row.funnel_stage = data.get("funnel_stage") or row.funnel_stage
-        row.suggested_url = data.get("suggested_url") or row.suggested_url
+        row.cluster = data.cluster or row.cluster
+        row.intent = data.intent or row.intent
+        row.funnel_stage = data.funnel_stage or row.funnel_stage
+        row.suggested_url = data.suggested_url or row.suggested_url
         row.updated_at = datetime.utcnow()
         # Hub: prefer clusters array hub_keyword, fallback to is_hub field
-        cluster_id = data.get("cluster_id", "")
+        cluster_id = data.cluster_id
         if hub_map and cluster_id in hub_map:
             row.is_hub = (hub_map[cluster_id] == row.keyword.strip().lower())
         else:
-            row.is_hub = bool(data.get("is_hub", False))
+            row.is_hub = data.is_hub
         updated += 1
 
     _match_sitemap(rows, db, current_user.id, context.name)

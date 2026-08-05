@@ -6,7 +6,6 @@ GET  /projects/{name}/improve/preferences           — get distilled preference
 POST /projects/{name}/improve/preferences/refresh   — re-distill from feedback history
 """
 
-import json
 from datetime import datetime
 from typing import Optional
 
@@ -15,6 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from agents.base import SkillAgent
+from contracts.feedback_distiller import FeedbackDistillerResponse
 from api.dependencies import get_current_user, get_db, get_project_context
 from api.routers.identity.api_keys import get_user_secret
 from core.db.models import PageChange, ProjectFeedback, ProjectPreferences, User
@@ -74,11 +74,9 @@ def _distill_preferences(
 
     try:
         raw = SkillAgent("feedback-distiller", openai_key, model="gpt-4o-mini").run(
-            feedback_data, timeout=60, json_mode=True
+            feedback_data, timeout=60, output_mode="structured", contract=FeedbackDistillerResponse
         )
-        data = json.loads(raw)
-        rules = data.get("rules", [])
-        return [r for r in rules if isinstance(r, str) and r.strip()][:10]
+        return FeedbackDistillerResponse.model_validate_json(raw).rules
     except Exception:
         return []
 

@@ -21,6 +21,11 @@ from typing import Literal, Type
 
 from pydantic import BaseModel
 
+from contracts.article import ArticlePhase1Response
+from contracts.analyzer import AnalyzerResponse
+from contracts.cluster import ClusterResponse
+from contracts.editor import EditorResponse
+from contracts.feedback_distiller import FeedbackDistillerResponse
 from contracts.meta import MetaResponse
 
 # ── Shared-doc list constants — named to avoid repeated literals ───────────────
@@ -79,9 +84,9 @@ _ENTRIES: list[AgentConfig] = [
         temperature=0.3,
         timeout=60,
         max_tokens=1200,
-        output_mode="json_mode",   # TODO: migrate to "structured" → create contracts/analyzer.py
+        output_mode="structured",
         shared_docs=["eeat-framework", "seo-standards", "json-output-discipline"],
-        contract=None,
+        contract=AnalyzerResponse,
         capabilities=["AI_WRITER"],
         description="Analyzes page content against 9 SEO signals and outputs a structured improvement plan.",
     ),
@@ -92,9 +97,9 @@ _ENTRIES: list[AgentConfig] = [
         temperature=0.55,
         timeout=120,
         max_tokens=4000,
-        output_mode="json_mode",   # TODO: migrate to "structured" → create contracts/editor.py
+        output_mode="structured",
         shared_docs=_FULL_EDIT,
-        contract=None,
+        contract=EditorResponse,
         capabilities=["AI_WRITER"],
         description="Rewrites page HTML to improve on-page SEO signals while preserving content intent.",
     ),
@@ -105,9 +110,9 @@ _ENTRIES: list[AgentConfig] = [
         temperature=0.3,
         timeout=60,
         max_tokens=2000,
-        output_mode="json_mode",   # TODO: migrate to "structured" → create contracts/cluster.py
+        output_mode="structured",
         shared_docs=_JSON_ONLY,
-        contract=None,
+        contract=ClusterResponse,
         capabilities=["AI_WRITER"],
         description="Groups keywords into hub-and-spoke clusters and assigns primary/secondary intent.",
     ),
@@ -118,7 +123,7 @@ _ENTRIES: list[AgentConfig] = [
         temperature=0.3,
         timeout=60,
         max_tokens=1000,
-        output_mode="json_mode",   # TODO: migrate to "structured" → create contracts/schema.py
+        output_mode="markdown",    # Returns raw HTML <script> blocks, not JSON — no contract
         shared_docs=_JSON_ONLY,
         contract=None,
         capabilities=["AI_WRITER"],
@@ -131,9 +136,9 @@ _ENTRIES: list[AgentConfig] = [
         temperature=0.7,           # at cap; do not increase
         timeout=180,
         max_tokens=2500,
-        output_mode="json_mode",   # TODO: migrate to "structured" → create contracts/article.py
+        output_mode="structured",
         shared_docs=_FULL_WRITE,
-        contract=None,
+        contract=ArticlePhase1Response,  # Phase 1 contract; router passes phase-specific contracts per call
         capabilities=["AI_WRITER"],
         description="Writes long-form SEO articles in three phases: outline, draft, optimise.",
     ),
@@ -157,9 +162,9 @@ _ENTRIES: list[AgentConfig] = [
         temperature=0.3,
         timeout=45,
         max_tokens=500,
-        output_mode="json_mode",   # TODO: migrate to "structured" → create contracts/feedback_distiller.py
+        output_mode="structured",
         shared_docs=_JSON_ONLY,
-        contract=None,
+        contract=FeedbackDistillerResponse,
         capabilities=["AI_WRITER", "FEEDBACK_LOOP"],
         description="Distils subscriber approval/rejection patterns into persistent preference rules.",
     ),

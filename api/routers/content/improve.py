@@ -11,6 +11,8 @@ import yaml
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 from pydantic import BaseModel, ValidationError
+from contracts.analyzer import AnalyzerResponse
+from contracts.editor import EditorResponse
 from contracts.meta import MetaResponse
 from sqlalchemy.orm import Session
 
@@ -585,14 +587,14 @@ def _run_page_pipeline(
 """
 
     raw_analysis = SkillAgent("seo-analyzer", openai_key, model="gpt-4o-mini").run(
-        analyzer_msg, timeout=60, json_mode=True
+        analyzer_msg, timeout=60, output_mode="structured", contract=AnalyzerResponse
     )
     try:
-        analysis = json.loads(raw_analysis)
-    except json.JSONDecodeError:
-        raise ValueError("Analyzer returned invalid JSON.")
+        analysis = AnalyzerResponse.model_validate_json(raw_analysis)
+    except ValidationError as e:
+        raise ValueError(f"Analyzer returned invalid output: {e}")
 
-    action_needed = analysis.get("action_needed", False)
+    action_needed = analysis.action_needed
 
     py_stats = {
         "keyword_frequency": _count_keyword_frequency(post_data["content"], keyword),
@@ -643,33 +645,33 @@ def _run_page_pipeline(
 {knowledge_block}
 
 ## recommendations
-{json.dumps(analysis.get('recommendations', []), indent=2)}
+{json.dumps([r.model_dump() for r in analysis.recommendations], indent=2)}
 
 ## html_content (Title: {post_data['title']})
 {post_data['content']}
 """
 
         raw_edit = SkillAgent("seo-editor", openai_key, model="gpt-4o").run(
-            editor_msg, timeout=120, json_mode=True
+            editor_msg, timeout=120, output_mode="structured", contract=EditorResponse
         )
         try:
-            edit_result = json.loads(raw_edit)
-        except json.JSONDecodeError:
-            raise ValueError("Editor returned invalid JSON.")
+            edit_result = EditorResponse.model_validate_json(raw_edit)
+        except ValidationError as e:
+            raise ValueError(f"Editor returned invalid output: {e}")
 
         # Content changes — only apply when content is actually editable
         if profile["content_editable"] and action_needed:
             changes_made = [
-                f"{c['type']}: {c['description']}"
-                for c in edit_result.get("changes_made", [])
-                if isinstance(c, dict) and c.get("status") == "applied"
+                f"{c.type}: {c.description}"
+                for c in edit_result.changes_made
+                if c.status == "applied"
             ]
-            new_content = edit_result.get("new_content") or post_data["content"]
+            new_content = edit_result.new_content or post_data["content"]
 
         # Meta changes — only store when plugin is present and values actually changed
         if profile["meta_editable"]:
-            meta_title = (edit_result.get("suggested_meta_title") or "").strip()
-            meta_description = (edit_result.get("suggested_meta_description") or "").strip()
+            meta_title = edit_result.suggested_meta_title  # stripped by validator
+            meta_description = edit_result.suggested_meta_description  # stripped by validator
             current_title = (post_data.get("current_meta_title") or "").strip()
             current_description = (post_data.get("current_meta_description") or "").strip()
             title_changed = meta_title and meta_title != current_title
@@ -692,9 +694,9 @@ def _run_page_pipeline(
     has_meta = bool(meta_updates)
 
     if has_content_change or has_meta:
-        change_summary = analysis.get("summary", "")
+        change_summary = analysis.summary
     else:
-        change_summary = analysis.get("no_action_reason") or "Page is already well-optimized — no changes needed."
+        change_summary = analysis.no_action_reason or "Page is already well-optimized — no changes needed."
 
     record = PageChange(
         user_id=user_id,
@@ -707,7 +709,7 @@ def _run_page_pipeline(
         new_content=new_content,
         change_summary=change_summary,
         changes_made=changes_made,
-        statistics={**(analysis.get("statistics") or {}), **py_stats},
+        statistics={**analysis.statistics.model_dump(), **py_stats},
         meta_updates=meta_updates,
         status="pending" if (has_content_change or has_meta) else "no_action",
     )

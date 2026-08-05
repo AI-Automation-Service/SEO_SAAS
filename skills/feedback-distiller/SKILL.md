@@ -8,10 +8,4 @@ Rules must be:
 - Based on observed patterns in the feedback data you receive
 - Written as direct instructions for an AI (e.g. "Always include a direct answer in the first paragraph")
 
-Output a JSON object:
-{"rules": ["rule 1", "rule 2", ...]}
-
-Maximum 10 rules. If no clear patterns emerge from the data, return fewer rules or an empty list.
-Only include rules you can confidently derive from the feedback. Do not invent rules.
-
-Do NOT return markdown or code blocks. Your response MUST be valid JSON parseable directly.
+Return up to 10 rules as a structured list. Return fewer rules or an empty list when no clear patterns emerge. Only include rules you can confidently derive from the feedback — do not invent rules.

@@ -8,15 +8,16 @@ Result → PageChange(action_type=new_draft, platform=wordpress) in the Change Q
 Plagiarism check runs after Phase 3 if a Copyscape key is available.
 """
 
-import json
 import re
 import uuid
 from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
+
+from contracts.article import ArticlePhase1Response, ArticlePhase2Response, ArticlePhase3Response
 
 from agents.base import SkillAgent
 from api.dependencies import get_current_user, get_db, get_project_context
@@ -438,13 +439,13 @@ def _phase2_message(
     keyword: str,
     business_block: str,
     website: str,
-    phase1: dict,
+    phase1: ArticlePhase1Response,
     target_wc: int,
 ) -> str:
-    actual_p1_wc = _word_count(phase1.get("content_phase1", ""))
+    actual_p1_wc = _word_count(phase1.content_phase1)
     p2_target = max(target_wc // 3, 600)
-    sections = phase1.get("sections_remaining", [])
-    p1_tail = (phase1.get("content_phase1", "") or "")[-600:]
+    sections = phase1.sections_remaining
+    p1_tail = (phase1.content_phase1 or "")[-600:]
     section_steps = "".join(
         f"STEP {i + 1} — H2: {s} (250-400 words)\n"
         f"• Open with a direct answer paragraph (60-80 words)\n"
@@ -466,8 +467,8 @@ BUSINESS CONTEXT
 PHASE 1 HANDOFF
 ════════════════════════════════════════
 Primary keyword : {keyword}
-H1              : {phase1.get("h1")}
-Phase 1 covered : {", ".join(phase1.get("sections_outline", []))}
+H1              : {phase1.h1}
+Phase 1 covered : {", ".join(phase1.sections_outline)}
 Phase 1 length  : {actual_p1_wc} words (measured by backend)
 Still to write  : {", ".join(sections)} (Phase 2) — FAQ + Conclusion come in Phase 3
 
@@ -495,7 +496,7 @@ OUTPUT FORMAT
 Return a single JSON object with EXACTLY these keys — no extra keys, no markdown fences:
 {{
   "content_phase2": "<full HTML — middle body H2 sections only — target {p2_target}+ words — use HTML tags only, no Markdown>",
-  "schema_json_ld": "<script type=\\"application/ld+json\\">{{...valid JSON-LD for {phase1.get("schema_type", "Article")}...}}</script>"
+  "schema_json_ld": "<script type=\\"application/ld+json\\">{{...valid JSON-LD for {phase1.schema_type}...}}</script>"
 }}
 """
 
@@ -503,7 +504,7 @@ Return a single JSON object with EXACTLY these keys — no extra keys, no markdo
 def _phase3_message(
     keyword: str,
     business_name: str,
-    phase1: dict,
+    phase1: ArticlePhase1Response,
     phase2_tail: str,
 ) -> str:
     return f"""You are running PHASE 3 (final) of a three-phase SEO article writing pipeline.
@@ -514,7 +515,7 @@ The GLOBAL RULES from Phase 1 apply in full — voice, variety, no banned phrase
 PHASE 3 TASK — FAQ + Conclusion (~500 words)
 ════════════════════════════════════════
 Primary keyword : {keyword}
-H1              : {phase1.get("h1")}
+H1              : {phase1.h1}
 
 Continuation point — pick up naturally after this content (do NOT repeat it):
 …{phase2_tail}
@@ -678,16 +679,16 @@ def generate_article(
     t0 = time.monotonic()
     try:
         raw_p1 = SkillAgent("seo-article-writer", openai_key, model="gpt-4o").run(
-            p1_msg, timeout=300, json_mode=True, max_tokens=6000
+            p1_msg, timeout=300, output_mode="structured", contract=ArticlePhase1Response, max_tokens=6000
         )
     except Exception as e:
         raise HTTPException(502, f"Article writer Phase 1 failed: {e}")
     p1_ms = int((time.monotonic() - t0) * 1000)
 
     try:
-        phase1 = json.loads(raw_p1)
-    except json.JSONDecodeError:
-        raise HTTPException(500, "Article writer Phase 1 returned invalid JSON.")
+        phase1 = ArticlePhase1Response.model_validate_json(raw_p1)
+    except ValidationError as e:
+        raise HTTPException(500, f"Article writer Phase 1 returned invalid output: {e}")
 
     # Rough token estimate for logging (100 chars ≈ 25 tokens)
     p1_in = len(p1_msg) // 4
@@ -702,16 +703,16 @@ def generate_article(
     t0 = time.monotonic()
     try:
         raw_p2 = SkillAgent("seo-article-writer", openai_key, model="gpt-4o").run(
-            p2_msg, timeout=300, json_mode=True, max_tokens=6000
+            p2_msg, timeout=300, output_mode="structured", contract=ArticlePhase2Response, max_tokens=6000
         )
     except Exception as e:
         raise HTTPException(502, f"Article writer Phase 2 failed: {e}")
     p2_ms = int((time.monotonic() - t0) * 1000)
 
     try:
-        phase2 = json.loads(raw_p2)
-    except json.JSONDecodeError:
-        raise HTTPException(500, "Article writer Phase 2 returned invalid JSON.")
+        phase2 = ArticlePhase2Response.model_validate_json(raw_p2)
+    except ValidationError as e:
+        raise HTTPException(500, f"Article writer Phase 2 returned invalid output: {e}")
 
     p2_in = len(p2_msg) // 4
     p2_out = len(raw_p2) // 4
@@ -720,22 +721,22 @@ def generate_article(
               p2_in, p2_out, p2_cost, p2_ms, article_job_id)
 
     # ── Phase 3 ────────────────────────────────────────────────────────────────
-    p2_tail = (phase2.get("content_phase2", "") or "")[-600:]
+    p2_tail = (phase2.content_phase2 or "")[-600:]
     p3_msg = _phase3_message(body.keyword, business_name, phase1, p2_tail)
 
     t0 = time.monotonic()
     try:
         raw_p3 = SkillAgent("seo-article-writer", openai_key, model="gpt-4o").run(
-            p3_msg, timeout=180, json_mode=True, max_tokens=2500
+            p3_msg, timeout=180, output_mode="structured", contract=ArticlePhase3Response, max_tokens=2500
         )
     except Exception as e:
         raise HTTPException(502, f"Article writer Phase 3 failed: {e}")
     p3_ms = int((time.monotonic() - t0) * 1000)
 
     try:
-        phase3 = json.loads(raw_p3)
-    except json.JSONDecodeError:
-        raise HTTPException(500, "Article writer Phase 3 returned invalid JSON.")
+        phase3 = ArticlePhase3Response.model_validate_json(raw_p3)
+    except ValidationError as e:
+        raise HTTPException(500, f"Article writer Phase 3 returned invalid output: {e}")
 
     p3_in = len(p3_msg) // 4
     p3_out = len(raw_p3) // 4
@@ -745,23 +746,23 @@ def generate_article(
 
     # ── seo-schema: dedicated schema generation (replaces Phase 2 inline) ─────────
     published_date = datetime.utcnow().strftime("%Y-%m-%d")
-    draft_title_tmp = phase1.get("h1") or phase1.get("meta_title") or body.keyword.title()
+    draft_title_tmp = phase1.h1 or phase1.meta_title or body.keyword.title()
     draft_slug_tmp = _slugify(body.keyword)
     schema_block = _generate_schema(
         openai_key, draft_title_tmp, draft_slug_tmp, body.keyword,
         website, business_name,
-        phase1.get("schema_type", "Article"), published_date,
+        phase1.schema_type, published_date,
     )
     # Fall back to Phase 2's inline schema if dedicated call fails
     if not schema_block:
-        schema_block = phase2.get("schema_json_ld", "")
+        schema_block = phase2.schema_json_ld
     # Strip "Your Business Name" placeholders from schema
     schema_block = _strip_placeholders(schema_block, business_name)
 
     # ── Assemble final article ─────────────────────────────────────────────────
-    p1_content = _md_to_html(phase1.get("content_phase1", ""))
-    p2_content = _md_to_html(phase2.get("content_phase2", ""))
-    p3_content = _md_to_html(phase3.get("content_phase3", ""))
+    p1_content = _md_to_html(phase1.content_phase1)
+    p2_content = _md_to_html(phase2.content_phase2)
+    p3_content = _md_to_html(phase3.content_phase3)
 
     # ── Humanizer pass (GPT-4o-mini) ───────────────────────────────────────────
     # Separate the schema block before humanizing — it's code, not prose
@@ -795,7 +796,7 @@ def generate_article(
     full_article = "\n\n".join(filter(None, [article_body, schema_block]))
     total_wc = _word_count(article_body)  # count prose only, not schema
 
-    draft_title = phase1.get("h1") or phase1.get("meta_title") or body.keyword.title()
+    draft_title = phase1.h1 or phase1.meta_title or body.keyword.title()
     # Always derive slug from the raw keyword — GPT drops stop words ("in", "of", …)
     draft_slug = _slugify(body.keyword)
 
@@ -833,8 +834,8 @@ def generate_article(
             "phase1_words": _word_count(p1_content),
             "phase2_words": _word_count(p2_content),
             "phase3_words": _word_count(p3_content),
-            "meta_title": (phase1.get("meta_title") or "").strip(),
-            "meta_description": (phase1.get("meta_description") or "").strip(),
+            "meta_title": phase1.meta_title.strip(),
+            "meta_description": phase1.meta_description.strip(),
             "focus_keyword": body.keyword,
             "required_internal_link": required_internal_link or "",
             "required_link_reason": required_link_reason,
@@ -876,8 +877,7 @@ def generate_article(
         db.commit()
 
     db.refresh(record)
-    import re as _re
-    preview_text = _re.sub(r'<[^>]+>', ' ', record.new_content or "").strip()
+    preview_text = re.sub(r'<[^>]+>', ' ', record.new_content or "").strip()
     return ArticleOut(
         change_id=record.id,
         article_job_id=article_job_id,

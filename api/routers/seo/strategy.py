@@ -178,7 +178,9 @@ def _article_background_job(
         _phase2_message, _slugify, _word_count,
     )
     from api.routers.content.improve import _knowledge_block as _imp_knowledge_block
+    from contracts.article import ArticlePhase1Response, ArticlePhase2Response
     from core.db.base import SessionLocal
+    from core.project import load_project_context
 
     db = SessionLocal()
     try:
@@ -187,22 +189,25 @@ def _article_background_job(
         article_job_id = str(uuid.uuid4())
         target_wc = 2100
 
-        p1_msg = _phase1_message(keyword, "informational", False, business_block, knowledge_blk, target_wc)
+        ctx = load_project_context(user_id, project_name)
+        website = str(ctx.config.website or "").rstrip("/") if ctx else ""
+
+        p1_msg = _phase1_message(keyword, "informational", False, business_block, knowledge_blk, website, target_wc)
         agent = SkillAgent("seo-article-writer", openai_key, model="gpt-4o")
-        raw_p1 = agent.run(p1_msg, timeout=240, json_mode=True, max_tokens=4096)
-        phase1 = json.loads(raw_p1)
+        raw_p1 = agent.run(p1_msg, timeout=240, output_mode="structured", contract=ArticlePhase1Response, max_tokens=4096)
+        phase1 = ArticlePhase1Response.model_validate_json(raw_p1)
 
-        p2_msg = _phase2_message(keyword, business_block, phase1, target_wc)
-        raw_p2 = agent.run(p2_msg, timeout=240, json_mode=True, max_tokens=4096)
-        phase2 = json.loads(raw_p2)
+        p2_msg = _phase2_message(keyword, business_block, website, phase1, target_wc)
+        raw_p2 = agent.run(p2_msg, timeout=240, output_mode="structured", contract=ArticlePhase2Response, max_tokens=4096)
+        phase2 = ArticlePhase2Response.model_validate_json(raw_p2)
 
-        p1_content = phase1.get("content_phase1", "")
-        p2_content = phase2.get("content_phase2", "")
-        schema_block = phase2.get("schema_json_ld", "")
+        p1_content = phase1.content_phase1
+        p2_content = phase2.content_phase2
+        schema_block = phase2.schema_json_ld
         full_article = "\n\n".join(filter(None, [p1_content, p2_content, schema_block]))
         total_wc = _word_count(full_article)
 
-        draft_title = phase1.get("h1") or phase1.get("meta_title") or keyword.title()
+        draft_title = phase1.h1 or phase1.meta_title or keyword.title()
         draft_slug = _slugify(keyword)
 
         plag = _check_plagiarism(full_article, db, user_id)
@@ -221,6 +226,12 @@ def _article_background_job(
             new_content=full_article,
             change_summary=f"Content gap article: \"{draft_title}\" ({total_wc} words)",
             changes_made=["content-strategy: article generated from content gap analysis"],
+            statistics={
+                "word_count": total_wc,
+                "meta_title": phase1.meta_title.strip(),
+                "meta_description": phase1.meta_description.strip(),
+                "focus_keyword": keyword,
+            },
             draft_title=draft_title,
             draft_slug=draft_slug,
             draft_word_count=total_wc,
