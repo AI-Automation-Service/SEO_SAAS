@@ -403,20 +403,39 @@ async def upload_planner_csv(
         upserted += 1
 
     db.commit()
-    return {"imported": upserted, "message": f"Imported {upserted} keywords from Keyword Planner."}
+
+    # Flag keywords that already have a page in the sitemap — prevents duplicate article generation
+    imported_rows = (
+        db.query(Keyword)
+        .filter_by(user_id=current_user.id, project_name=context.name)
+        .all()
+    )
+    flagged = _match_sitemap(imported_rows, db, current_user.id, context.name)
+    if flagged:
+        db.commit()
+
+    msg = f"Imported {upserted} keywords from Keyword Planner."
+    if flagged:
+        msg += f" {flagged} keyword(s) already have a page on your site and are marked as covered."
+    return {"imported": upserted, "flagged": flagged, "message": msg}
 
 
-def _match_sitemap(rows: list, db: Session, user_id: int, project_name: str) -> None:
-    """For keywords without existing_url, try to match against sitemap page slugs."""
+def _match_sitemap(rows: list, db: Session, user_id: int, project_name: str) -> int:
+    """
+    Match keywords without existing_url against sitemap page slugs.
+    Sets existing_url and marks status='covered' when a match is found.
+    Returns the number of keywords matched.
+    """
     unmatched = [r for r in rows if not r.existing_url]
     if not unmatched:
-        return
+        return 0
     pages = db.query(SitePage).filter(
         SitePage.user_id == user_id,
         SitePage.project_name == project_name,
     ).all()
     if not pages:
-        return
+        return 0
+    matched = 0
     for row in unmatched:
         kw_slug = re.sub(r"[^a-z0-9\s]", "", row.keyword.lower())
         kw_slug = re.sub(r"\s+", "-", kw_slug.strip())
@@ -425,7 +444,10 @@ def _match_sitemap(rows: list, db: Session, user_id: int, project_name: str) -> 
         for page in pages:
             if kw_slug in page.slug:
                 row.existing_url = page.url
+                row.status = "covered"
+                matched += 1
                 break
+    return matched
 
 
 def _format_keyword_line(row) -> str:

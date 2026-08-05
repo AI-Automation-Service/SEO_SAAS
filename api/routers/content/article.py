@@ -21,9 +21,9 @@ from sqlalchemy.orm import Session
 from agents.base import SkillAgent
 from api.dependencies import get_current_user, get_db, get_project_context
 from api.routers.identity.api_keys import get_user_secret
-from api.routers.content.improve import _knowledge_block, _get_wp_adapter
+from api.routers.content.improve import _knowledge_block
 from api.utils.knowledge import fetch_knowledge
-from core.db.models import AIHistory, PageChange, User
+from core.db.models import AIHistory, Keyword, PageChange, SitePage, User
 from core.models.context import ProjectContext
 from shared.exceptions import SecretNotFoundError
 
@@ -304,6 +304,8 @@ def _phase1_message(
     website: str,
     target_wc: int,
     sitemap_urls: list | None = None,
+    required_internal_link: str | None = None,
+    required_link_reason: str = "",
 ) -> str:
     third = target_wc // 3
     ymyl_note = (
@@ -311,19 +313,32 @@ def _phase1_message(
         "Add health/legal/financial disclaimers where relevant."
         if ymyl else "No"
     )
-    sitemap_hint = ""
     if sitemap_urls:
-        url_list = "\n".join(f"  • {u}" for u in sitemap_urls[:15])
+        url_list = "\n".join(f"  • {u}" for u in sitemap_urls)
         sitemap_hint = (
-            f"\nKNOWN PAGES ON THIS WEBSITE (use these for internal links — pick the most relevant):\n"
+            f"\nKNOWN PAGES ON THIS WEBSITE (use these for additional internal links — pick the most relevant):\n"
             f"{url_list}\n"
         )
     else:
         sitemap_hint = (
-            f"\nFor internal links: choose a logical URL path on {website} based on the business "
-            f"services (e.g. {website}/services/ or {website}/contact/ or {website}/about/). "
+            f"\nFor additional internal links: choose a logical URL path on {website} based on the "
+            f"business services (e.g. {website}/services/ or {website}/contact/). "
             f"Do NOT use /relevant-page/ as a URL path.\n"
         )
+
+    if required_internal_link:
+        required_link_instruction = (
+            f"• REQUIRED INTERNAL LINK — You MUST include a link to: {required_internal_link}\n"
+            f"  Reason: this is the {required_link_reason}. Linking to it passes authority.\n"
+            f"  Use descriptive anchor text that fits naturally into the sentence — NOT 'click here' or 'read more'."
+        )
+        self_check_link = f"✓ REQUIRED internal link to {required_internal_link} is present"
+    else:
+        required_link_instruction = (
+            f"• Include 1 internal link to a real page on this website (pick from the known pages list above)\n"
+            f"  Use descriptive anchor text."
+        )
+        self_check_link = f"✓ At least 1 internal link to a real page on {website} (from known pages list)"
 
     return f"""You are running PHASE 1 of a three-phase SEO article writing pipeline.
 
@@ -364,7 +379,7 @@ STEP 2 — H2 Section 1 (250-400 words)
 • Follow with 3-4 paragraphs OR a mix of prose + bullet list + example
 • Include 1 E-E-A-T signal (concrete example, statistic with [Citation: …], or real scenario)
 • Include 1 citation placeholder: [Citation: describe source needed]
-• Include 1 internal link to a real page on this website (see known pages above)
+{required_link_instruction}
 • Include 1 external link to a real authoritative source (e.g. a government site, .edu, or major publication like Forbes or Harvard Business Review) — use the actual known URL
 
 STEP 3 — H2 Section 2 (250-400 words)
@@ -397,7 +412,7 @@ INTERNAL SEO SELF-CHECK (do not output — verify before submitting)
 ✓ Semantic variations used naturally (not stuffed)
 ✓ Each H2 section has at least one E-E-A-T signal
 ✓ At least 2 citation placeholders present
-✓ At least 1 internal link to a real page (from the known pages list above)
+{self_check_link}
 ✓ At least 2 external links to real authoritative URLs
 ✓ 2 image placeholders included (after intro, after Section 2)
 ✓ No banned phrases, no bracket placeholders, no invented URLs
@@ -595,19 +610,69 @@ def generate_article(
     website = str(context.config.website or "").rstrip("/")
     knowledge_block = _knowledge_block(db, current_user.id, context.name)
 
-    # ── Fetch sitemap URLs for real internal links (non-fatal) ─────────────────
-    sitemap_urls: list[str] = []
-    try:
-        wp = _get_wp_adapter(context)
-        sitemap_urls = wp.get_sitemap_urls()[:15]
-    except Exception:
-        pass
+    # ── Slug deduplication — block if page already exists ─────────────────────
+    target_slug = _slugify(body.keyword)
+    existing_page = (
+        db.query(SitePage)
+        .filter_by(user_id=current_user.id, project_name=context.name, slug=target_slug)
+        .first()
+    )
+    if existing_page:
+        raise HTTPException(
+            409,
+            f"A page already exists at /{target_slug}/ ({existing_page.url}). "
+            "Generating an article would create duplicate content. "
+            "Use the Pages tab to improve the existing page instead."
+        )
+
+    # ── Sitemap URLs from DB (Pages tab data — all synced pages) ───────────────
+    sitemap_urls: list[str] = [
+        row.url for row in
+        db.query(SitePage)
+        .filter_by(user_id=current_user.id, project_name=context.name)
+        .order_by(SitePage.synced_at.desc())
+        .all()
+        if target_slug not in row.url  # exclude self-referential
+    ]
+
+    # ── Required internal link resolution ──────────────────────────────────────
+    required_internal_link: str | None = None
+    required_link_reason: str = ""
+
+    if body.cluster_name:
+        # Spoke article: must link back to the cluster hub page
+        hub_kw = (
+            db.query(Keyword)
+            .filter_by(user_id=current_user.id, project_name=context.name,
+                       cluster=body.cluster_name, is_hub=True)
+            .first()
+        )
+        if hub_kw and (hub_kw.existing_url or hub_kw.suggested_url):
+            required_internal_link = hub_kw.existing_url or hub_kw.suggested_url
+            required_link_reason = f"hub page for the '{body.cluster_name}' cluster"
+    else:
+        # GSC keyword: link to the existing page already ranking for this keyword
+        kw_row = (
+            db.query(Keyword)
+            .filter(
+                Keyword.user_id == current_user.id,
+                Keyword.project_name == context.name,
+                Keyword.keyword == body.keyword,
+                Keyword.existing_url.isnot(None),
+            )
+            .first()
+        )
+        if kw_row:
+            required_internal_link = kw_row.existing_url
+            required_link_reason = "existing page already ranking for this keyword in Google Search Console"
 
     # ── Phase 1 ────────────────────────────────────────────────────────────────
     p1_msg = _phase1_message(
         body.keyword, body.intent, body.ymyl,
         business_block, knowledge_block, website, body.target_word_count,
         sitemap_urls=sitemap_urls,
+        required_internal_link=required_internal_link,
+        required_link_reason=required_link_reason,
     )
 
     t0 = time.monotonic()
@@ -771,6 +836,8 @@ def generate_article(
             "meta_title": (phase1.get("meta_title") or "").strip(),
             "meta_description": (phase1.get("meta_description") or "").strip(),
             "focus_keyword": body.keyword,
+            "required_internal_link": required_internal_link or "",
+            "required_link_reason": required_link_reason,
         },
         draft_title=draft_title,
         draft_slug=draft_slug,
