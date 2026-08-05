@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ChevronLeft, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -17,20 +17,20 @@ import { AutomationTab } from './tabs/AutomationTab'
 import { projectsApi, getErrorMessage } from '@/api/client'
 import { cn } from '@/lib/utils'
 
+// Overview and Integrations are now sidebar links — not in the tab bar
 const TABS = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'integrations', label: 'Integrations' },
-  { id: 'knowledge', label: 'Knowledge' },
-  { id: 'keywords', label: 'Keywords' },
-  { id: 'pages', label: 'Pages' },
+  { id: 'knowledge',   label: 'Knowledge' },
+  { id: 'strategy',   label: 'Strategy' },
+  { id: 'keywords',   label: 'Keywords' },
+  { id: 'pages',      label: 'Pages' },
   { id: 'competitor', label: 'Competitor Pages' },
-  { id: 'strategy', label: 'Strategy' },
-  { id: 'content', label: 'Content' },
+  { id: 'content',    label: 'Content' },
   { id: 'automation', label: 'Automation' },
-  { id: 'speed', label: 'Speed' },
+  { id: 'speed',      label: 'Speed' },
 ] as const
 
-type TabId = (typeof TABS)[number]['id']
+type WorkTabId = (typeof TABS)[number]['id']
+type TabId = WorkTabId | 'overview' | 'integrations'
 
 function DeleteModal({ projectName, onClose }: { projectName: string; onClose: () => void }) {
   const navigate = useNavigate()
@@ -102,8 +102,11 @@ function DeleteModal({ projectName, onClose }: { projectName: string; onClose: (
 
 export function ProjectDetailPage() {
   const { name } = useParams<{ name: string }>()
-  const [activeTab, setActiveTab] = useState<TabId>('overview')
+  const [searchParams, setSearchParams] = useSearchParams()
   const [showDelete, setShowDelete] = useState(false)
+
+  const activeTab = (searchParams.get('tab') as TabId) || 'knowledge'
+  function setActiveTab(tab: TabId) { setSearchParams({ tab }, { replace: true }) }
 
   const { data: project, isLoading, error } = useQuery({
     queryKey: ['project', name],

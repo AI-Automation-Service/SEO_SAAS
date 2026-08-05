@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   FileText, RefreshCw, CheckCircle, ShieldAlert, Shield,
-  ChevronDown, Wand2,
+  ChevronDown, Wand2, Pencil, X,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { keywordsApi, articleApi, improveApi, getErrorMessage } from '@/api/client'
@@ -14,10 +14,10 @@ interface ContentTabProps {
 }
 
 const PLAGIARISM_BADGE: Record<PlagiarismStatus, { label: string; className: string; Icon: typeof Shield }> = {
-  skipped:   { label: 'Not checked',  className: 'bg-slate-100 text-slate-500',    Icon: Shield },
-  clean:     { label: 'Original',     className: 'bg-emerald-100 text-emerald-700', Icon: Shield },
-  flagged:   { label: 'Plagiarism detected', className: 'bg-red-100 text-red-600', Icon: ShieldAlert },
-  rewritten: { label: 'Auto-rewritten', className: 'bg-blue-100 text-blue-700',    Icon: Shield },
+  skipped:   { label: 'Not checked',       className: 'bg-slate-100 text-slate-500',    Icon: Shield },
+  clean:     { label: 'Original',          className: 'bg-emerald-100 text-emerald-700', Icon: Shield },
+  flagged:   { label: 'Plagiarism detected', className: 'bg-red-100 text-red-600',      Icon: ShieldAlert },
+  rewritten: { label: 'Auto-rewritten',    className: 'bg-blue-100 text-blue-700',       Icon: Shield },
 }
 
 export function ContentTab({ projectName }: ContentTabProps) {
@@ -26,8 +26,9 @@ export function ContentTab({ projectName }: ContentTabProps) {
   const [selectedCluster, setSelectedCluster] = useState('')
   const [result, setResult] = useState<ArticleOut | null>(null)
   const [applyDone, setApplyDone] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [editedContent, setEditedContent] = useState('')
 
-  // Load clusters to populate the optional cluster selector
   const { data: keywords = [] } = useQuery({
     queryKey: ['keywords', projectName],
     queryFn: () => keywordsApi.list(projectName),
@@ -47,16 +48,20 @@ export function ContentTab({ projectName }: ContentTabProps) {
       }),
     onSuccess: (data) => {
       setResult(data)
+      setEditedContent(data.content_html ?? '')
       setApplyDone(false)
+      setEditing(false)
       toast.success('Article generated — ready to review.')
     },
     onError: (err) => toast.error(getErrorMessage(err)),
   })
 
   const applyMut = useMutation({
-    mutationFn: () => improveApi.apply(projectName, result!.change_id),
+    mutationFn: () =>
+      improveApi.apply(projectName, result!.change_id, editing ? editedContent : undefined),
     onSuccess: () => {
       setApplyDone(true)
+      setEditing(false)
       toast.success('Draft published to WordPress.')
       qc.invalidateQueries({ queryKey: ['improve-history', projectName] })
     },
@@ -79,7 +84,6 @@ export function ContentTab({ projectName }: ContentTabProps) {
 
       {/* Form */}
       <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
-        {/* Target keyword */}
         <div>
           <label className="block text-xs font-medium text-slate-700 mb-1.5">
             Target keyword <span className="text-red-400">*</span>
@@ -94,7 +98,6 @@ export function ContentTab({ projectName }: ContentTabProps) {
           />
         </div>
 
-        {/* Optional cluster link */}
         {clusters.length > 0 && (
           <div>
             <label className="block text-xs font-medium text-slate-700 mb-1.5">
@@ -117,7 +120,6 @@ export function ContentTab({ projectName }: ContentTabProps) {
           </div>
         )}
 
-        {/* Generate button */}
         <button
           type="button"
           onClick={() => generateMut.mutate()}
@@ -134,14 +136,13 @@ export function ContentTab({ projectName }: ContentTabProps) {
             : <><Wand2 size={14} /> Generate Article</>}
         </button>
 
-        {/* Progress hint while generating */}
         {generateMut.isPending && (
           <div className="space-y-1.5">
             {[
-              { label: 'Phase 1 — Outline + first half', done: false },
-              { label: 'Phase 2 — Completion + final polish', done: false },
-              { label: 'Plagiarism check via Copyscape', done: false },
-            ].map(({ label }) => (
+              'Phase 1 — Outline + first half',
+              'Phase 2 — Completion + final polish',
+              'Plagiarism check via Copyscape',
+            ].map((label) => (
               <div key={label} className="flex items-center gap-2 text-xs text-slate-500">
                 <RefreshCw size={10} className="animate-spin text-emerald-400 shrink-0" />
                 {label}
@@ -190,15 +191,46 @@ export function ContentTab({ projectName }: ContentTabProps) {
               </div>
             )}
 
-            {/* Preview */}
             {plagStatus !== 'flagged' && (
               <>
+                {/* Preview / Editor */}
                 <div>
-                  <p className="text-xs font-medium text-slate-500 mb-2">Content preview</p>
-                  <div className="bg-slate-50 border border-slate-100 rounded-lg p-3 text-xs text-slate-700 leading-relaxed whitespace-pre-wrap max-h-60 overflow-y-auto">
-                    {result.content_preview}
-                    <span className="text-slate-400"> …</span>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-medium text-slate-500">
+                      {editing ? 'Edit content (HTML)' : 'Content preview'}
+                    </p>
+                    {!applyDone && !editing && (
+                      <button
+                        type="button"
+                        onClick={() => setEditing(true)}
+                        className="inline-flex items-center gap-1 text-[10px] text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                      >
+                        <Pencil size={10} /> Edit
+                      </button>
+                    )}
+                    {editing && (
+                      <button
+                        type="button"
+                        onClick={() => setEditing(false)}
+                        className="inline-flex items-center gap-1 text-[10px] text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                      >
+                        <X size={10} /> Cancel edit
+                      </button>
+                    )}
                   </div>
+
+                  {editing ? (
+                    <textarea
+                      value={editedContent}
+                      onChange={(e) => setEditedContent(e.target.value)}
+                      className="w-full h-80 text-xs font-mono border border-slate-200 rounded-lg p-3 text-slate-700 bg-slate-50 focus:outline-none focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400 resize-y"
+                      spellCheck={false}
+                    />
+                  ) : (
+                    <div className="bg-slate-50 border border-slate-100 rounded-lg p-3 text-xs text-slate-700 leading-relaxed whitespace-pre-wrap max-h-60 overflow-y-auto">
+                      {result.content_preview}
+                    </div>
+                  )}
                 </div>
 
                 {/* Actions */}
@@ -212,15 +244,17 @@ export function ContentTab({ projectName }: ContentTabProps) {
                     >
                       {applyMut.isPending
                         ? <><RefreshCw size={12} className="animate-spin" /> Publishing draft…</>
-                        : <><CheckCircle size={12} /> Publish as WordPress Draft</>}
+                        : <><CheckCircle size={12} /> {editing ? 'Save edits & Publish' : 'Publish as WordPress Draft'}</>}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => { setResult(null); setKeyword('') }}
-                      className="px-3 py-2 border border-slate-200 text-slate-500 text-xs rounded-lg hover:bg-slate-50 cursor-pointer transition-colors"
-                    >
-                      Discard
-                    </button>
+                    {!editing && (
+                      <button
+                        type="button"
+                        onClick={() => { setResult(null); setKeyword('') }}
+                        className="px-3 py-2 border border-slate-200 text-slate-500 text-xs rounded-lg hover:bg-slate-50 cursor-pointer transition-colors"
+                      >
+                        Discard
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">

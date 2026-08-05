@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 import httpx
 import yaml
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -995,9 +995,14 @@ def analyze_cluster(
     return [_to_change_out(r, history) for r in results]
 
 
+class ApplyRequest(BaseModel):
+    content_override: Optional[str] = None
+
+
 @router.post("/apply/{change_id}", response_model=ChangeOut)
 def apply_change(
     change_id: int,
+    body: Optional[ApplyRequest] = Body(default=None),
     context: ProjectContext = Depends(get_project_context),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -1022,22 +1027,30 @@ def apply_change(
         db.refresh(record)
         return _to_change_out(record, [])
 
+    # Apply subscriber edits before pushing to WP
+    if body and body.content_override:
+        record.new_content = body.content_override
+        db.flush()
+
     action_type = record.action_type or "page_edit"
 
-    # ── new_draft: publish as WP draft post ───────────────────────────────────
+    # ── new_draft: publish as WP draft ────────────────────────────────────────
     if action_type == "new_draft":
         from integrations.cms.base import PostDraft
-        import markdown as md
         wp = _get_wp_adapter(context)
-        html = md.markdown(record.new_content, extensions=["tables", "fenced_code"])
+        # Use the content as-is (article writer produces HTML directly)
         draft = PostDraft(
             title=record.draft_title or "New Article",
-            content=html,
+            content=record.new_content or "",
             slug=record.draft_slug or "",
             status="draft",
         )
         try:
-            created = wp.create_page(draft)
+            # Articles go to Posts; competitor/landing pages go to Pages
+            if record.wp_post_type == "page":
+                created = wp.create_page(draft)
+            else:
+                created = wp.create_post(draft)
         except IntegrationError as e:
             raise HTTPException(502, f"WordPress draft creation error: {e}")
         # Update record with the real WP post ID and URL

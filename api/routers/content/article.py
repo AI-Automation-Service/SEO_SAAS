@@ -191,6 +191,7 @@ class ArticleOut(BaseModel):
     change_id: int
     article_job_id: str
     keyword: str
+    content_html: str = ""
     draft_title: str
     draft_slug: str
     draft_word_count: int
@@ -468,6 +469,7 @@ def generate_article(
     return ArticleOut(
         change_id=record.id,
         article_job_id=article_job_id,
+        content_html=record.new_content or "",
         keyword=body.keyword,
         draft_title=record.draft_title or draft_title,
         draft_slug=record.draft_slug or draft_slug,

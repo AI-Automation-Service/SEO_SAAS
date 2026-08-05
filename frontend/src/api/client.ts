@@ -294,8 +294,11 @@ function makeImproveApi(segment: string) {
   return {
     analyze: (name: string, cluster_name: string) =>
       api.post<PageChange[]>(`/api/projects/${name}/${segment}/analyze`, { cluster_name }).then((r) => r.data),
-    apply: (name: string, changeId: number) =>
-      api.post<PageChange>(`/api/projects/${name}/${segment}/apply/${changeId}`).then((r) => r.data),
+    apply: (name: string, changeId: number, contentOverride?: string) =>
+      api.post<PageChange>(
+        `/api/projects/${name}/${segment}/apply/${changeId}`,
+        contentOverride ? { content_override: contentOverride } : undefined,
+      ).then((r) => r.data),
     rollback: (name: string, changeId: number) =>
       api.post<PageChange>(`/api/projects/${name}/${segment}/rollback/${changeId}`).then((r) => r.data),
     history: (name: string) =>

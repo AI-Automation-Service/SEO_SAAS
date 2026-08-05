@@ -264,6 +264,7 @@ export interface ArticleOut {
   plagiarism_score?: number | null
   plagiarism_flag: boolean
   content_preview: string
+  content_html?: string
   status: string
 }
 
