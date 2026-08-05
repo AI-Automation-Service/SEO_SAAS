@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, FolderOpen, LogOut, ChevronLeft, ChevronRight } from 'lucide-react'
+import { LayoutDashboard, FolderOpen, LogOut, ChevronLeft, ChevronRight, Settings, ShieldCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/context/AuthContext'
 
@@ -71,16 +71,51 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             {!collapsed && label}
           </NavLink>
         ))}
+
+        {user?.is_admin && (
+          <NavLink
+            to="/admin"
+            title={collapsed ? 'Admin' : undefined}
+            className={({ isActive }) =>
+              cn(
+                'flex items-center gap-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                collapsed ? 'justify-center px-2' : 'px-3',
+                isActive
+                  ? 'bg-purple-500/10 text-purple-400'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800',
+              )
+            }
+          >
+            <ShieldCheck size={16} className="shrink-0" />
+            {!collapsed && 'Admin'}
+          </NavLink>
+        )}
       </nav>
 
       {/* User info + logout */}
-      <div className="p-2 border-t border-slate-800">
+      <div className="p-2 border-t border-slate-800 space-y-1">
         {!collapsed && user && (
-          <div className="px-3 py-1.5 mb-1">
+          <div className="px-3 py-1.5">
             <p className="text-xs text-slate-400 truncate">{user.full_name}</p>
             <p className="text-xs text-slate-600 truncate">{user.email}</p>
           </div>
         )}
+        <NavLink
+          to="/account"
+          title={collapsed ? 'Account' : undefined}
+          className={({ isActive }) =>
+            cn(
+              'w-full flex items-center gap-3 py-2 rounded-lg text-sm transition-colors cursor-pointer',
+              collapsed ? 'justify-center px-2' : 'px-3',
+              isActive
+                ? 'bg-emerald-500/10 text-emerald-400'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800',
+            )
+          }
+        >
+          <Settings size={15} className="shrink-0" />
+          {!collapsed && 'Account'}
+        </NavLink>
         <button
           type="button"
           onClick={handleLogout}

@@ -58,6 +58,10 @@ def _migrate_columns() -> None:
         "ALTER TABLE page_changes ADD COLUMN applied_by TEXT",
         # users — capability flags
         "ALTER TABLE users ADD COLUMN capabilities TEXT",
+        # users — admin + plan fields
+        "ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE users ADD COLUMN plan TEXT DEFAULT 'free'",
+        "ALTER TABLE users ADD COLUMN max_projects INTEGER DEFAULT 3",
     ]
 
     with engine.connect() as conn:

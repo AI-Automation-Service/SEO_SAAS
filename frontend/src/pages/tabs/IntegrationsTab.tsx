@@ -321,6 +321,146 @@ function CopyscapeSection({ isConnected }: { isConnected: boolean }) {
   )
 }
 
+// ── Google API Key ────────────────────────────────────────────────────────────
+
+function GoogleAPIKeySection({ isConnected }: { isConnected: boolean }) {
+  const qc = useQueryClient()
+  const [value, setValue] = useState('')
+  const [editing, setEditing] = useState(!isConnected)
+
+  const saveMut = useMutation({
+    mutationFn: async () => {
+      await keysApi.test('google_api_key', value)
+      await keysApi.save('google_api_key', value)
+    },
+    onSuccess: () => {
+      toast.success('Google API key saved and verified')
+      setValue('')
+      setEditing(false)
+      qc.invalidateQueries({ queryKey: ['user-keys'] })
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
+
+  const deleteMut = useMutation({
+    mutationFn: () => keysApi.delete('google_api_key'),
+    onSuccess: () => {
+      toast.success('Google API key removed')
+      setEditing(true)
+      qc.invalidateQueries({ queryKey: ['user-keys'] })
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
+
+  const status: IntegrationStatusItem = { name: 'google_api_key', connected: isConnected, error: isConnected ? null : 'Not connected' }
+
+  return (
+    <SectionWrapper title="Google API Key (PageSpeed)" status={status}>
+      <p className="text-xs text-slate-500 -mt-1">
+        Required for Core Web Vitals and PageSpeed audits. Free — create one in{' '}
+        <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="text-emerald-600 underline hover:text-emerald-700">
+          Google Cloud Console
+        </a>
+        {' '}with PageSpeed Insights API enabled.
+      </p>
+      {!editing && isConnected ? (
+        <ConnectedRow label="Key stored securely" onEdit={() => setEditing(true)} onDelete={() => deleteMut.mutate()} deleteLoading={deleteMut.isPending} />
+      ) : (
+        <div className="space-y-3">
+          <Field label="API Key" error={undefined}>
+            <PasswordInput value={value} onChange={(e) => setValue(e.target.value)} placeholder="AIza..." autoComplete="off" />
+          </Field>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => saveMut.mutate()}
+              disabled={!value.trim() || saveMut.isPending}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white text-sm font-medium rounded-lg hover:bg-emerald-600 disabled:opacity-50 transition-colors cursor-pointer"
+            >
+              {saveMut.isPending && <Loader2 size={14} className="animate-spin" />}
+              {saveMut.isPending ? 'Testing & Saving…' : 'Test & Save'}
+            </button>
+            {isConnected && (
+              <button type="button" onClick={() => { setEditing(false); setValue('') }} className="flex items-center gap-1.5 px-3 py-2 text-slate-500 text-sm rounded-lg hover:bg-slate-100 transition-colors cursor-pointer">
+                <X size={13} /> Cancel
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </SectionWrapper>
+  )
+}
+
+// ── DataForSEO ────────────────────────────────────────────────────────────────
+
+const dataForSEOSchema = z.object({
+  login: z.string().min(1, 'Login is required'),
+  password: z.string().min(1, 'Password is required'),
+})
+type DataForSEOForm = z.infer<typeof dataForSEOSchema>
+
+function DataForSEOSection({ isConnected }: { isConnected: boolean }) {
+  const qc = useQueryClient()
+  const [editing, setEditing] = useState(!isConnected)
+
+  const { register, handleSubmit, reset, formState: { errors } } = useForm<DataForSEOForm>({
+    resolver: zodResolver(dataForSEOSchema),
+  })
+
+  const saveMut = useMutation({
+    mutationFn: (data: DataForSEOForm) =>
+      Promise.all([keysApi.save('dataforseo_login', data.login), keysApi.save('dataforseo_password', data.password)]),
+    onSuccess: () => {
+      toast.success('DataForSEO credentials saved')
+      setEditing(false)
+      reset()
+      qc.invalidateQueries({ queryKey: ['user-keys'] })
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
+
+  const deleteMut = useMutation({
+    mutationFn: () => Promise.all([keysApi.delete('dataforseo_login'), keysApi.delete('dataforseo_password')]),
+    onSuccess: () => {
+      toast.success('DataForSEO credentials removed')
+      setEditing(true)
+      qc.invalidateQueries({ queryKey: ['user-keys'] })
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
+
+  const status: IntegrationStatusItem = { name: 'dataforseo', connected: isConnected, error: isConnected ? null : 'Not connected' }
+
+  return (
+    <SectionWrapper title="DataForSEO (Optional)" status={status}>
+      <p className="text-xs text-slate-500 -mt-1">
+        Optional — adds real keyword difficulty scores to analysis. Without this, keyword volume/difficulty data uses GSC estimates.
+      </p>
+      {!editing && isConnected ? (
+        <ConnectedRow label="Login + password stored" onEdit={() => setEditing(true)} onDelete={() => deleteMut.mutate()} deleteLoading={deleteMut.isPending} />
+      ) : (
+        <form onSubmit={handleSubmit((d) => saveMut.mutate(d))} className="space-y-3">
+          <Field label="DataForSEO Login (email)" error={errors.login?.message}>
+            <Input {...register('login')} placeholder="your@email.com" autoComplete="off" />
+          </Field>
+          <Field label="Password" error={errors.password?.message}>
+            <PasswordInput {...register('password')} placeholder="••••••••••••••••" autoComplete="new-password" />
+          </Field>
+          <div className="flex items-center gap-2">
+            <SaveButton loading={saveMut.isPending} label="Save Credentials" />
+            {isConnected && (
+              <button type="button" onClick={() => { setEditing(false); reset() }} className="flex items-center gap-1.5 px-3 py-2 text-slate-500 text-sm rounded-lg hover:bg-slate-100 transition-colors cursor-pointer">
+                <X size={13} /> Cancel
+              </button>
+            )}
+          </div>
+        </form>
+      )}
+    </SectionWrapper>
+  )
+}
+
 // ── Shopify ───────────────────────────────────────────────────────────────────
 
 const shopifySchema = z.object({
@@ -715,7 +855,9 @@ export function IntegrationsTab({ projectName }: { projectName: string }) {
         <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Account-level Keys</h3>
         <div className="space-y-4">
           <OpenAISection isConnected={keyConnected('openai')} />
+          <GoogleAPIKeySection isConnected={keyConnected('google_api_key')} />
           <CopyscapeSection isConnected={keyConnected('copyscape_user') && keyConnected('copyscape_key')} />
+          <DataForSEOSection isConnected={keyConnected('dataforseo_login') && keyConnected('dataforseo_password')} />
         </div>
       </div>
       <div>

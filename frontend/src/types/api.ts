@@ -93,6 +93,34 @@ export interface AuthUser {
   email: string
   full_name: string
   onboarding_complete: boolean
+  is_admin: boolean
+  plan: string
+}
+
+export interface AccountUsage {
+  email: string
+  full_name: string
+  plan: string
+  max_projects: number
+  project_count: number
+  is_admin: boolean
+}
+
+export interface AdminUser {
+  id: number
+  email: string
+  full_name: string
+  plan: string
+  max_projects: number
+  is_active: boolean
+  is_admin: boolean
+  created_at: string
+}
+
+export interface AdminStats {
+  total_users: number
+  active_users: number
+  admin_users: number
 }
 
 export interface TokenResponse {

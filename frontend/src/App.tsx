@@ -12,6 +12,8 @@ import { OnboardingPage } from '@/pages/OnboardingPage'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { ProjectsPage } from '@/pages/ProjectsPage'
 import { ProjectDetailPage } from '@/pages/ProjectDetailPage'
+import { AccountPage } from '@/pages/AccountPage'
+import { AdminPage } from '@/pages/AdminPage'
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -60,6 +62,8 @@ function App() {
                         <Route path="/" element={<DashboardPage />} />
                         <Route path="/projects" element={<ProjectsPage />} />
                         <Route path="/projects/:name" element={<ProjectDetailPage />} />
+                        <Route path="/account" element={<AccountPage />} />
+                        <Route path="/admin" element={<AdminPage />} />
                       </Routes>
                     </main>
                   </div>

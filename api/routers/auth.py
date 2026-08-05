@@ -42,6 +42,8 @@ class MeResponse(BaseModel):
     email: str
     full_name: str
     onboarding_complete: bool
+    is_admin: bool = False
+    plan: str = "free"
     capabilities: dict = {}
 
 
@@ -117,6 +119,8 @@ def me(current_user: User = Depends(get_current_user)):
         email=current_user.email,
         full_name=current_user.full_name,
         onboarding_complete=current_user.onboarding_complete,
+        is_admin=current_user.is_admin,
+        plan=current_user.plan,
         capabilities=current_user.get_capabilities(),
     )
 

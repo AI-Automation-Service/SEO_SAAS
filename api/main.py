@@ -26,6 +26,8 @@ from api.routers.article import router as article_router
 from api.routers.cron import router as cron_router
 from api.routers.feedback import router as feedback_router
 from api.routers.shopify_improve import router as shopify_improve_router
+from api.routers.account import router as account_router
+from api.routers.admin import router as admin_router
 from core.db.base import create_tables
 
 
@@ -70,6 +72,8 @@ app.include_router(article_router, prefix="/api")
 app.include_router(cron_router, prefix="/api")
 app.include_router(feedback_router, prefix="/api")
 app.include_router(shopify_improve_router, prefix="/api")
+app.include_router(account_router, prefix="/api")
+app.include_router(admin_router, prefix="/api")
 
 
 @app.get("/health", response_model=HealthResponse, tags=["health"])

@@ -26,6 +26,9 @@ import type {
   KeyStatus,
   CronJob,
   CronRun,
+  AccountUsage,
+  AdminUser,
+  AdminStats,
 } from '@/types/api'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? ''
@@ -335,6 +338,24 @@ export const feedbackApi = {
 
 // ── Shopify Improve ───────────────────────────────────────────────────────────
 export const shopifyImproveApi = makeImproveApi('shopify/improve')
+
+// ── Account ───────────────────────────────────────────────────────────────────
+export const accountApi = {
+  usage: () => api.get<AccountUsage>('/api/account/usage').then((r) => r.data),
+  changePassword: (current_password: string, new_password: string) =>
+    api.put('/api/account/password', { current_password, new_password }).then((r) => r.data),
+  deleteAccount: () => api.delete('/api/account').then((r) => r.data),
+}
+
+// ── Admin ─────────────────────────────────────────────────────────────────────
+export const adminApi = {
+  users: () => api.get<AdminUser[]>('/api/admin/users').then((r) => r.data),
+  stats: () => api.get<AdminStats>('/api/admin/stats').then((r) => r.data),
+  updatePlan: (userId: number, plan: string) =>
+    api.put(`/api/admin/users/${userId}/plan`, { plan }).then((r) => r.data),
+  deleteUser: (userId: number) =>
+    api.delete(`/api/admin/users/${userId}`).then((r) => r.data),
+}
 
 // ── Health ────────────────────────────────────────────────────────────────────
 export const healthApi = {

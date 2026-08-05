@@ -1,3 +1,4 @@
+from functools import lru_cache
 from pathlib import Path
 from pydantic_settings import BaseSettings
 
@@ -20,5 +21,6 @@ class AppConfig(BaseSettings):
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
+@lru_cache(maxsize=None)
 def load_config() -> AppConfig:
     return AppConfig()
