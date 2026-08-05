@@ -1,4 +1,4 @@
-"""
+﻿"""
 seo-article-writer two-phase pipeline.
 
 Phase 1: outline + first half (~950 words).
@@ -19,8 +19,8 @@ from sqlalchemy.orm import Session
 
 from agents.base import SkillAgent
 from api.dependencies import get_current_user, get_db, get_project_context
-from api.routers.api_keys import get_user_secret
-from api.routers.improve import _knowledge_block
+from api.routers.identity.api_keys import get_user_secret
+from api.routers.content.improve import _knowledge_block
 from api.utils.knowledge import fetch_knowledge
 from core.db.models import AIHistory, PageChange, User
 from core.models.context import ProjectContext
@@ -389,7 +389,8 @@ def generate_article(
     total_wc = _word_count(full_article)
 
     draft_title = phase1.get("h1") or phase1.get("meta_title") or body.keyword.title()
-    draft_slug = phase1.get("slug") or _slugify(draft_title)
+    # Always derive slug from the raw keyword — GPT drops stop words ("in", "of", …)
+    draft_slug = _slugify(body.keyword)
 
     # ── Plagiarism check ───────────────────────────────────────────────────────
     plag = _check_plagiarism(full_article, db, current_user.id)
@@ -463,7 +464,7 @@ def generate_article(
 
     db.refresh(record)
     import re as _re
-    preview_text = _re.sub(r'<[^>]+>', ' ', record.new_content or "")[:800].strip()
+    preview_text = _re.sub(r'<[^>]+>', ' ', record.new_content or "").strip()
     return ArticleOut(
         change_id=record.id,
         article_job_id=article_job_id,

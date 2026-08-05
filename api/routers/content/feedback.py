@@ -1,4 +1,4 @@
-"""
+﻿"""
 Subscriber feedback endpoints.
 
 POST /projects/{name}/improve/feedback/{change_id}  — record approve/reject + comment
@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from agents.base import SkillAgent
 from api.dependencies import get_current_user, get_db, get_project_context
-from api.routers.api_keys import get_user_secret
+from api.routers.identity.api_keys import get_user_secret
 from core.db.models import PageChange, ProjectFeedback, ProjectPreferences, User
 from core.models.context import ProjectContext
 
@@ -188,7 +188,7 @@ def _trigger_distillation(
 ) -> None:
     if openai_key is None:
         try:
-            from api.routers.api_keys import get_user_secret
+            from api.routers.identity.api_keys import get_user_secret
             openai_key = get_user_secret("openai", user_id, db)
         except Exception:
             return

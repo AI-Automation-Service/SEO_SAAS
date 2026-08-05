@@ -1,18 +1,18 @@
-import json
+﻿import json
 from datetime import datetime
 from typing import Optional
 from urllib.parse import urlparse
 
 import markdown as md
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from agents.base import SkillAgent
 from api.dependencies import get_current_user, get_db, get_project_context, get_secret_manager
-from api.routers.api_keys import get_user_secret
+from api.routers.identity.api_keys import get_user_secret
 from api.utils.knowledge import fetch_knowledge
-from core.db.models import Keyword, SitePage, StrategyOutput, User
+from core.db.models import Keyword, PageChange, SitePage, StrategyOutput, User
 from core.models.context import ProjectContext
 from core.secrets import SecretManager
 from integrations.base import IntegrationError
@@ -130,6 +130,122 @@ def _get_keywords(db: Session, user_id: int, project_name: str) -> list:
     )
 
 
+def _queue_strategy_change(
+    db: Session,
+    user_id: int,
+    project_name: str,
+    skill: str,
+    kw,
+    markdown_output: str,
+) -> PageChange:
+    """Convert a strategy Markdown output into a pending Change Queue entry."""
+    html = md.markdown(markdown_output, extensions=["tables", "fenced_code"])
+    action_type = "page_edit" if kw.existing_url else "new_draft"
+    record = PageChange(
+        user_id=user_id,
+        project_name=project_name,
+        action_type=action_type,
+        platform="wordpress",
+        source_agent=skill,
+        cluster_name=kw.cluster or "unclustered",
+        wp_post_id=0,
+        wp_post_url=kw.existing_url or "",
+        wp_post_type=kw.page_type or "post",
+        original_content="",
+        new_content=html,
+        change_summary=f"{skill}: recommendations for '{kw.keyword}' queued for review",
+        changes_made=[f"{skill}: strategy analysis for '{kw.keyword}'"],
+        status="pending",
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+def _article_background_job(
+    user_id: int,
+    project_name: str,
+    keyword: str,
+    cluster_name: str,
+    openai_key: str,
+    business_block: str,
+) -> None:
+    """Background task: run two-phase article writer for a content gap keyword."""
+    import uuid
+    from api.routers.content.article import (
+        _check_plagiarism, _phase1_message,
+        _phase2_message, _slugify, _word_count,
+    )
+    from api.routers.content.improve import _knowledge_block as _imp_knowledge_block
+    from core.db.base import SessionLocal
+
+    db = SessionLocal()
+    try:
+        # Use improve's plain knowledge format — matches what the article writer expects
+        knowledge_blk = _imp_knowledge_block(db, user_id, project_name)
+        article_job_id = str(uuid.uuid4())
+        target_wc = 2100
+
+        p1_msg = _phase1_message(keyword, "informational", False, business_block, knowledge_blk, target_wc)
+        agent = SkillAgent("seo-article-writer", openai_key, model="gpt-4o")
+        raw_p1 = agent.run(p1_msg, timeout=240, json_mode=True, max_tokens=4096)
+        phase1 = json.loads(raw_p1)
+
+        p2_msg = _phase2_message(keyword, business_block, phase1, target_wc)
+        raw_p2 = agent.run(p2_msg, timeout=240, json_mode=True, max_tokens=4096)
+        phase2 = json.loads(raw_p2)
+
+        p1_content = phase1.get("content_phase1", "")
+        p2_content = phase2.get("content_phase2", "")
+        schema_block = phase2.get("schema_json_ld", "")
+        full_article = "\n\n".join(filter(None, [p1_content, p2_content, schema_block]))
+        total_wc = _word_count(full_article)
+
+        draft_title = phase1.get("h1") or phase1.get("meta_title") or keyword.title()
+        draft_slug = _slugify(keyword)
+
+        plag = _check_plagiarism(full_article, db, user_id)
+
+        record = PageChange(
+            user_id=user_id,
+            project_name=project_name,
+            action_type="new_draft",
+            platform="wordpress",
+            source_agent="content-strategy",
+            cluster_name=cluster_name or keyword,
+            wp_post_id=0,
+            wp_post_url="",
+            wp_post_type="post",
+            original_content="",
+            new_content=full_article,
+            change_summary=f"Content gap article: \"{draft_title}\" ({total_wc} words)",
+            changes_made=["content-strategy: article generated from content gap analysis"],
+            draft_title=draft_title,
+            draft_slug=draft_slug,
+            draft_word_count=total_wc,
+            plagiarism_flag=plag["flag"],
+            plagiarism_score=plag.get("score"),
+            plagiarism_status=plag["status"],
+            status="pending",
+        )
+        db.add(record)
+        db.commit()
+        db.refresh(record)
+
+        # Rewrite flagged paragraphs — mirrors what generate_article does
+        if plag["flag"]:
+            from agents.content_rewriter import rewrite_flagged_paragraphs
+            record = rewrite_flagged_paragraphs(record, openai_key, db, article_job_id)
+            if record.plagiarism_score is not None and record.plagiarism_score > 40:
+                record.plagiarism_status = "flagged"
+                db.commit()
+    except Exception:
+        pass
+    finally:
+        db.close()
+
+
 def _save_output(db: Session, user_id: int, project_name: str, strategy_type: str, output: str) -> None:
     row = (
         db.query(StrategyOutput)
@@ -159,6 +275,8 @@ class StrategyResult(BaseModel):
     skill: str
     output: str
     execution_plan: Optional[dict] = None
+    change_id: Optional[int] = None
+    queued_articles: int = 0
 
 
 class CompetitorPageRequest(BaseModel):
@@ -337,6 +455,7 @@ def run_seo_plan(
 
 @router.post("/content", response_model=StrategyResult)
 def run_content_strategy(
+    background_tasks: BackgroundTasks,
     context: ProjectContext = Depends(get_project_context),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -351,8 +470,9 @@ def run_content_strategy(
 
     sitemap = _sitemap_block(db, current_user.id, context.name)
     knowledge = _knowledge_block(db, current_user.id, context.name)
+    business_block = _project_block(context)
     msg = (
-        f"{_project_block(context)}"
+        f"{business_block}"
         f"{knowledge}\n\n"
         f"Funnel breakdown: TOFU={tofu}, MOFU={mofu}, BOFU={bofu}\n\n"
         f"Cluster summary:\n{_cluster_summary(rows)}"
@@ -366,7 +486,24 @@ def run_content_strategy(
     )
     output = _run_skill("content-strategy", openai_key, msg)
     _save_output(db, current_user.id, context.name, "content", output)
-    return StrategyResult(skill="content-strategy", output=output)
+
+    # Trigger seo-article-writer for gap cluster hub keywords (up to 2) via background task
+    gap_hubs = [
+        r for r in rows
+        if r.is_hub and r.status in ("gap", "opportunity") and not r.existing_url
+    ][:2]
+    for kw in gap_hubs:
+        background_tasks.add_task(
+            _article_background_job,
+            current_user.id,
+            context.name,
+            kw.keyword,
+            kw.cluster or kw.keyword,
+            openai_key,
+            business_block,
+        )
+
+    return StrategyResult(skill="content-strategy", output=output, queued_articles=len(gap_hubs))
 
 
 @router.post("/architecture", response_model=StrategyResult)
@@ -443,7 +580,9 @@ def run_seo_flow(
         "Give 4-6 specific, actionable steps. Be concrete — name exact on-page elements, "
         "content additions, or links to build. Output in Markdown."
     )
-    return StrategyResult(skill="seo-flow", output=_run_skill("seo-flow", openai_key, msg, timeout=120))
+    output = _run_skill("seo-flow", openai_key, msg, timeout=120)
+    record = _queue_strategy_change(db, current_user.id, context.name, "seo-flow", kw, output)
+    return StrategyResult(skill="seo-flow", output=output, change_id=record.id)
 
 
 @router.post("/improve-page/{keyword_id}", response_model=StrategyResult)
@@ -503,7 +642,9 @@ def run_improve_page(
         "7. Quick wins: if GSC data shows high impressions but low CTR, address title/description first\n\n"
         "Output in Markdown with clear headings. Be specific and actionable."
     )
-    return StrategyResult(skill="seo-page", output=_run_skill("seo-page", openai_key, msg, timeout=120))
+    output = _run_skill("seo-page", openai_key, msg, timeout=120)
+    record = _queue_strategy_change(db, current_user.id, context.name, "seo-page", kw, output)
+    return StrategyResult(skill="seo-page", output=output, change_id=record.id)
 
 
 @router.post("/competitor-page", response_model=StrategyResult)

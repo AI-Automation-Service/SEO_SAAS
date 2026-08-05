@@ -1,4 +1,4 @@
-"""
+﻿"""
 Google OAuth flow — subscriber GSC + GA4 access (§17, §22 Phase 3).
 
 Single OAuth flow covers both Search Console and Analytics.
@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from api.dependencies import get_current_user, get_db
-from api.routers.api_keys import _save_key
+from api.routers.identity.api_keys import _save_key
 from core.config import load_config
 from core.db.models import User
 

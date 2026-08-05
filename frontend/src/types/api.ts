@@ -296,6 +296,9 @@ export interface SitePage {
 export interface StrategyResult {
   skill: string
   output: string
+  execution_plan?: Record<string, unknown>
+  change_id?: number
+  queued_articles?: number
 }
 
 // API Key status

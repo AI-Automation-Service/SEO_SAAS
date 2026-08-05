@@ -1,4 +1,4 @@
-"""
+﻿"""
 content-rewriter: rewrites flagged paragraphs from a PageChange.
 
 Triggered when plagiarism_status = "flagged". Rewrites only the paragraphs
@@ -83,7 +83,7 @@ def rewrite_flagged_paragraphs(
     Rewrite flagged paragraphs in a PageChange and update it in place.
     Returns the updated record.
     """
-    from api.routers.article import _check_plagiarism
+    from api.routers.content.article import _check_plagiarism
 
     content = record.new_content
     plag_report = record.plagiarism_report

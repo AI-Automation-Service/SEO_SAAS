@@ -1,4 +1,4 @@
-"""
+﻿"""
 Data Provider Layer (§17, §19 P2-17).
 
 Pluggable adapter that routes keyword volume and domain authority queries to
@@ -30,7 +30,7 @@ def get_keyword_volume(keyword: str, user_id: int, db: "Session") -> dict | None
     Priority: DataForSEO → SEMrush → Ahrefs.
     Returns {'volume': int, 'difficulty': float | None, 'source': str} or None.
     """
-    from api.routers.api_keys import get_user_secret
+    from api.routers.identity.api_keys import get_user_secret
     from fastapi import HTTPException
 
     try:
@@ -61,7 +61,7 @@ def get_domain_authority(domain: str, user_id: int, db: "Session") -> dict | Non
     Priority: Moz → Ahrefs → SEMrush.
     Returns {'da': int, 'source': str} or None.
     """
-    from api.routers.api_keys import get_user_secret
+    from api.routers.identity.api_keys import get_user_secret
     from fastapi import HTTPException
 
     try:

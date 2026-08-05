@@ -1,4 +1,4 @@
-"""
+﻿"""
 APScheduler-based cron system for SEO OS.
 
 Six job types:
@@ -35,7 +35,7 @@ def _run_gsc_sync(user_id: int, project_name: str, cron_job_id: int) -> int:
     """Pull fresh GSC keyword data and update positions."""
     from core.db.base import SessionLocal
     from core.db.models import CronRun, CronJob, Keyword
-    from api.routers.keywords import _sync_keywords_from_gsc
+    from api.routers.seo.keywords import _sync_keywords_from_gsc
     from core.project import load_project
     from core.secrets import SecretManager
 
@@ -136,7 +136,7 @@ def _run_cluster_improve(user_id: int, project_name: str, cron_job_id: int) -> i
                 target_cluster = unimproved[0].cluster
 
         if target_cluster:
-            from api.routers.improve import _run_cron_improve
+            from api.routers.content.improve import _run_cron_improve
             new_changes = _run_cron_improve(user_id, project_name, target_cluster, cron_job_id, db)
             changes_created = len(new_changes)
 
@@ -164,8 +164,8 @@ def _run_meta_audit(user_id: int, project_name: str, cron_job_id: int) -> int:
     """Run seo-meta on pages that are missing optimized meta title or description."""
     from core.db.base import SessionLocal
     from core.db.models import CronRun, CronJob, Keyword, PageChange
-    from api.routers.api_keys import get_user_secret
-    from api.routers.improve import _get_wp_adapter, _run_meta_only, _knowledge_block
+    from api.routers.identity.api_keys import get_user_secret
+    from api.routers.content.improve import _get_wp_adapter, _run_meta_only, _knowledge_block
     from core.project import load_project
 
     db = SessionLocal()

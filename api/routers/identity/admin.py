@@ -1,4 +1,4 @@
-from datetime import datetime
+﻿from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -6,7 +6,7 @@ from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from api.dependencies import get_admin_user, get_db
-from api.routers.account import _delete_user_data
+from api.routers.identity.account import _delete_user_data
 from core.db.models import User
 
 router = APIRouter(prefix="/admin", tags=["admin"])

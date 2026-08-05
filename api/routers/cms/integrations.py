@@ -1,4 +1,4 @@
-import json
+﻿import json
 import re
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -74,7 +74,7 @@ def _check_wordpress(
 def _get_oauth_refresh_token(user_id: int, db: Session) -> str | None:
     """Return the subscriber's Google OAuth refresh token, or None if not stored."""
     try:
-        from api.routers.api_keys import get_user_secret
+        from api.routers.identity.api_keys import get_user_secret
         return get_user_secret("google_refresh_token", user_id, db)
     except HTTPException:
         return None

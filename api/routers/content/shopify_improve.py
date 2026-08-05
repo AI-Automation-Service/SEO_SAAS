@@ -1,4 +1,4 @@
-"""
+﻿"""
 Shopify SEO improve pipeline.
 
 Mirrors the WordPress improve.py flow but for Shopify:
@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from agents.base import SkillAgent
 from api.dependencies import get_current_user, get_db, get_project_context
-from api.routers.api_keys import get_user_secret
+from api.routers.identity.api_keys import get_user_secret
 from api.utils.knowledge import fetch_knowledge
 from core.db.models import Keyword, PageChange, User
 from core.models.context import ProjectContext

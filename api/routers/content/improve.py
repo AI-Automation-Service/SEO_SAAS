@@ -1,4 +1,4 @@
-import json
+﻿import json
 import re
 import time
 from datetime import datetime
@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from agents.base import SkillAgent
 from api.dependencies import get_current_user, get_db, get_project_context
-from api.routers.api_keys import get_user_secret
+from api.routers.identity.api_keys import get_user_secret
 from api.utils.knowledge import fetch_knowledge
 from core.db.models import Keyword, PageChange, User
 from core.models.context import ProjectContext
@@ -725,7 +725,7 @@ def _run_cron_improve(
     Returns the list of PageChange records created.
     Does not raise HTTP exceptions — logs errors and skips pages on failure.
     """
-    from api.routers.api_keys import get_user_secret
+    from api.routers.identity.api_keys import get_user_secret
     from core.project import load_project
 
     try:
@@ -1011,6 +1011,16 @@ def apply_change(
         raise HTTPException(404, "Change not found.")
     if record.status != "pending":
         raise HTTPException(400, f"Change is already '{record.status}'.")
+
+    # Advisory-only changes (seo-flow, seo-page) are recommendations, not WP pushes.
+    # Approving them acknowledges the review; no content is pushed to WordPress.
+    if record.source_agent in ("seo-flow", "seo-page"):
+        record.status = "approved"
+        record.approved_at = datetime.utcnow()
+        record.applied_by = "subscriber"
+        db.commit()
+        db.refresh(record)
+        return _to_change_out(record, [])
 
     action_type = record.action_type or "page_edit"
 
