@@ -517,7 +517,7 @@ def generate_article(
               p1_in, p1_out, p1_cost, p1_ms, article_job_id)
 
     # ── Phase 2 ────────────────────────────────────────────────────────────────
-    p2_msg = _phase2_message(body.keyword, business_block, business_name, website, phase1, target_wc)
+    p2_msg = _phase2_message(body.keyword, business_block, business_name, website, phase1, body.target_word_count)
 
     t0 = time.monotonic()
     try:
