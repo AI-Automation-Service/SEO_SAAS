@@ -505,7 +505,38 @@ def generate_article(
 
     full_article = "\n\n".join(filter(None, [p1_content, p2_content, schema_block]))
     full_article = _strip_placeholders(full_article, business_name)
-    total_wc = _word_count(full_article)
+
+    # ── Humanizer pass (GPT-4o-mini) ───────────────────────────────────────────
+    # Separate the schema block before humanizing — it's code, not prose
+    article_body = "\n\n".join(filter(None, [p1_content, p2_content]))
+    article_body = _strip_placeholders(article_body, business_name)
+    t0 = time.monotonic()
+    try:
+        humanizer_msg = (
+            "Humanize the following SEO article. "
+            "Keep ALL content, facts, headings (H1/H2/H3), internal links, "
+            "citation placeholders (e.g. [Citation: ...]), and image placeholders "
+            "(<!-- Image: ... -->) exactly as-is. "
+            "Only change the prose style: remove AI writing patterns per your guidelines. "
+            "Return ONLY the revised article — no preamble, no explanation.\n\n"
+            f"{article_body}"
+        )
+        humanized = SkillAgent("humanizer", openai_key, model="gpt-4o-mini").run(
+            humanizer_msg, timeout=240, json_mode=False, max_tokens=8000
+        )
+        if humanized and len(humanized) > len(article_body) * 0.5:
+            article_body = humanized
+    except Exception:
+        pass  # humanizer failure is non-fatal — original content is kept
+    h_ms = int((time.monotonic() - t0) * 1000)
+    h_in = len(humanizer_msg) // 4
+    h_out = len(article_body) // 4
+    h_cost = round(h_in / 1000 * 0.00015 + h_out / 1000 * 0.0006, 6)
+    _log_call(db, current_user.id, context.name, "humanizer", "gpt-4o-mini",
+              h_in, h_out, h_cost, h_ms, article_job_id)
+
+    full_article = "\n\n".join(filter(None, [article_body, schema_block]))
+    total_wc = _word_count(article_body)  # count prose only, not schema
 
     draft_title = phase1.get("h1") or phase1.get("meta_title") or body.keyword.title()
     # Always derive slug from the raw keyword — GPT drops stop words ("in", "of", …)
