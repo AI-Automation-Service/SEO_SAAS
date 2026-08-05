@@ -142,8 +142,9 @@ export function ContentTab({ projectName }: ContentTabProps) {
         {generateMut.isPending && (
           <div className="space-y-1.5">
             {[
-              'Phase 1 — Outline + first half',
-              'Phase 2 — Completion + final polish',
+              'Phase 1 — Intro + first 3 sections',
+              'Phase 2 — Middle 3 sections',
+              'Phase 3 — FAQ + Conclusion',
               'Plagiarism check via Copyscape',
             ].map((label) => (
               <div key={label} className="flex items-center gap-2 text-xs text-slate-500">

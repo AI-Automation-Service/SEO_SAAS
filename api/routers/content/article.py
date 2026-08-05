@@ -1,10 +1,11 @@
 ﻿"""
-seo-article-writer two-phase pipeline.
+seo-article-writer three-phase pipeline.
 
-Phase 1: outline + first half (~950 words).
-Phase 2: receives Phase 1 JSON, completes the article (~1050 words).
+Phase 1: outline + first third — intro + 3 H2 sections (~700 words).
+Phase 2: middle body — 3 more H2 sections (~700 words).
+Phase 3: FAQ + Conclusion (~500 words).
 Result → PageChange(action_type=new_draft, platform=wordpress) in the Change Queue.
-Plagiarism check runs after Phase 2 if a Copyscape key is available.
+Plagiarism check runs after Phase 3 if a Copyscape key is available.
 """
 
 import json
@@ -20,7 +21,7 @@ from sqlalchemy.orm import Session
 from agents.base import SkillAgent
 from api.dependencies import get_current_user, get_db, get_project_context
 from api.routers.identity.api_keys import get_user_secret
-from api.routers.content.improve import _knowledge_block
+from api.routers.content.improve import _knowledge_block, _get_wp_adapter
 from api.utils.knowledge import fetch_knowledge
 from core.db.models import AIHistory, PageChange, User
 from core.models.context import ProjectContext
@@ -302,14 +303,29 @@ def _phase1_message(
     knowledge_block: str,
     website: str,
     target_wc: int,
+    sitemap_urls: list | None = None,
 ) -> str:
-    half = target_wc // 2
+    third = target_wc // 3
     ymyl_note = (
         "YES — every factual claim must include a citation placeholder. "
         "Add health/legal/financial disclaimers where relevant."
         if ymyl else "No"
     )
-    return f"""You are running PHASE 1 of a two-phase SEO article writing pipeline.
+    sitemap_hint = ""
+    if sitemap_urls:
+        url_list = "\n".join(f"  • {u}" for u in sitemap_urls[:15])
+        sitemap_hint = (
+            f"\nKNOWN PAGES ON THIS WEBSITE (use these for internal links — pick the most relevant):\n"
+            f"{url_list}\n"
+        )
+    else:
+        sitemap_hint = (
+            f"\nFor internal links: choose a logical URL path on {website} based on the business "
+            f"services (e.g. {website}/services/ or {website}/contact/ or {website}/about/). "
+            f"Do NOT use /relevant-page/ as a URL path.\n"
+        )
+
+    return f"""You are running PHASE 1 of a three-phase SEO article writing pipeline.
 
 {_GLOBAL_RULES}
 
@@ -318,7 +334,7 @@ BUSINESS CONTEXT
 ════════════════════════════════════════
 {business_block}
 {f"{chr(10)}Brand & Strategy Notes:{chr(10)}{knowledge_block}" if knowledge_block else ""}
-
+{sitemap_hint}
 ════════════════════════════════════════
 SEO SPECIFICATION
 ════════════════════════════════════════
@@ -332,9 +348,9 @@ Semantic coverage — weave these naturally throughout the article (do not list 
 • 2-3 "People Also Ask" questions Google shows for this keyword (answer them inside the article body)
 
 ════════════════════════════════════════
-ARTICLE STRUCTURE — Phase 1 (first {half}+ words)
+ARTICLE STRUCTURE — Phase 1 (first {third}+ words)
 ════════════════════════════════════════
-Write the FIRST HALF of a {target_wc}-word article. Produce exactly 4 H2 sections.
+Write the FIRST THIRD of a {target_wc}-word article. Produce exactly 3 H2 sections.
 
 STEP 1 — Introduction (100-150 words)
 • FIRST SENTENCE must contain the exact primary keyword: "{keyword}"
@@ -348,7 +364,7 @@ STEP 2 — H2 Section 1 (250-400 words)
 • Follow with 3-4 paragraphs OR a mix of prose + bullet list + example
 • Include 1 E-E-A-T signal (concrete example, statistic with [Citation: …], or real scenario)
 • Include 1 citation placeholder: [Citation: describe source needed]
-• Include 1 internal link: choose a logical URL path on {website} based on the business services (e.g. {website}/services/ or {website}/contact/ or {website}/about/) — do NOT use /relevant-page/ as a URL path
+• Include 1 internal link to a real page on this website (see known pages above)
 • Include 1 external link to a real authoritative source (e.g. a government site, .edu, or major publication like Forbes or Harvard Business Review) — use the actual known URL
 
 STEP 3 — H2 Section 2 (250-400 words)
@@ -359,9 +375,6 @@ STEP 3 — H2 Section 2 (250-400 words)
 
 STEP 4 — H2 Section 3 (250-400 words)
 • Use a different content format than Section 2 (e.g. numbered steps or comparison table)
-• Include 1 E-E-A-T signal, 1 citation placeholder
-
-STEP 5 — H2 Section 4 (250-400 words)
 • Include 1 E-E-A-T signal, 1 citation placeholder
 
 HTML formatting rules (STRICT — no Markdown syntax allowed):
@@ -384,7 +397,7 @@ INTERNAL SEO SELF-CHECK (do not output — verify before submitting)
 ✓ Semantic variations used naturally (not stuffed)
 ✓ Each H2 section has at least one E-E-A-T signal
 ✓ At least 2 citation placeholders present
-✓ At least 1 internal link to a real page on {website} (NOT /relevant-page/)
+✓ At least 1 internal link to a real page (from the known pages list above)
 ✓ At least 2 external links to real authoritative URLs
 ✓ 2 image placeholders included (after intro, after Section 2)
 ✓ No banned phrases, no bracket placeholders, no invented URLs
@@ -399,9 +412,9 @@ Return a single JSON object with EXACTLY these keys — no extra keys, no markdo
   "slug": "url-slug-lowercase-hyphens",
   "h1": "Article headline — contains primary keyword, matches meta_title closely",
   "schema_type": "Article or BlogPosting or NewsArticle",
-  "sections_outline": ["Section 1 heading", "Section 2 heading", "Section 3 heading", "Section 4 heading"],
-  "content_phase1": "<full HTML content — introduction + 4 H2 sections — target {half}+ words — use HTML tags only, no Markdown>",
-  "sections_remaining": ["Section 5 heading", "Section 6 heading", "FAQ", "Conclusion"]
+  "sections_outline": ["Section 1 heading", "Section 2 heading", "Section 3 heading"],
+  "content_phase1": "<full HTML content — introduction + 3 H2 sections — target {third}+ words — use HTML tags only, no Markdown>",
+  "sections_remaining": ["Section 4 heading", "Section 5 heading", "Section 6 heading"]
 }}
 """
 
@@ -409,15 +422,13 @@ Return a single JSON object with EXACTLY these keys — no extra keys, no markdo
 def _phase2_message(
     keyword: str,
     business_block: str,
-    business_name: str,
     website: str,
     phase1: dict,
     target_wc: int,
 ) -> str:
     actual_p1_wc = _word_count(phase1.get("content_phase1", ""))
-    remaining_wc = max(target_wc - actual_p1_wc, target_wc // 2)
+    p2_target = max(target_wc // 3, 600)
     sections = phase1.get("sections_remaining", [])
-    body_sections = [s for s in sections if s not in ("FAQ", "Conclusion")]
     p1_tail = (phase1.get("content_phase1", "") or "")[-600:]
     section_steps = "".join(
         f"STEP {i + 1} — H2: {s} (250-400 words)\n"
@@ -425,9 +436,9 @@ def _phase2_message(
         f"• Include 1 E-E-A-T signal (concrete example, statistic, or real scenario)\n"
         f"• Include 1 citation placeholder: [Citation: describe source needed]\n"
         f"• Mix content formats (prose + list or prose + table) — avoid uniform paragraphs\n\n"
-        for i, s in enumerate(body_sections)
+        for i, s in enumerate(sections)
     )
-    return f"""You are running PHASE 2 of a two-phase SEO article writing pipeline.
+    return f"""You are running PHASE 2 of a three-phase SEO article writing pipeline.
 
 The GLOBAL RULES from Phase 1 apply in full — voice, variety, E-E-A-T, citation placeholders, no banned phrases, no invented URLs, no bracket placeholders.
 
@@ -441,44 +452,86 @@ PHASE 1 HANDOFF
 ════════════════════════════════════════
 Primary keyword : {keyword}
 H1              : {phase1.get("h1")}
-Phase 1 covered : {", ".join(phase1.get("sections_outline", [])[:4])}
+Phase 1 covered : {", ".join(phase1.get("sections_outline", []))}
 Phase 1 length  : {actual_p1_wc} words (measured by backend)
-Still to write  : {", ".join(sections)}
+Still to write  : {", ".join(sections)} (Phase 2) — FAQ + Conclusion come in Phase 3
 
 Continuation point — pick up naturally from here, do NOT repeat:
 …{p1_tail}
 
 ════════════════════════════════════════
-ARTICLE STRUCTURE — Phase 2 (remaining {remaining_wc}+ words)
+ARTICLE STRUCTURE — Phase 2 (body sections only, {p2_target}+ words)
 ════════════════════════════════════════
-{section_steps}STEP {len(body_sections) + 1} — FAQ Section (~350 words)
-• Write exactly 5 H3 questions that readers genuinely ask about this topic on Google
-• Each answer: 60-80 words — direct, specific, no filler
-• Use only facts already established in the article — do not introduce new claims here
+Write ONLY the middle body sections below. Do NOT write FAQ or Conclusion — those come in Phase 3.
 
-STEP {len(body_sections) + 2} — Conclusion (100-150 words)
-• Summarise 3 key takeaways in 1-2 sentences each
-• Close with a CTA that names "{business_name}" specifically
-• Do NOT write "Your Business Name" or any placeholder
-
+{section_steps}
 ════════════════════════════════════════
 INTERNAL SEO SELF-CHECK (do not output — verify before submitting)
 ════════════════════════════════════════
-✓ Primary keyword "{keyword}" appears naturally in at least 2 Phase 2 sections
+✓ Primary keyword "{keyword}" appears naturally in at least 1-2 Phase 2 sections
 ✓ Each H2 has at least 1 E-E-A-T signal
 ✓ At least 2 more citation placeholders present
-✓ 1-2 internal links to {website} included
-✓ FAQ answers do not contradict Phase 1 content
-✓ CTA names the real business, not a placeholder
-✓ No heading prefixes (H2: / H3:), no invented URLs, no banned phrases
+✓ 1 internal link to {website} included
+✓ No FAQ, no Conclusion, no heading prefixes, no invented URLs, no banned phrases
 
 ════════════════════════════════════════
 OUTPUT FORMAT
 ════════════════════════════════════════
 Return a single JSON object with EXACTLY these keys — no extra keys, no markdown fences:
 {{
-  "content_phase2": "<full HTML — all remaining H2 sections + FAQ + Conclusion — target {remaining_wc}+ words — use HTML tags only, no Markdown>",
+  "content_phase2": "<full HTML — middle body H2 sections only — target {p2_target}+ words — use HTML tags only, no Markdown>",
   "schema_json_ld": "<script type=\\"application/ld+json\\">{{...valid JSON-LD for {phase1.get("schema_type", "Article")}...}}</script>"
+}}
+"""
+
+
+def _phase3_message(
+    keyword: str,
+    business_name: str,
+    phase1: dict,
+    phase2_tail: str,
+) -> str:
+    return f"""You are running PHASE 3 (final) of a three-phase SEO article writing pipeline.
+
+The GLOBAL RULES from Phase 1 apply in full — voice, variety, no banned phrases, no bracket placeholders.
+
+════════════════════════════════════════
+PHASE 3 TASK — FAQ + Conclusion (~500 words)
+════════════════════════════════════════
+Primary keyword : {keyword}
+H1              : {phase1.get("h1")}
+
+Continuation point — pick up naturally after this content (do NOT repeat it):
+…{phase2_tail}
+
+STEP 1 — FAQ Section (H2: "Frequently Asked Questions", ~350 words)
+• Write exactly 5 H3 questions that people genuinely search for about "{keyword}" on Google
+• Each answer: 60-80 words — direct, specific, actionable
+• Do not introduce new claims that contradict the article body
+• Format strictly as:
+  <h2>Frequently Asked Questions</h2>
+  <h3>Question one?</h3><p>Answer...</p>
+  <h3>Question two?</h3><p>Answer...</p>
+  (repeat × 5)
+
+STEP 2 — Conclusion (H2: "Conclusion", 100-150 words)
+• Summarise 2-3 key takeaways in 1-2 sentences each
+• Close with a call-to-action that names "{business_name}" specifically
+• Do NOT write "Your Business Name" or any placeholder
+• Format: <h2>Conclusion</h2><p>...</p>
+
+HTML formatting rules (STRICT — no Markdown syntax allowed):
+• Headings: <h2>Section</h2>, <h3>Question</h3>
+• Paragraphs: <p>text</p>
+• Bold: <strong>text</strong>
+• Do NOT use #, ##, **, *, –, or any other Markdown syntax
+
+════════════════════════════════════════
+OUTPUT FORMAT
+════════════════════════════════════════
+Return a single JSON object — no extra keys, no markdown fences:
+{{
+  "content_phase3": "<full HTML — FAQ section + Conclusion — ~500 words — HTML tags only, no Markdown>"
 }}
 """
 
@@ -542,10 +595,19 @@ def generate_article(
     website = str(context.config.website or "").rstrip("/")
     knowledge_block = _knowledge_block(db, current_user.id, context.name)
 
+    # ── Fetch sitemap URLs for real internal links (non-fatal) ─────────────────
+    sitemap_urls: list[str] = []
+    try:
+        wp = _get_wp_adapter(context)
+        sitemap_urls = wp.get_sitemap_urls()[:15]
+    except Exception:
+        pass
+
     # ── Phase 1 ────────────────────────────────────────────────────────────────
     p1_msg = _phase1_message(
         body.keyword, body.intent, body.ymyl,
         business_block, knowledge_block, website, body.target_word_count,
+        sitemap_urls=sitemap_urls,
     )
 
     t0 = time.monotonic()
@@ -570,7 +632,7 @@ def generate_article(
               p1_in, p1_out, p1_cost, p1_ms, article_job_id)
 
     # ── Phase 2 ────────────────────────────────────────────────────────────────
-    p2_msg = _phase2_message(body.keyword, business_block, business_name, website, phase1, body.target_word_count)
+    p2_msg = _phase2_message(body.keyword, business_block, website, phase1, body.target_word_count)
 
     t0 = time.monotonic()
     try:
@@ -592,6 +654,30 @@ def generate_article(
     _log_call(db, current_user.id, context.name, "seo-article-writer-p2", "gpt-4o",
               p2_in, p2_out, p2_cost, p2_ms, article_job_id)
 
+    # ── Phase 3 ────────────────────────────────────────────────────────────────
+    p2_tail = (phase2.get("content_phase2", "") or "")[-600:]
+    p3_msg = _phase3_message(body.keyword, business_name, phase1, p2_tail)
+
+    t0 = time.monotonic()
+    try:
+        raw_p3 = SkillAgent("seo-article-writer", openai_key, model="gpt-4o").run(
+            p3_msg, timeout=180, json_mode=True, max_tokens=2500
+        )
+    except Exception as e:
+        raise HTTPException(502, f"Article writer Phase 3 failed: {e}")
+    p3_ms = int((time.monotonic() - t0) * 1000)
+
+    try:
+        phase3 = json.loads(raw_p3)
+    except json.JSONDecodeError:
+        raise HTTPException(500, "Article writer Phase 3 returned invalid JSON.")
+
+    p3_in = len(p3_msg) // 4
+    p3_out = len(raw_p3) // 4
+    p3_cost = round(p3_in / 1000 * 0.0025 + p3_out / 1000 * 0.010, 6)
+    _log_call(db, current_user.id, context.name, "seo-article-writer-p3", "gpt-4o",
+              p3_in, p3_out, p3_cost, p3_ms, article_job_id)
+
     # ── seo-schema: dedicated schema generation (replaces Phase 2 inline) ─────────
     published_date = datetime.utcnow().strftime("%Y-%m-%d")
     draft_title_tmp = phase1.get("h1") or phase1.get("meta_title") or body.keyword.title()
@@ -610,13 +696,11 @@ def generate_article(
     # ── Assemble final article ─────────────────────────────────────────────────
     p1_content = _md_to_html(phase1.get("content_phase1", ""))
     p2_content = _md_to_html(phase2.get("content_phase2", ""))
-
-    full_article = "\n\n".join(filter(None, [p1_content, p2_content, schema_block]))
-    full_article = _strip_placeholders(full_article, business_name)
+    p3_content = _md_to_html(phase3.get("content_phase3", ""))
 
     # ── Humanizer pass (GPT-4o-mini) ───────────────────────────────────────────
     # Separate the schema block before humanizing — it's code, not prose
-    article_body = "\n\n".join(filter(None, [p1_content, p2_content]))
+    article_body = "\n\n".join(filter(None, [p1_content, p2_content, p3_content]))
     article_body = _strip_placeholders(article_body, business_name)
     humanizer_msg = (
         "Humanize the following SEO article. "
@@ -678,11 +762,12 @@ def generate_article(
         original_content="",   # no original — this is a new draft
         new_content=full_article,
         change_summary=change_summary,
-        changes_made=["article_writer: new draft created via two-phase pipeline"],
+        changes_made=["article_writer: new draft created via three-phase pipeline"],
         statistics={
             "word_count": total_wc,
             "phase1_words": _word_count(p1_content),
             "phase2_words": _word_count(p2_content),
+            "phase3_words": _word_count(p3_content),
             "meta_title": (phase1.get("meta_title") or "").strip(),
             "meta_description": (phase1.get("meta_description") or "").strip(),
             "focus_keyword": body.keyword,
