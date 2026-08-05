@@ -232,7 +232,8 @@ def _phase1_message(
 ## {_ANTI_AI_RULE}
 
 ## Your Task (Phase 1)
-Produce the FIRST HALF of a {target_wc}-word SEO article. Target: ~{half} words.
+Produce the FIRST HALF of a {target_wc}-word SEO article.
+HARD REQUIREMENT: content_phase1 MUST contain at least {half} words. Do not stop writing until you reach {half} words.
 
 Output a JSON object with EXACTLY these keys:
 {{
@@ -243,19 +244,20 @@ Output a JSON object with EXACTLY these keys:
   "schema_type": "Article|BlogPosting|NewsArticle",
   "author_name": "suggested author name",
   "sections_outline": ["Section heading text", "Section heading text", ...],
-  "content_phase1": "Full HTML/Markdown of: Introduction + first 3-4 H2 sections. ~{half} words.",
-  "word_count_phase1": <integer>,
+  "content_phase1": "Introduction (100-150 words) + EXACTLY 4 H2 sections each 250-300 words. Total MUST exceed {half} words.",
+  "word_count_phase1": <integer count of words in content_phase1>,
   "sections_remaining": ["Section heading text", "Section heading text", "FAQ", "Conclusion"]
 }}
 
 Rules for content_phase1:
-- H1 as # heading
-- H2 sections as ## heading — NEVER write "## H2: Title". Just "## Title".
+- Write EXACTLY 4 H2 body sections — not 2, not 3, exactly 4
+- Each H2 section MUST be 250-300 words: write 4-5 paragraphs with specific details, examples, and actionable advice
+- Do NOT move to the next section until the current one is at least 250 words
+- H1 as # heading; H2 as ## heading — NEVER "## H2: Title", just "## Title"
 - sections_outline and sections_remaining must be plain heading text — no "H2:", "H3:", or any prefix
-- Start EACH section with a 40-80 word direct answer paragraph (AEO/AI Overview target)
-- Minimum 2 meaningful H2 sections with substantive content
+- First paragraph of each section: 50-80 word direct answer (AEO/AI Overview target)
+- Self-check before submitting: count the words in content_phase1. If under {half}, expand the shortest sections until you reach {half}.
 - NEVER output bracket placeholders like [Author Name], [Your Business Name], [date] — use real values from Business Context
-- No placeholder text. Write the full content now.
 - {_ANTI_AI_RULE}
 """
 
@@ -266,7 +268,9 @@ def _phase2_message(
     phase1: dict,
     target_wc: int,
 ) -> str:
-    remaining_wc = target_wc - phase1.get("word_count_phase1", 950)
+    # Measure Phase 1 content directly — don't trust GPT's self-reported count
+    actual_p1_wc = _word_count(phase1.get("content_phase1", ""))
+    remaining_wc = max(target_wc - actual_p1_wc, target_wc // 2)
     sections = phase1.get("sections_remaining", [])
     # Only pass the tail of Phase 1 for continuity — passing the full content burns
     # output-token budget and results in GPT-4o producing far less Phase 2 content.
@@ -291,30 +295,33 @@ def _phase2_message(
 ## {_ANTI_AI_RULE}
 
 ## Your Task (Phase 2)
-Write the REMAINING content to complete the article. You MUST produce at least {remaining_wc} words of new content — this is non-negotiable. Do not stop early.
+Write the REMAINING content to complete the article.
+HARD REQUIREMENT: content_phase2 MUST contain at least {remaining_wc} words. Do not stop writing until you reach {remaining_wc} words.
 
-Sections to write:
-{chr(10).join(f"- {s}" for s in sections)}
+H2 body sections to write ({len(sections) - 2} sections):
+{chr(10).join(f"- {s}" for s in sections if s not in ("FAQ", "Conclusion"))}
 
-Include:
-- Remaining H2 body sections (NEVER prefix headings with "H2:" or "H3:" — use "## Heading" and "### Heading" only)
-- FAQ section (3-5 H3 questions using ONLY information from the article — never invent answers)
-- Conclusion (75-100 words + CTA using the REAL business name from Business Context above)
+Each H2 section above MUST be 250-300 words (4-5 paragraphs). Do NOT move to the next section until the current one is at least 250 words.
+
+Then write:
+- FAQ section: 5 H3 questions with 60-80 word answers each (total ~350 words)
+- Conclusion: 75-100 words + CTA using the REAL business name from Business Context above
 - Author block: "By {phase1.get("author_name", "the author")} · Last updated: {datetime.utcnow().strftime('%B %Y')}"
 - JSON-LD schema snippet for {phase1.get("schema_type", "Article")}
 
 Output a JSON object with EXACTLY these keys:
 {{
-  "content_phase2": "Full Markdown/HTML of remaining sections. ~{remaining_wc} words.",
-  "word_count_phase2": <integer>,
+  "content_phase2": "Full Markdown of all remaining sections. MUST exceed {remaining_wc} words.",
+  "word_count_phase2": <integer count of words in content_phase2>,
   "schema_json_ld": "<script type=\\"application/ld+json\\">...</script>"
 }}
 
 Rules:
-- Continue naturally from where Phase 1 left off
+- Continue naturally from where Phase 1 left off — do NOT repeat any Phase 1 content
 - NEVER write "## H2: Title" or "### H3: Title" — write "## Title" and "### Title" only
-- NEVER output bracket placeholders like [Author Name], [Your Business Name], [date] — use real values from the Business Context
-- FAQ: questions must come from natural reader follow-ups — never invent facts
+- NEVER output bracket placeholders like [Author Name], [Your Business Name], [date] — use real values from Business Context
+- Self-check before submitting: if content_phase2 is under {remaining_wc} words, expand the shortest sections
+- FAQ: questions must be natural reader follow-ups — never invent facts not in the article
 - {_ANTI_AI_RULE}
 """
 
