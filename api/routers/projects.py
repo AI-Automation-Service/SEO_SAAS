@@ -199,6 +199,52 @@ def update_project(
     return {"name": context.name, **updates}
 
 
+class AutopilotRequest(BaseModel):
+    autopilot_mode: Optional[str] = None     # manual | semi_auto | full_auto
+    autopilot_daily_limit: Optional[int] = None
+
+
+@router.put("/{name}/autopilot")
+def update_autopilot(
+    name: str,
+    body: AutopilotRequest,
+    context: ProjectContext = Depends(get_project_context),
+    current_user: User = Depends(get_current_user),
+):
+    if body.autopilot_mode and body.autopilot_mode not in ("manual", "semi_auto", "full_auto"):
+        raise HTTPException(400, "autopilot_mode must be manual, semi_auto, or full_auto")
+    if body.autopilot_daily_limit is not None and not (1 <= body.autopilot_daily_limit <= 50):
+        raise HTTPException(400, "autopilot_daily_limit must be between 1 and 50")
+
+    config_file = context.project_dir / "config" / "project.yaml"
+    updates: dict = {}
+    if body.autopilot_mode is not None:
+        updates["autopilot_mode"] = body.autopilot_mode
+    if body.autopilot_daily_limit is not None:
+        updates["autopilot_daily_limit"] = body.autopilot_daily_limit
+    if updates:
+        update_project_yaml(config_file, updates)
+
+    return {
+        "name": name,
+        "autopilot_mode": body.autopilot_mode or context.config.autopilot_mode,
+        "autopilot_daily_limit": body.autopilot_daily_limit or context.config.autopilot_daily_limit,
+    }
+
+
+@router.get("/{name}/state")
+def get_project_state(
+    context: ProjectContext = Depends(get_project_context),
+    current_user: User = Depends(get_current_user),
+):
+    return {
+        "name": context.name,
+        "project_state": context.config.project_state,
+        "autopilot_mode": context.config.autopilot_mode,
+        "autopilot_daily_limit": context.config.autopilot_daily_limit,
+    }
+
+
 @router.delete("/{name}", status_code=200)
 def delete_project(
     name: str,

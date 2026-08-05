@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Optional
 
 import yaml
 
@@ -6,6 +7,31 @@ from core.models.project import ProjectConfig
 from shared.exceptions import ProjectConfigError, ProjectNotFoundError
 
 PROJECTS_DIR = Path(__file__).parent.parent / "projects"
+
+
+def load_project_context(user_id: int, project_name: str):
+    """
+    Load a ProjectContext for use outside of FastAPI request scope (e.g. cron jobs).
+    Returns None if the project does not exist.
+    """
+    from core.config import load_config
+    from core.knowledge import KnowledgeLoader
+    from core.models.context import ProjectContext
+
+    config = load_config()
+    user_dir = config.projects_dir / str(user_id)
+    loader = ProjectLoader(user_dir)
+    kl = KnowledgeLoader(user_dir)
+    try:
+        project_config = loader.load(project_name)
+    except (ProjectNotFoundError, ProjectConfigError):
+        return None
+    return ProjectContext(
+        name=project_name,
+        config=project_config,
+        knowledge=kl.load(project_name),
+        project_dir=user_dir / project_name,
+    )
 
 
 class ProjectLoader:

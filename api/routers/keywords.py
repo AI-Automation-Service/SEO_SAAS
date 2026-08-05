@@ -623,6 +623,14 @@ def run_cluster_agent(
     _match_sitemap(rows, db, current_user.id, context.name)
     db.commit()
     cluster_count = len({r.cluster for r in rows if r.cluster})
+
+    # Advance project state to CLUSTERED
+    try:
+        from core.state_machine import advance_state
+        advance_state(context, "CLUSTERED")
+    except Exception:
+        pass
+
     return {
         "clustered": updated,
         "clusters": cluster_count,

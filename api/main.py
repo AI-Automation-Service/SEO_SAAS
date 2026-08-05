@@ -22,14 +22,21 @@ from api.routers.strategy import router as strategy_router
 from api.routers.sitemap import router as sitemap_router
 from api.routers.knowledge import router as knowledge_router
 from api.routers.improve import router as improve_router
+from api.routers.article import router as article_router
+from api.routers.cron import router as cron_router
+from api.routers.feedback import router as feedback_router
+from api.routers.shopify_improve import router as shopify_improve_router
 from core.db.base import create_tables
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     create_tables()  # idempotent — creates tables that don't exist yet
+    from scheduler.cron import start_scheduler, stop_scheduler
+    start_scheduler()
     logger.info("SEO OS API starting")
     yield
+    stop_scheduler()
     logger.info("SEO OS API stopped")
 
 
@@ -59,6 +66,10 @@ app.include_router(strategy_router, prefix="/api")
 app.include_router(sitemap_router, prefix="/api")
 app.include_router(knowledge_router, prefix="/api")
 app.include_router(improve_router, prefix="/api")
+app.include_router(article_router, prefix="/api")
+app.include_router(cron_router, prefix="/api")
+app.include_router(feedback_router, prefix="/api")
+app.include_router(shopify_improve_router, prefix="/api")
 
 
 @app.get("/health", response_model=HealthResponse, tags=["health"])

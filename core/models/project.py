@@ -48,3 +48,12 @@ class ProjectConfig(BaseModel):
     business_location: str = ""         # city/region e.g. "Cairo, Egypt"
     integrations: ProjectIntegrations = ProjectIntegrations()
     active: bool = True
+
+    # Autopilot
+    # manual | semi_auto | full_auto
+    autopilot_mode: str = "manual"
+    autopilot_daily_limit: int = 5
+
+    # Project state machine
+    # SETUP | CLUSTERED | PLANNED | ACTIVE | MONITORING
+    project_state: str = "SETUP"

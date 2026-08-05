@@ -1,4 +1,6 @@
+import json
 from datetime import datetime
+from typing import Optional
 from urllib.parse import urlparse
 
 import markdown as md
@@ -156,6 +158,7 @@ def _save_output(db: Session, user_id: int, project_name: str, strategy_type: st
 class StrategyResult(BaseModel):
     skill: str
     output: str
+    execution_plan: Optional[dict] = None
 
 
 class CompetitorPageRequest(BaseModel):
@@ -214,6 +217,83 @@ def delete_saved_output(
 
 # ── Generation endpoints ──────────────────────────────────────────────────────
 
+def _build_execution_plan_json(
+    rows: list,
+    ctx: ProjectContext,
+    markdown_plan: str,
+    openai_key: str,
+) -> dict:
+    """
+    Ask GPT-4o-mini to extract a structured JSON execution plan from the Markdown roadmap.
+    Returns the JSON dict; falls back to a minimal stub on failure.
+    """
+    clusters = {}
+    for r in rows:
+        if not r.cluster:
+            continue
+        c = clusters.setdefault(r.cluster, {"hub": None, "spokes": [], "keywords": []})
+        c["keywords"].append(r.keyword)
+        if r.is_hub:
+            c["hub"] = r.keyword
+        elif r.existing_url:
+            c["spokes"].append(r.existing_url)
+
+    cluster_list = [
+        {
+            "name": name,
+            "hub_keyword": data["hub"] or data["keywords"][0],
+            "keyword_count": len(data["keywords"]),
+        }
+        for name, data in clusters.items()
+    ]
+
+    prompt = (
+        "You are a structured data extractor. Given the 12-month SEO plan below, "
+        "produce a JSON execution plan. Output ONLY valid JSON, no markdown wrapper.\n\n"
+        "Required structure:\n"
+        "{\n"
+        '  "phases": [\n'
+        '    {"name": "foundation", "weeks": "1-4", "focus": "...", "cluster_targets": ["cluster1"]},\n'
+        '    {"name": "expansion", "weeks": "5-12", "focus": "...", "cluster_targets": []},\n'
+        '    {"name": "scale", "weeks": "13-24", "focus": "...", "cluster_targets": []},\n'
+        '    {"name": "authority", "weeks": "25-52", "focus": "...", "cluster_targets": []}\n'
+        "  ],\n"
+        '  "content_calendar": [\n'
+        '    {"cluster": "cluster_name", "action": "new_article|improve", "phase": "foundation", '
+        '"priority": "P0|P1|P2|P3", "target_keyword": "..."}\n'
+        "  ],\n"
+        '  "improvement_queue": [\n'
+        '    {"cluster": "cluster_name", "priority": "P0|P1|P2|P3", "reason": "..."}\n'
+        "  ],\n"
+        '  "kpi_targets": {"3_month": {}, "6_month": {}, "12_month": {}}\n'
+        "}\n\n"
+        f"Available clusters: {cluster_list}\n\n"
+        f"SEO Plan (Markdown):\n{markdown_plan[:4000]}"
+    )
+
+    try:
+        raw = SkillAgent("seo-plan", openai_key, model="gpt-4o-mini").run(
+            prompt, timeout=90, json_mode=True
+        )
+        return json.loads(raw)
+    except Exception:
+        # Minimal fallback so the plan always has a machine-readable form
+        return {
+            "phases": [
+                {"name": "foundation", "weeks": "1-4", "focus": "Quick wins and pillar content", "cluster_targets": []},
+                {"name": "expansion", "weeks": "5-12", "focus": "Spoke content and internal linking", "cluster_targets": []},
+                {"name": "scale", "weeks": "13-24", "focus": "Content depth and authority signals", "cluster_targets": []},
+                {"name": "authority", "weeks": "25-52", "focus": "Link building and brand authority", "cluster_targets": []},
+            ],
+            "content_calendar": [],
+            "improvement_queue": [
+                {"cluster": name, "priority": "P1", "reason": "Pending plan analysis"}
+                for name in list(clusters.keys())[:10]
+            ],
+            "kpi_targets": {},
+        }
+
+
 @router.post("/plan", response_model=StrategyResult)
 def run_seo_plan(
     context: ProjectContext = Depends(get_project_context),
@@ -238,9 +318,21 @@ def run_seo_plan(
         "Include: executive summary, KPI targets table (Baseline/3 Month/6 Month/12 Month), "
         "content priorities per cluster, and phased implementation roadmap. Output in Markdown."
     )
-    output = _run_skill("seo-plan", openai_key, msg)
-    _save_output(db, current_user.id, context.name, "plan", output)
-    return StrategyResult(skill="seo-plan", output=output)
+    markdown_output = _run_skill("seo-plan", openai_key, msg)
+    _save_output(db, current_user.id, context.name, "plan", markdown_output)
+
+    # Build JSON execution plan from the Markdown roadmap
+    execution_plan = _build_execution_plan_json(rows, context, markdown_output, openai_key)
+    _save_output(db, current_user.id, context.name, "plan_json", json.dumps(execution_plan))
+
+    # Advance project state to PLANNED
+    try:
+        from core.state_machine import advance_state
+        advance_state(context, "PLANNED")
+    except Exception:
+        pass
+
+    return StrategyResult(skill="seo-plan", output=markdown_output, execution_plan=execution_plan)
 
 
 @router.post("/content", response_model=StrategyResult)
@@ -469,6 +561,76 @@ def _competitor_title_and_slug(business_name: str, competitor_url: str) -> tuple
     return title, slug
 
 
+class QueueCompetitorOut(BaseModel):
+    change_id: int
+    draft_title: str
+    draft_slug: str
+    status: str
+
+
+@router.post("/queue-competitor", response_model=QueueCompetitorOut)
+def queue_competitor_page(
+    body: CompetitorPageRequest,
+    context: ProjectContext = Depends(get_project_context),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Queue the saved competitor page as a new_draft PageChange.
+    Subscriber approves in the Change Queue, which then pushes it to WordPress as a draft post.
+    Replaces the old publish-competitor endpoint (which pushed directly).
+    """
+    from core.db.models import PageChange
+
+    strategy_type = f"competitor:{body.competitor_url}"
+    row = (
+        db.query(StrategyOutput)
+        .filter(
+            StrategyOutput.user_id == current_user.id,
+            StrategyOutput.project_name == context.name,
+            StrategyOutput.strategy_type == strategy_type,
+        )
+        .first()
+    )
+    if not row:
+        raise HTTPException(404, "No saved output for this competitor. Generate it first.")
+
+    title, slug = _competitor_title_and_slug(context.config.business_name, body.competitor_url)
+    html = md.markdown(row.output, extensions=["tables", "fenced_code"])
+    wc = len(row.output.split())
+
+    record = PageChange(
+        user_id=current_user.id,
+        project_name=context.name,
+        action_type="new_draft",
+        platform="wordpress",
+        source_agent="seo-competitor-pages",
+        cluster_name="competitor",
+        wp_post_id=0,
+        wp_post_url="",
+        wp_post_type="page",
+        original_content="",
+        new_content=html,
+        change_summary=f"Competitor comparison page: \"{title}\" ({wc} words)",
+        changes_made=["competitor_page: comparison page queued for WordPress draft"],
+        draft_title=title,
+        draft_slug=slug,
+        draft_word_count=wc,
+        plagiarism_status="skipped",
+        status="pending",
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+
+    return QueueCompetitorOut(
+        change_id=record.id,
+        draft_title=title,
+        draft_slug=slug,
+        status="pending",
+    )
+
+
 @router.post("/publish-competitor")
 def publish_competitor_page(
     body: CompetitorPageRequest,
@@ -477,6 +639,7 @@ def publish_competitor_page(
     db: Session = Depends(get_db),
     secrets: SecretManager = Depends(get_secret_manager),
 ):
+    """Deprecated: use /queue-competitor instead. Kept for backward compatibility."""
     strategy_type = f"competitor:{body.competitor_url}"
     row = (
         db.query(StrategyOutput)
@@ -492,7 +655,7 @@ def publish_competitor_page(
 
     wp_cfg = context.config.integrations.wordpress
     if not wp_cfg.enabled:
-        raise HTTPException(400, "WordPress integration is not enabled. Connect WordPress in the Integrations tab first.")
+        raise HTTPException(400, "WordPress integration is not enabled.")
 
     try:
         adapter = WordPressAdapter(

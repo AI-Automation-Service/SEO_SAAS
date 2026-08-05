@@ -10,7 +10,7 @@ If `is_homepage` is true:
 - `author_date`: mark **skipped** — author and date attribution does not belong on a homepage.
 - `internal_link`: mark **skipped** — this page IS the hub; a page cannot link to itself.
 - `aeo_structure`: mark **skipped** — homepage does not target a specific query for snippet extraction.
-- `faq_opportunity`: mark **skipped** — FAQ schema is not appropriate for homepages.
+- `faq_opportunity`: mark **skipped** — a FAQ section is not appropriate for homepages.
 
 Evaluate `direct_answer` and `heading_structure` normally even for homepages.
 
@@ -94,18 +94,46 @@ Mark **skipped** for homepage, transactional pages, or pages with fewer than 200
 Severity: **medium**
 
 ### 7. faq_opportunity (optional — only evaluate if content has Q&A potential)
-Does the page contain questions and answers that would qualify for FAQPage schema?
+Does the page contain question-and-answer pairs that could be structured as a dedicated FAQ section?
 
-FAQPage schema triggers PAA-style rich results and is cited more frequently by AI Overviews.
+A well-structured FAQ section targets People Also Ask (PAA) boxes organically through question-format H3 headings and concise paragraph answers — no schema dependency required.
 
 Evaluate: does the main content include 2 or more distinct question-and-answer pairs? These can be:
 - Explicit Q&A sections ("Q: ... A: ...")
 - H2/H3 questions followed by answer paragraphs
 - "Common questions" or "People also ask" style sections
+- Scattered questions and answers that would benefit from grouping into a dedicated section
 
-Mark **needed** if 2+ Q&A pairs exist and no FAQPage schema is present.
-Mark **not_needed** if FAQPage schema already exists or fewer than 2 Q&A pairs are present.
+Mark **needed** if 2+ Q&A pairs exist and they are not already in a structured FAQ section with H3 headings.
+Mark **not_needed** if the content already has a well-structured FAQ section with H3 question headings.
 Mark **skipped** for homepage, service/landing pages, or non-informational content.
+
+Severity: **medium**
+
+### 8. content_freshness (skip for pages with fewer than 200 words or non-informational content)
+Is the content date fresh enough to qualify for AI citation eligibility?
+
+~44% of AI Overview citations come from pages in the first 30% of content that signal freshness. Pages with no visible date or a date older than 6 months are deprioritized by AI citation algorithms.
+
+Evaluate `date_visible` from the statistics block:
+- If `date_visible` is false (no date visible in content): mark **needed** — missing date prevents AI citation engines from assessing freshness
+- If `date_visible` is true: check if the date is more than 6 months before `current_date`. If stale: mark **needed** with a note that the date must be updated in WordPress (the editor cannot modify existing dates without removing content)
+- If `date_visible` is true and date is within 6 months: mark **not_needed**
+
+Mark **skipped** for: homepage, landing/transactional pages, pages with fewer than 200 words.
+
+Severity: **low**
+
+### 9. images_alt (skip if `images_missing_alt` statistic is 0)
+Do all images in the main content have descriptive alt text?
+
+Missing alt text harms both accessibility (WCAG 2.1 Level A requirement) and SEO — Google uses alt text to understand image content and include images in image search results.
+
+Evaluate the `images_missing_alt` count from statistics:
+- If `images_missing_alt` > 0: mark **needed** — list the count in the reason field
+- If `images_missing_alt` = 0: mark **not_needed**
+
+Mark **skipped** if no `<img>` elements appear in the main content.
 
 Severity: **medium**
 
@@ -128,6 +156,8 @@ Based on signals 4 and 6, determine the page type. Include in output as `page_ty
 | author_date | low |
 | aeo_structure | medium |
 | faq_opportunity | medium |
+| content_freshness | low |
+| images_alt | medium |
 
 ## Confidence Rules
 
@@ -217,7 +247,21 @@ Return exactly this JSON:
       "type": "faq_opportunity",
       "status": "needed" | "not_needed" | "skipped",
       "severity": "medium",
-      "reason": "One sentence. If needed, list the Q&A pairs found.",
+      "reason": "One sentence. If needed, describe the Q&A pairs found and how they should be grouped.",
+      "target_url": null
+    },
+    {
+      "type": "content_freshness",
+      "status": "needed" | "not_needed" | "skipped",
+      "severity": "low",
+      "reason": "One sentence. If needed, state whether the date is missing or stale (include the date found if visible).",
+      "target_url": null
+    },
+    {
+      "type": "images_alt",
+      "status": "needed" | "not_needed" | "skipped",
+      "severity": "medium",
+      "reason": "One sentence. If needed, state the count of images missing alt text.",
       "target_url": null
     }
   ],
@@ -227,7 +271,7 @@ Return exactly this JSON:
 ## Validation Before Returning
 
 Before returning, verify:
-- [ ] `recommendations` array contains exactly 7 items in this order: direct_answer, heading_structure, internal_link, schema, author_date, aeo_structure, faq_opportunity
+- [ ] `recommendations` array contains exactly 9 items in this order: direct_answer, heading_structure, internal_link, schema, author_date, aeo_structure, faq_opportunity, content_freshness, images_alt
 - [ ] Every recommendation has a non-empty `reason`
 - [ ] `page_type` is one of: blog_post, article, service, landing
 - [ ] `no_action_reason` is non-null only when all recommendations are `not_needed` or `skipped`

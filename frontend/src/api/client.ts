@@ -21,6 +21,8 @@ import type {
   StrategyResult,
   SpeedResult,
   PageChange,
+  ArticleGenerateRequest,
+  ArticleOut,
 } from '@/types/api'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? ''
@@ -290,6 +292,12 @@ export const improveApi = {
 
   history: (name: string) =>
     api.get<PageChange[]>(`/api/projects/${name}/improve/history`).then((r) => r.data),
+}
+
+// ── Article Writer ────────────────────────────────────────────────────────────
+export const articleApi = {
+  generate: (name: string, body: ArticleGenerateRequest) =>
+    api.post<ArticleOut>(`/api/projects/${name}/article/generate`, body).then((r) => r.data),
 }
 
 // ── Health ────────────────────────────────────────────────────────────────────

@@ -29,6 +29,7 @@ dependencies = [
     "email-validator>=2.0.0",
     "python-multipart>=0.0.9",
     "markdown>=3.6",
+    "apscheduler>=3.10.0",
 ]
 
 [project.scripts]

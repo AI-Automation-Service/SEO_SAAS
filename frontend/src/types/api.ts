@@ -157,6 +157,8 @@ export interface KeywordSummary {
 
 // Page Improvement types
 export type PageChangeStatus = 'pending' | 'approved' | 'rolled_back' | 'no_action'
+export type ActionType = 'page_edit' | 'meta_edit' | 'new_draft'
+export type PlagiarismStatus = 'skipped' | 'clean' | 'flagged' | 'rewritten'
 
 export interface PageStatistics {
   word_count?: number
@@ -174,13 +176,16 @@ export interface PageStatistics {
 }
 
 export interface MetaUpdates {
-  plugin: 'yoast' | 'rankmath'
+  plugin?: 'yoast' | 'rankmath'
+  platform?: 'shopify' | 'wordpress'
   suggested_meta_title: string | null
   suggested_meta_description: string | null
 }
 
 export interface PageChange {
   id: number
+  action_type: ActionType
+  platform: string
   cluster_name: string
   wp_post_id: number
   wp_post_url: string
@@ -191,9 +196,46 @@ export interface PageChange {
   meta_updates: MetaUpdates | null
   original_content: string
   new_content: string
+  draft_title?: string | null
+  draft_slug?: string | null
+  draft_word_count?: number | null
+  plagiarism_flag?: boolean
+  plagiarism_score?: number | null
+  plagiarism_status?: PlagiarismStatus
+  rejection_reason?: string | null
+  applied_by?: string | null
   status: PageChangeStatus
   created_at: string
   approved_at: string | null
+  refresh_status?: RefreshStatus | null
+}
+
+export interface RefreshStatus {
+  overall_action: string
+  message: string
+  days_since_last_improvement: number | null
+  meta: { min_days: number; ready: boolean; days_remaining: number }
+  content: { min_days: number; ready: boolean; days_remaining: number }
+}
+
+// Article writer types
+export interface ArticleGenerateRequest {
+  keyword: string
+  cluster_name?: string
+}
+
+export interface ArticleOut {
+  change_id: number
+  article_job_id: string
+  keyword: string
+  draft_title: string
+  draft_slug: string
+  draft_word_count: number
+  plagiarism_status: PlagiarismStatus
+  plagiarism_score?: number | null
+  plagiarism_flag: boolean
+  content_preview: string
+  status: string
 }
 
 // Knowledge Base types

@@ -4,10 +4,11 @@ import {
   Tags, RefreshCw, Upload, Sparkles, Search, X, ExternalLink,
   ChevronUp, ChevronDown, Trash2, Crown, Zap, HelpCircle, RotateCcw, Info,
   Wand2, Copy, Check, ChevronRight, Wrench, RotateCcw as Rollback, CheckCircle, AlertCircle,
+  FileText, Shield, ShieldAlert,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { keywordsApi, strategyApi, improveApi, getErrorMessage } from '@/api/client'
-import type { Keyword, KeywordStatus, KeywordType, FunnelStage, PageChange, PageStatistics } from '@/types/api'
+import type { Keyword, KeywordStatus, KeywordType, FunnelStage, PageChange, PageStatistics, ActionType, PlagiarismStatus } from '@/types/api'
 import { cn } from '@/lib/utils'
 
 // ── Tooltip ───────────────────────────────────────────────────────────────────
@@ -1052,6 +1053,19 @@ function ImprovePanelDiff({ original, updated }: { original: string; updated: st
   )
 }
 
+const ACTION_TYPE_STYLES: Record<ActionType, { label: string; className: string }> = {
+  page_edit:  { label: 'Page Edit',  className: 'bg-blue-100 text-blue-700' },
+  meta_edit:  { label: 'Meta Edit',  className: 'bg-purple-100 text-purple-700' },
+  new_draft:  { label: 'New Draft',  className: 'bg-amber-100 text-amber-700' },
+}
+
+const PLAGIARISM_STYLES: Record<PlagiarismStatus, { label: string; className: string; icon: typeof Shield }> = {
+  skipped:   { label: 'Unchecked',  className: 'bg-slate-100 text-slate-500',   icon: Shield },
+  clean:     { label: 'Original',   className: 'bg-emerald-100 text-emerald-700', icon: Shield },
+  flagged:   { label: 'Flagged',    className: 'bg-red-100 text-red-600',         icon: ShieldAlert },
+  rewritten: { label: 'Rewritten',  className: 'bg-blue-100 text-blue-700',       icon: Shield },
+}
+
 function PageChangeCard({
   change,
   projectName,
@@ -1087,12 +1101,18 @@ function PageChangeCard({
 
   const isLoading = applyMut.isPending || rollbackMut.isPending
   const slug = change.wp_post_url.replace(/^https?:\/\/[^/]+/, '') || '/'
+  const actionType = change.action_type ?? 'page_edit'
+  const actionStyle = ACTION_TYPE_STYLES[actionType] ?? ACTION_TYPE_STYLES.page_edit
+  const plagiarismStatus = change.plagiarism_status ?? 'skipped'
+  const showPlagiarism = plagiarismStatus !== 'skipped'
+  const plagiarismStyle = PLAGIARISM_STYLES[plagiarismStatus]
+  const PlagiarismIcon = plagiarismStyle.icon
 
   return (
     <div className="border border-slate-200 rounded-xl overflow-hidden">
       {/* Card header */}
       <div className={cn(
-        'flex items-center gap-2 px-4 py-2.5 border-b border-slate-100',
+        'flex items-center gap-2 px-4 py-2.5 border-b border-slate-100 flex-wrap',
         isHub ? 'bg-amber-50' : 'bg-slate-50',
       )}>
         {isHub
@@ -1101,8 +1121,21 @@ function PageChangeCard({
         <span className={cn('text-xs font-semibold', isHub ? 'text-amber-700' : 'text-slate-500')}>
           {isHub ? 'Hub Page' : 'Spoke Page'}
         </span>
-        <span className="text-[10px] text-slate-400 ml-1">
-          · analyzed {new Date(change.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+        {/* action_type badge */}
+        <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium', actionStyle.className)}>
+          {actionType === 'new_draft' && <FileText size={9} />}
+          {actionStyle.label}
+        </span>
+        {/* plagiarism badge */}
+        {showPlagiarism && (
+          <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium', plagiarismStyle.className)}>
+            <PlagiarismIcon size={9} />
+            {plagiarismStyle.label}
+            {change.plagiarism_score != null && ` ${Math.round(change.plagiarism_score)}%`}
+          </span>
+        )}
+        <span className="text-[10px] text-slate-400">
+          · {new Date(change.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
         </span>
         <a
           href={change.wp_post_url}
@@ -1211,6 +1244,20 @@ function PageChangeCard({
           </div>
         )}
 
+        {/* Draft info for new_draft */}
+        {actionType === 'new_draft' && change.draft_title && (
+          <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 space-y-1">
+            <p className="text-[10px] font-semibold text-amber-600 uppercase tracking-wide">New Article Draft</p>
+            <p className="text-xs font-medium text-slate-800">{change.draft_title}</p>
+            {change.draft_word_count && (
+              <p className="text-[10px] text-slate-400">{change.draft_word_count.toLocaleString()} words</p>
+            )}
+            {change.draft_slug && (
+              <p className="text-[10px] text-slate-400 font-mono">/{change.draft_slug}</p>
+            )}
+          </div>
+        )}
+
         {/* Actions */}
         {change.status === 'pending' && (
           <div className="flex items-center gap-2 pt-1">
@@ -1221,11 +1268,13 @@ function PageChangeCard({
               className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 bg-emerald-600 text-white text-xs rounded-lg hover:bg-emerald-700 disabled:opacity-50 cursor-pointer transition-colors"
             >
               {applyMut.isPending ? <RefreshCw size={12} className="animate-spin" /> : <CheckCircle size={12} />}
-              {change.original_content !== change.new_content && change.meta_updates
-                ? 'Approve & Push Content + Meta'
-                : change.meta_updates
-                  ? 'Approve & Push SEO Meta'
-                  : 'Approve & Push to WordPress'}
+              {actionType === 'new_draft'
+                ? 'Publish as Draft'
+                : change.original_content !== change.new_content && change.meta_updates
+                  ? 'Approve & Push Content + Meta'
+                  : change.meta_updates
+                    ? 'Approve & Push SEO Meta'
+                    : 'Approve & Push to WordPress'}
             </button>
           </div>
         )}

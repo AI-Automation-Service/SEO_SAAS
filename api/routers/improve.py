@@ -711,6 +711,101 @@ def _run_page_pipeline(
     return record
 
 
+# ── Cron-callable improve helper ──────────────────────────────────────────────
+
+def _run_cron_improve(
+    user_id: int,
+    project_name: str,
+    cluster_name: str,
+    cron_job_id: int,
+    db: Session,
+) -> list[PageChange]:
+    """
+    Run the improve pipeline for a cluster, invoked by the cron system.
+    Returns the list of PageChange records created.
+    Does not raise HTTP exceptions — logs errors and skips pages on failure.
+    """
+    from api.routers.api_keys import get_user_secret
+    from core.project import load_project
+
+    try:
+        openai_key = get_user_secret("openai", user_id, db)
+    except Exception:
+        return []
+
+    from core.project import load_project_context
+    ctx = load_project_context(user_id, project_name)
+    if not ctx:
+        return []
+
+    rows = (
+        db.query(Keyword)
+        .filter(
+            Keyword.user_id == user_id,
+            Keyword.project_name == project_name,
+            Keyword.cluster == cluster_name,
+        )
+        .all()
+    )
+    if not rows:
+        return []
+
+    hub = next((r for r in rows if r.is_hub), rows[0])
+    if not hub.existing_url:
+        return []
+
+    try:
+        wp = _get_wp_adapter(ctx)
+        hub_post_data = wp.find_post_by_url(hub.existing_url)
+    except Exception:
+        return []
+
+    if not hub_post_data:
+        return []
+
+    history = (
+        db.query(PageChange)
+        .filter(
+            PageChange.user_id == user_id,
+            PageChange.project_name == project_name,
+            PageChange.cluster_name == cluster_name,
+        )
+        .order_by(PageChange.created_at.desc())
+        .limit(10)
+        .all()
+    )
+
+    seo_plugin = wp.detect_seo_plugin()
+    results: list[PageChange] = []
+    hub_secondary = ", ".join(r.keyword for r in rows if not r.is_hub) or "None"
+
+    try:
+        rec = _run_page_pipeline(
+            keyword=hub.keyword,
+            secondary_keywords=hub_secondary,
+            post_data=hub_post_data,
+            pillar_url=hub.suggested_url or hub.existing_url or "",
+            history=history,
+            project=ctx.config,
+            openai_key=openai_key,
+            user_id=user_id,
+            project_name=project_name,
+            cluster_name=cluster_name,
+            db=db,
+            is_hub=True,
+            hub_existing_url=hub.existing_url,
+            seo_plugin=seo_plugin,
+        )
+        rec.cron_job_id = cron_job_id
+        rec.source_agent = "cluster_improve"
+        db.commit()
+        results.append(rec)
+    except Exception:
+        pass
+
+    return results
+
+
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
 class AnalyzeRequest(BaseModel):
@@ -719,6 +814,10 @@ class AnalyzeRequest(BaseModel):
 
 class ChangeOut(BaseModel):
     id: int
+    action_type: str = "page_edit"
+    platform: str = "wordpress"
+    source_agent: Optional[str] = None
+    plan_phase: Optional[str] = None
     cluster_name: str
     wp_post_id: int
     wp_post_url: str
@@ -729,6 +828,14 @@ class ChangeOut(BaseModel):
     meta_updates: Optional[dict] = None
     original_content: str
     new_content: str
+    draft_title: Optional[str] = None
+    draft_slug: Optional[str] = None
+    draft_word_count: Optional[int] = None
+    plagiarism_flag: bool = False
+    plagiarism_score: Optional[float] = None
+    plagiarism_status: str = "skipped"
+    rejection_reason: Optional[str] = None
+    applied_by: Optional[str] = None
     status: str
     created_at: datetime
     approved_at: Optional[datetime] = None
@@ -742,6 +849,10 @@ def _to_change_out(record: PageChange, history: list[PageChange]) -> ChangeOut:
     """Build ChangeOut with computed refresh_status from pre-analysis history."""
     return ChangeOut(
         id=record.id,
+        action_type=record.action_type or "page_edit",
+        platform=record.platform or "wordpress",
+        source_agent=record.source_agent,
+        plan_phase=record.plan_phase,
         cluster_name=record.cluster_name,
         wp_post_id=record.wp_post_id,
         wp_post_url=record.wp_post_url,
@@ -752,6 +863,14 @@ def _to_change_out(record: PageChange, history: list[PageChange]) -> ChangeOut:
         meta_updates=record.meta_updates,
         original_content=record.original_content,
         new_content=record.new_content,
+        draft_title=record.draft_title,
+        draft_slug=record.draft_slug,
+        draft_word_count=record.draft_word_count,
+        plagiarism_flag=record.plagiarism_flag or False,
+        plagiarism_score=record.plagiarism_score,
+        plagiarism_status=record.plagiarism_status or "skipped",
+        rejection_reason=record.rejection_reason,
+        applied_by=record.applied_by,
         status=record.status,
         created_at=record.created_at,
         approved_at=record.approved_at,
@@ -893,6 +1012,35 @@ def apply_change(
     if record.status != "pending":
         raise HTTPException(400, f"Change is already '{record.status}'.")
 
+    action_type = record.action_type or "page_edit"
+
+    # ── new_draft: publish as WP draft post ───────────────────────────────────
+    if action_type == "new_draft":
+        from integrations.cms.base import PostDraft
+        import markdown as md
+        wp = _get_wp_adapter(context)
+        html = md.markdown(record.new_content, extensions=["tables", "fenced_code"])
+        draft = PostDraft(
+            title=record.draft_title or "New Article",
+            content=html,
+            slug=record.draft_slug or "",
+            status="draft",
+        )
+        try:
+            created = wp.create_page(draft)
+        except IntegrationError as e:
+            raise HTTPException(502, f"WordPress draft creation error: {e}")
+        # Update record with the real WP post ID and URL
+        record.wp_post_id = created.id
+        record.wp_post_url = created.url
+        record.status = "approved"
+        record.approved_at = datetime.utcnow()
+        record.applied_by = "subscriber"
+        db.commit()
+        db.refresh(record)
+        history: list = []
+        return _to_change_out(record, history)
+
     wp = _get_wp_adapter(context)
     content_changed = record.original_content != record.new_content
 
@@ -924,9 +1072,28 @@ def apply_change(
 
     record.status = "approved"
     record.approved_at = datetime.utcnow()
+    record.applied_by = "subscriber"
     db.commit()
     db.refresh(record)
-    return record
+
+    # Advance project state to ACTIVE on first approved change
+    try:
+        from core.state_machine import advance_state
+        advance_state(context, "ACTIVE")
+    except Exception:
+        pass
+
+    history = (
+        db.query(PageChange)
+        .filter(
+            PageChange.user_id == current_user.id,
+            PageChange.project_name == context.name,
+        )
+        .order_by(PageChange.created_at.desc())
+        .limit(20)
+        .all()
+    )
+    return _to_change_out(record, history)
 
 
 @router.post("/rollback/{change_id}", response_model=ChangeOut)
@@ -983,7 +1150,7 @@ def get_history(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return (
+    records = (
         db.query(PageChange)
         .filter(
             PageChange.user_id == current_user.id,
@@ -992,6 +1159,7 @@ def get_history(
         .order_by(PageChange.created_at.desc())
         .all()
     )
+    return [_to_change_out(r, records) for r in records]
 
 
 class ClusterStatusOut(BaseModel):

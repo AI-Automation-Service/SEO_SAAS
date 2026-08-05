@@ -42,6 +42,7 @@ class MeResponse(BaseModel):
     email: str
     full_name: str
     onboarding_complete: bool
+    capabilities: dict = {}
 
 
 @router.post("/register", response_model=TokenResponse, status_code=201)
@@ -116,6 +117,7 @@ def me(current_user: User = Depends(get_current_user)):
         email=current_user.email,
         full_name=current_user.full_name,
         onboarding_complete=current_user.onboarding_complete,
+        capabilities=current_user.get_capabilities(),
     )
 
 

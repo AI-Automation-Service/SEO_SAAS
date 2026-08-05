@@ -29,7 +29,10 @@ def get_cms_adapter(context: ProjectContext, secrets: SecretManager) -> CMSAdapt
                 f"Shopify integration is not enabled for project '{context.name}'. "
                 "Set integrations.shopify.enabled: true in project.yaml."
             )
-        return ShopifyAdapter()
+        return ShopifyAdapter(
+            store_url=cfg.store_url,
+            access_token=secrets.get(cfg.token_env),
+        )
 
     raise IntegrationConfigError(
         f"No CMS adapter available for '{cms}'. Supported: wordpress, shopify."
