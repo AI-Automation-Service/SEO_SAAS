@@ -309,6 +309,25 @@ class WordPressAdapter(CMSAdapter):
                 pass
         return None
 
+    def upload_media(self, image_bytes: bytes, filename: str, mime_type: str = "image/png") -> dict:
+        """
+        Upload an image to the WordPress Media Library.
+        Returns dict with 'id' and 'url' keys.
+        """
+        response = self._request(
+            "POST", "/media",
+            content=image_bytes,
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Type": mime_type,
+            },
+        )
+        data = response.json()
+        return {
+            "id": data.get("id"),
+            "url": data.get("source_url") or data.get("guid", {}).get("rendered", ""),
+        }
+
     def get_sitemap_urls(self) -> list[str]:
         urls: list[str] = []
         for content_type in ("posts", "pages"):

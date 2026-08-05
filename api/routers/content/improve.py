@@ -1037,11 +1037,57 @@ def apply_change(
     # ── new_draft: publish as WP draft ────────────────────────────────────────
     if action_type == "new_draft":
         from integrations.cms.base import PostDraft
+        from openai import OpenAI as _OpenAI
         wp = _get_wp_adapter(context)
-        # Use the content as-is (article writer produces HTML directly)
+
+        # ── Image generation (DALL-E 3) ─────────────────────────────────────
+        article_content = record.new_content or ""
+        image_placeholders = re.findall(r'<!--\s*Image:\s*([^>]{5,200}?)\s*-->', article_content)
+        if image_placeholders:
+            try:
+                openai_key = get_user_secret("openai", current_user.id, db)
+                oai = _OpenAI(api_key=openai_key)
+                slug_prefix = (record.draft_slug or "article")[:30]
+                for idx, description in enumerate(image_placeholders[:3]):  # max 3 images
+                    img_prompt = (
+                        f"Professional editorial blog image for an article titled '{record.draft_title}'. "
+                        f"Scene: {description}. "
+                        "Style: clean, modern, photorealistic, no text overlays, no watermarks, "
+                        "suitable for a professional business website."
+                    )
+                    img_resp = oai.images.generate(
+                        model="dall-e-3",
+                        prompt=img_prompt,
+                        size="1792x1024",
+                        quality="standard",
+                        n=1,
+                    )
+                    img_url = img_resp.data[0].url
+                    img_bytes = httpx.get(img_url, timeout=30).content
+                    media = wp.upload_media(
+                        img_bytes,
+                        filename=f"{slug_prefix}-img-{idx + 1}.png",
+                        mime_type="image/png",
+                    )
+                    if media.get("url"):
+                        # Replace placeholder with a WordPress image block
+                        wp_img_block = (
+                            f'\n<!-- wp:image {{"id":{media["id"]}}} -->\n'
+                            f'<figure class="wp-block-image">'
+                            f'<img src="{media["url"]}" alt="{description[:120]}" class="wp-image-{media["id"]}"/>'
+                            f'</figure>\n<!-- /wp:image -->\n'
+                        )
+                        placeholder_pattern = re.compile(
+                            r'<!--\s*Image:\s*' + re.escape(description) + r'\s*-->',
+                            re.IGNORECASE,
+                        )
+                        article_content = placeholder_pattern.sub(wp_img_block, article_content, count=1)
+            except Exception:
+                pass  # image generation failure is non-fatal — placeholders remain
+
         draft = PostDraft(
             title=record.draft_title or "New Article",
-            content=record.new_content or "",
+            content=article_content,
             slug=record.draft_slug or "",
             status="draft",
         )

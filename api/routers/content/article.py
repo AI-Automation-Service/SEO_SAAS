@@ -229,7 +229,7 @@ def _check_plagiarism(article_text: str, db: Session, user_id: int) -> dict:
 
 class GenerateArticleRequest(BaseModel):
     keyword: str
-    cluster_name: str
+    cluster_name: Optional[str] = None
     intent: str = "informational"   # informational / commercial / transactional
     ymyl: bool = False
     target_word_count: int = 2100
@@ -430,6 +430,115 @@ Return a single JSON object with EXACTLY these keys — no extra keys, no markdo
 """
 
 
+# ── Phase 0: SERP research ────────────────────────────────────────────────────
+
+def _serp_research(keyword: str, business_block: str, openai_key: str) -> dict:
+    """
+    Use GPT-4o with web_search_preview to research the real SERP for the keyword.
+    Returns a dict with competitor gaps, PAA questions, and secondary keywords.
+    Falls back to {} on any failure — Phase 1 proceeds without research context.
+    """
+    from openai import OpenAI
+    client = OpenAI(api_key=openai_key)
+    prompt = (
+        f"Research the Google SERP for: \"{keyword}\"\n\n"
+        f"Business context:\n{business_block}\n\n"
+        "Search for this keyword and analyse the top 5 results. Return a JSON object with:\n"
+        "{\n"
+        '  "search_intent": "informational|commercial|transactional",\n'
+        '  "serp_format": "long-form guide|listicle|comparison|FAQ|landing page",\n'
+        '  "competitor_sections": ["H2 topics that appear in 3+ top results"],\n'
+        '  "content_gaps": ["subtopics competitors miss or cover poorly"],\n'
+        '  "paa_questions": ["5 People Also Ask questions from Google for this keyword"],\n'
+        '  "secondary_keywords": ["6-8 semantic keyword variations"],\n'
+        '  "avg_competitor_wc": 2100\n'
+        "}\n\n"
+        "Use web search to get real data. Return only the JSON object."
+    )
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": prompt}],
+            tools=[{"type": "web_search_preview"}],
+            tool_choice="auto",
+            response_format={"type": "json_object"},
+            timeout=60,
+            max_tokens=1000,
+        )
+        raw = response.choices[0].message.content or "{}"
+        return json.loads(raw)
+    except Exception:
+        return {}
+
+
+def _research_to_context(research: dict) -> str:
+    """Format SERP research dict into a readable context block for Phase 1."""
+    if not research:
+        return ""
+    lines = ["## SERP Research (real data — use this to shape the article)"]
+    if research.get("search_intent"):
+        lines.append(f"Search intent confirmed: {research['search_intent']}")
+    if research.get("serp_format"):
+        lines.append(f"Google-rewarded format: {research['serp_format']}")
+    if research.get("competitor_sections"):
+        lines.append("\nTopics competitors cover (you must also cover these):")
+        for s in research["competitor_sections"][:8]:
+            lines.append(f"  • {s}")
+    if research.get("content_gaps"):
+        lines.append("\nContent gaps (your opportunity to outrank):")
+        for g in research["content_gaps"][:5]:
+            lines.append(f"  • {g}")
+    if research.get("paa_questions"):
+        lines.append("\nPeople Also Ask (answer inside the article body):")
+        for q in research["paa_questions"][:5]:
+            lines.append(f"  • {q}")
+    if research.get("secondary_keywords"):
+        lines.append("\nSecondary keywords to weave in naturally:")
+        lines.append("  " + ", ".join(research["secondary_keywords"][:8]))
+    return "\n".join(lines)
+
+
+def _generate_schema(
+    openai_key: str,
+    draft_title: str,
+    draft_slug: str,
+    keyword: str,
+    website: str,
+    business_name: str,
+    schema_type: str,
+    published_date: str,
+) -> str:
+    """
+    Call the seo-schema skill to generate proper JSON-LD.
+    Returns the <script> block or "" on failure.
+    Phase 2's inline schema is replaced by this output.
+    """
+    prompt = (
+        f"Generate schema markup for this article page.\n\n"
+        f"Page type: {schema_type} (Article or BlogPosting)\n"
+        f"Title: {draft_title}\n"
+        f"URL: {website}/blog/{draft_slug}/\n"
+        f"Primary keyword: {keyword}\n"
+        f"Publisher: {business_name}\n"
+        f"Date published: {published_date}\n\n"
+        "Requirements:\n"
+        "- Generate Article (or BlogPosting) + BreadcrumbList JSON-LD\n"
+        "- Do NOT generate FAQPage schema (deprecated May 2026)\n"
+        "- All URLs must be absolute\n"
+        "- Use real datePublished from above\n"
+        "- Return ONLY the <script type=\"application/ld+json\"> block(s), no explanation"
+    )
+    try:
+        raw = SkillAgent("seo-schema", openai_key, model="gpt-4o-mini").run(
+            prompt, timeout=60, json_mode=False, max_tokens=800
+        )
+        # Extract <script> block(s) from response
+        matches = re.findall(r'<script[^>]*type=["\']application/ld\+json["\'][^>]*>[\s\S]*?</script>', raw)
+        return "\n".join(matches) if matches else ""
+    except Exception:
+        return ""
+
+
 # ── Endpoint ───────────────────────────────────────────────────────────────────
 
 @router.post("/generate", response_model=ArticleOut)
@@ -448,10 +557,25 @@ def generate_article(
     website = (context.config.website or "").rstrip("/")
     knowledge_block = _knowledge_block(db, current_user.id, context.name)
 
+    # ── Phase 0: SERP research (web_search_preview) ────────────────────────────
+    t0 = time.monotonic()
+    research = _serp_research(body.keyword, business_block, openai_key)
+    research_context = _research_to_context(research)
+    p0_ms = int((time.monotonic() - t0) * 1000)
+    p0_cost = round(0.0025 * 0.5 + 0.010 * 0.25, 6)  # rough estimate
+    _log_call(db, current_user.id, context.name, "seo-content-brief", "gpt-4o",
+              500, 250, p0_cost, p0_ms, article_job_id)
+
+    # Override target word count from research if available
+    research_wc = research.get("avg_competitor_wc")
+    target_wc = max(body.target_word_count, int(research_wc * 1.1)) if research_wc else body.target_word_count
+
     # ── Phase 1 ────────────────────────────────────────────────────────────────
+    # Inject research context into knowledge block so Phase 1 gets real SERP data
+    enriched_knowledge = "\n\n".join(filter(None, [knowledge_block, research_context]))
     p1_msg = _phase1_message(
         body.keyword, body.intent, body.ymyl,
-        business_block, knowledge_block, website, body.target_word_count,
+        business_block, enriched_knowledge, website, target_wc,
     )
 
     t0 = time.monotonic()
@@ -476,7 +600,7 @@ def generate_article(
               p1_in, p1_out, p1_cost, p1_ms, article_job_id)
 
     # ── Phase 2 ────────────────────────────────────────────────────────────────
-    p2_msg = _phase2_message(body.keyword, business_block, business_name, website, phase1, body.target_word_count)
+    p2_msg = _phase2_message(body.keyword, business_block, business_name, website, phase1, target_wc)
 
     t0 = time.monotonic()
     try:
@@ -498,10 +622,22 @@ def generate_article(
     _log_call(db, current_user.id, context.name, "seo-article-writer-p2", "gpt-4o",
               p2_in, p2_out, p2_cost, p2_ms, article_job_id)
 
+    # ── seo-schema: dedicated schema generation (replaces Phase 2 inline) ─────────
+    published_date = datetime.utcnow().strftime("%Y-%m-%d")
+    draft_title_tmp = phase1.get("h1") or phase1.get("meta_title") or body.keyword.title()
+    draft_slug_tmp = _slugify(body.keyword)
+    schema_block = _generate_schema(
+        openai_key, draft_title_tmp, draft_slug_tmp, body.keyword,
+        website, business_name,
+        phase1.get("schema_type", "Article"), published_date,
+    )
+    # Fall back to Phase 2's inline schema if dedicated call fails
+    if not schema_block:
+        schema_block = phase2.get("schema_json_ld", "")
+
     # ── Assemble final article ─────────────────────────────────────────────────
     p1_content = phase1.get("content_phase1", "")
     p2_content = phase2.get("content_phase2", "")
-    schema_block = phase2.get("schema_json_ld", "")
 
     full_article = "\n\n".join(filter(None, [p1_content, p2_content, schema_block]))
     full_article = _strip_placeholders(full_article, business_name)
