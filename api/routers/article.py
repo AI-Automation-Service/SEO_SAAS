@@ -119,7 +119,7 @@ def _check_plagiarism(article_text: str, db: Session, user_id: int) -> dict:
     try:
         copyscape_user = get_user_secret("copyscape_user", user_id, db)
         copyscape_key = get_user_secret("copyscape_key", user_id, db)
-    except SecretNotFoundError:
+    except Exception:
         copyscape_user = os.environ.get("COPYSCAPE_USER")
         copyscape_key = os.environ.get("COPYSCAPE_KEY")
 
