@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   FileText, RefreshCw, CheckCircle, ShieldAlert, Shield,
-  ChevronDown, Wand2, Pencil, X,
+  ChevronDown, Wand2, Pencil, X, Globe,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { keywordsApi, articleApi, improveApi, getErrorMessage } from '@/api/client'
@@ -26,6 +26,7 @@ export function ContentTab({ projectName }: ContentTabProps) {
   const [selectedCluster, setSelectedCluster] = useState('')
   const [result, setResult] = useState<ArticleOut | null>(null)
   const [applyDone, setApplyDone] = useState(false)
+  const [publishedLive, setPublishedLive] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editedContent, setEditedContent] = useState('')
 
@@ -50,6 +51,7 @@ export function ContentTab({ projectName }: ContentTabProps) {
       setResult(data)
       setEditedContent(data.content_html ?? '')
       setApplyDone(false)
+      setPublishedLive(false)
       setEditing(false)
       toast.success('Article generated — ready to review.')
     },
@@ -57,12 +59,13 @@ export function ContentTab({ projectName }: ContentTabProps) {
   })
 
   const applyMut = useMutation({
-    mutationFn: () =>
-      improveApi.apply(projectName, result!.change_id, editing ? editedContent : undefined),
-    onSuccess: () => {
+    mutationFn: (wpStatus: 'draft' | 'publish') =>
+      improveApi.apply(projectName, result!.change_id, editing ? editedContent : undefined, wpStatus),
+    onSuccess: (_, wpStatus) => {
       setApplyDone(true)
+      setPublishedLive(wpStatus === 'publish')
       setEditing(false)
-      toast.success('Draft published to WordPress.')
+      toast.success(wpStatus === 'publish' ? 'Article published to WordPress.' : 'Draft saved to WordPress.')
       qc.invalidateQueries({ queryKey: ['improve-history', projectName] })
     },
     onError: (err) => toast.error(getErrorMessage(err)),
@@ -235,22 +238,34 @@ export function ContentTab({ projectName }: ContentTabProps) {
 
                 {/* Actions */}
                 {!applyDone ? (
-                  <div className="flex items-center gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => applyMut.mutate()}
-                      disabled={applyMut.isPending}
-                      className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 bg-emerald-600 text-white text-xs rounded-lg hover:bg-emerald-700 disabled:opacity-50 cursor-pointer transition-colors"
-                    >
-                      {applyMut.isPending
-                        ? <><RefreshCw size={12} className="animate-spin" /> Publishing draft…</>
-                        : <><CheckCircle size={12} /> {editing ? 'Save edits & Publish' : 'Publish as WordPress Draft'}</>}
-                    </button>
+                  <div className="flex flex-col gap-2 pt-1">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => applyMut.mutate('draft')}
+                        disabled={applyMut.isPending}
+                        className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 border border-slate-300 text-slate-700 bg-white text-xs rounded-lg hover:bg-slate-50 disabled:opacity-50 cursor-pointer transition-colors"
+                      >
+                        {applyMut.isPending && applyMut.variables === 'draft'
+                          ? <><RefreshCw size={12} className="animate-spin" /> Saving draft…</>
+                          : <><CheckCircle size={12} /> {editing ? 'Save edits as Draft' : 'Save as Draft'}</>}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyMut.mutate('publish')}
+                        disabled={applyMut.isPending}
+                        className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 bg-emerald-600 text-white text-xs rounded-lg hover:bg-emerald-700 disabled:opacity-50 cursor-pointer transition-colors"
+                      >
+                        {applyMut.isPending && applyMut.variables === 'publish'
+                          ? <><RefreshCw size={12} className="animate-spin" /> Publishing…</>
+                          : <><Globe size={12} /> {editing ? 'Save edits & Publish' : 'Publish Now'}</>}
+                      </button>
+                    </div>
                     {!editing && (
                       <button
                         type="button"
                         onClick={() => { setResult(null); setKeyword('') }}
-                        className="px-3 py-2 border border-slate-200 text-slate-500 text-xs rounded-lg hover:bg-slate-50 cursor-pointer transition-colors"
+                        className="text-xs text-slate-400 hover:text-slate-600 cursor-pointer transition-colors text-center"
                       >
                         Discard
                       </button>
@@ -260,9 +275,13 @@ export function ContentTab({ projectName }: ContentTabProps) {
                   <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
                     <CheckCircle size={14} className="text-emerald-600 shrink-0" />
                     <div>
-                      <p className="text-xs font-semibold text-emerald-700">Draft published to WordPress</p>
+                      <p className="text-xs font-semibold text-emerald-700">
+                        {publishedLive ? 'Article published to WordPress' : 'Draft saved to WordPress'}
+                      </p>
                       <p className="text-[10px] text-emerald-600 mt-0.5">
-                        Find it under Posts → Drafts in your WordPress admin, or view it in the Change Queue history.
+                        {publishedLive
+                          ? 'The article is now live on your website.'
+                          : 'Find it under Posts → Drafts in your WordPress admin.'}
                       </p>
                     </div>
                   </div>

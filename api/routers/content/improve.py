@@ -997,6 +997,7 @@ def analyze_cluster(
 
 class ApplyRequest(BaseModel):
     content_override: Optional[str] = None
+    wp_status: str = "draft"  # "draft" or "publish"
 
 
 @router.post("/apply/{change_id}", response_model=ChangeOut)
@@ -1085,11 +1086,12 @@ def apply_change(
             except Exception:
                 pass  # image generation failure is non-fatal — placeholders remain
 
+        wp_status = (body.wp_status if body and body.wp_status in ("draft", "publish") else "draft")
         draft = PostDraft(
             title=record.draft_title or "New Article",
             content=article_content,
             slug=record.draft_slug or "",
-            status="draft",
+            status=wp_status,
         )
         try:
             # Articles go to Posts; competitor/landing pages go to Pages
