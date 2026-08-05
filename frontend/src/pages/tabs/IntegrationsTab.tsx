@@ -887,7 +887,6 @@ function GoogleSection({
   const isConnected = gscStatus?.connected === true || isOAuthConnected
   const [mode, setMode] = useState<'oauth' | 'service_account'>('oauth')
   const [isEditing, setIsEditing] = useState(false)
-  const locked = isConnected && !isEditing
 
   const qc = useQueryClient()
 

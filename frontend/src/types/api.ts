@@ -29,6 +29,7 @@ export interface WordPressConfig {
   url: string
   username_env?: string
   password_env?: string
+  token_env?: string
 }
 
 export interface GoogleConfig {
