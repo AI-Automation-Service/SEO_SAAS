@@ -44,6 +44,23 @@ _ANTI_AI_RULE = (
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
+def _strip_placeholders(text: str, business_name: str) -> str:
+    """Replace common GPT placeholder patterns with real values or remove them."""
+    safe_name = business_name.strip() if business_name else ""
+    # Replace bracket-wrapped placeholders
+    text = re.sub(r'\[Your Business Name\]', safe_name or "us", text, flags=re.IGNORECASE)
+    text = re.sub(r'\[Author Name\]', "", text, flags=re.IGNORECASE)
+    text = re.sub(r'\[Company Name\]', safe_name or "us", text, flags=re.IGNORECASE)
+    text = re.sub(r'\[[^\]]{1,60}\]', "", text)  # any remaining [placeholder]
+    # Replace bare (no brackets) known placeholder strings
+    if safe_name:
+        text = re.sub(r'\bYour Business Name\b', safe_name, text, flags=re.IGNORECASE)
+    # Remove stray "By John Doe" / generic author lines GPT sometimes adds
+    text = re.sub(r'\nBy John Doe[^\n]*\n', '\n', text)
+    text = re.sub(r'\nBy \[?[^\n]{0,40}\]? · Last updated:[^\n]*\n', '\n', text)
+    return text
+
+
 def _slugify(title: str) -> str:
     slug = title.lower()
     slug = re.sub(r"[^\w\s-]", "", slug)
@@ -242,7 +259,6 @@ Output a JSON object with EXACTLY these keys:
   "slug": "url-slug-lowercase-hyphens",
   "h1": "Article headline (matches meta title closely)",
   "schema_type": "Article|BlogPosting|NewsArticle",
-  "author_name": "suggested author name",
   "sections_outline": ["Section heading text", "Section heading text", ...],
   "content_phase1": "Introduction (100-150 words) + EXACTLY 4 H2 sections each 250-300 words. Total MUST exceed {half} words.",
   "word_count_phase1": <integer count of words in content_phase1>,
@@ -265,6 +281,7 @@ Rules for content_phase1:
 def _phase2_message(
     keyword: str,
     business_block: str,
+    business_name: str,
     phase1: dict,
     target_wc: int,
 ) -> str:
@@ -305,8 +322,7 @@ Each H2 section above MUST be 250-300 words (4-5 paragraphs). Do NOT move to the
 
 Then write:
 - FAQ section: 5 H3 questions with 60-80 word answers each (total ~350 words)
-- Conclusion: 75-100 words + CTA using the REAL business name from Business Context above
-- Author block: "By {phase1.get("author_name", "the author")} · Last updated: {datetime.utcnow().strftime('%B %Y')}"
+- Conclusion: 75-100 words + CTA that mentions "{business_name}" by name (do NOT write "Your Business Name" or any placeholder)
 - JSON-LD schema snippet for {phase1.get("schema_type", "Article")}
 
 Output a JSON object with EXACTLY these keys:
@@ -340,6 +356,7 @@ def generate_article(
     openai_key = get_user_secret("openai", current_user.id, db)
     article_job_id = str(uuid.uuid4())
     business_block = _project_context_block(context)
+    business_name = (context.config.business_name or "").strip()
     knowledge_block = _knowledge_block(db, current_user.id, context.name)
 
     # ── Phase 1 ────────────────────────────────────────────────────────────────
@@ -370,7 +387,7 @@ def generate_article(
               p1_in, p1_out, p1_cost, p1_ms, article_job_id)
 
     # ── Phase 2 ────────────────────────────────────────────────────────────────
-    p2_msg = _phase2_message(body.keyword, business_block, phase1, body.target_word_count)
+    p2_msg = _phase2_message(body.keyword, business_block, business_name, phase1, body.target_word_count)
 
     t0 = time.monotonic()
     try:
@@ -398,6 +415,7 @@ def generate_article(
     schema_block = phase2.get("schema_json_ld", "")
 
     full_article = "\n\n".join(filter(None, [p1_content, p2_content, schema_block]))
+    full_article = _strip_placeholders(full_article, business_name)
     total_wc = _word_count(full_article)
 
     draft_title = phase1.get("h1") or phase1.get("meta_title") or body.keyword.title()
