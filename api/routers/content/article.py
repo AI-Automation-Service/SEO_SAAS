@@ -616,7 +616,7 @@ def generate_article(
         action_type="new_draft",
         platform="wordpress",
         source_agent="seo-article-writer",
-        cluster_name=body.cluster_name,
+        cluster_name=body.cluster_name or "",
         wp_post_id=0,          # no existing post — will be set after WP create
         wp_post_url="",        # filled in after publish
         wp_post_type="post",
