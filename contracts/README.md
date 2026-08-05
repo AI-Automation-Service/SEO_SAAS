@@ -23,7 +23,7 @@ A `ValidationError` raised here means the agent returned non-conforming output. 
 
 - **All field names** — exactly as the agent is instructed to return them
 - **All field types** — `str`, `int`, `float`, `bool`, `list`, nested models
-- **Required vs optional** — required fields have no default; optional fields use `Optional[T] = None`
+- **Required vs nullable** — required fields have no default; nullable fields use `Type | None = None`. No `Field(default_factory=...)` on non-nullable fields (strict mode incompatible — see below)
 - **Range validators** — scores in 0–100, lengths within bounds, enums for constrained strings
 - **Non-empty validators** — required strings must not be empty after stripping
 - **Field descriptions** — `Field(description="...")` for human documentation of what each field means
@@ -106,9 +106,58 @@ When migrating an existing router from `json.loads()` to Pydantic:
 ## Adding a New Contract
 
 1. Create `contracts/<agent-name>.py` using the structure above
-2. Add the import to `contracts/__init__.py`
-3. Import and use in the router
-4. Do NOT add field descriptions or schema documentation to SKILL.md
+2. Verify all fields satisfy strict mode rules: required or nullable; no `default_factory` on non-nullable; `Literal[...]` for constrained strings
+3. Add the import to `contracts/__init__.py`
+4. Set `output_mode: "structured"` in the registry entry (use `"json_mode"` only if there is a documented incompatibility)
+5. Import and use in the router via `ContractClass.model_validate_json(raw)`
+6. Do NOT add field names or schema documentation to SKILL.md or any prompt file
+
+---
+
+## Structured Outputs Compatibility Rules
+
+SEO OS uses OpenAI Structured Outputs as the standard for all JSON-output agents (`output_mode: "structured"`). Every contract must be compatible with OpenAI's strict mode. These four rules are mandatory:
+
+**Rule 1 — All fields must be either required or nullable.**  
+OpenAI strict mode does not support optional non-null fields with defaults. Every field falls into exactly one category:
+
+```python
+# REQUIRED — always returned; model returns [] or "" when not applicable
+change_notes: list[str]           # always present, may be empty list
+suggested_meta_title: str         # always present, never omitted
+
+# NULLABLE — legitimately absent for some inputs
+redirect_url: str | None = None   # present or null
+secondary_keyword: str | None = None
+
+# FORBIDDEN — Field(default_factory=...) on non-nullable fields
+change_notes: list[str] = Field(default_factory=list)  # NOT ALLOWED
+```
+
+**Rule 2 — No `dict` fields with non-string values.**  
+Use a nested Pydantic model instead.
+
+**Rule 3 — Constrained strings must use `Literal[...]`.**  
+```python
+severity: Literal["low", "medium", "high", "critical"]  # enforced by OpenAI
+severity: str  # NOT constrained at the API level
+```
+
+**Rule 4 — No recursive schemas.**  
+Pydantic models that reference themselves are not supported in strict mode.
+
+---
+
+## When json_mode Fallback Is Used
+
+`output_mode: "json_mode"` is reserved for two specific cases only:
+
+1. **The target model predates Structured Outputs support** — document in the registry entry which model and why.
+2. **The contract is incompatible with strict mode** — document why, and fix the contract to remove the incompatibility as soon as possible.
+
+When the fallback path is active, PromptComposer generates a one-line field hint from the contract's required fields and appends it to the system prompt. This hint is generated from the Pydantic model at runtime — it is never written manually into any prompt file.
+
+The fallback is a temporary measure. The goal is `output_mode: "structured"` for every agent.
 
 ---
 

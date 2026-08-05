@@ -211,17 +211,23 @@ description: "Analyzes page content against 9 SEO signals and outputs a structur
 
 ### Optional Fields
 
-#### `json_mode` — boolean (default: true for JSON agents, false for Markdown agents)
+#### `output_mode` — string enum (default: `"structured"` for JSON agents, `"markdown"` for Markdown agents)
 
-Whether to pass `response_format={"type": "json_object"}` to the OpenAI call.
+Controls how BaseAgent transmits the output format requirement to the OpenAI API.
 
 ```
-json_mode: true
+output_mode: "structured"
 ```
 
-Must be `true` for all agents with a Pydantic contract. Must be `false` for Markdown-output agents.
+| Value | When to use | What BaseAgent does |
+|---|---|---|
+| `"structured"` | All Pydantic contract agents (standard) | Passes `response_format={"type": "json_schema", "json_schema": {"strict": True, "schema": contract.model_json_schema()}}` |
+| `"json_mode"` | Fallback only — model predates SO, or contract is strict-mode-incompatible | Passes `response_format={"type": "json_object"}` |
+| `"markdown"` | Agents that return Markdown, not JSON | No `response_format` parameter |
 
-**Temperature constraint:** Any agent with `json_mode: true` must have `temperature ≤ 0.7`. Higher temperatures increase JSON structure failures in long outputs.
+`"structured"` is the standard. `"json_mode"` is a fallback that requires a documented reason in the registry entry comment. Any agent using `"json_mode"` should be tracked as tech debt to migrate to `"structured"`.
+
+**Temperature constraint:** Any agent with `output_mode: "structured"` or `"json_mode"` must have `temperature ≤ 0.7`.
 
 ---
 
@@ -236,7 +242,7 @@ Agent: seo-analyzer
   temperature:      0.3
   timeout:          60
   max_tokens:       1200
-  json_mode:        true
+  output_mode:      "structured"
   shared_docs:
     - "eeat-framework"
     - "seo-standards"
@@ -255,25 +261,25 @@ Note: `retry_on_validation_error` is not a registry field. Validation retry is t
 
 This table reflects the current state of agents before the registry is implemented. Use this as the starting point for `agents/registry.py`.
 
-**Temperature note:** Article writer phases show 0.75 in current code. When registry.py is implemented, cap all json_mode agents at 0.7. Update article writer to 0.7.
+**Temperature note:** Article writer phases show 0.75 in current code. When registry.py is implemented, cap all `output_mode: "structured"` or `"json_mode"` agents at 0.7. Update article writer to 0.7.
 
-| Agent | Model | Temp | Timeout | max_tokens | JSON | Contract (to create) |
+| Agent | Model | Temp | Timeout | max_tokens | output_mode | Contract |
 |---|---|---|---|---|---|---|
-| seo-analyzer | gpt-4o-mini | 0.3 | 60 | 1200 | ✓ | AnalyzerResponse |
-| seo-editor | gpt-4o | 0.55 | 120 | 4000 | ✓ | EditorResponse |
-| seo-meta | gpt-4o-mini | 0.3 | 45 | 600 | ✓ | MetaResponse ✓ |
-| seo-cluster | gpt-4o-mini | 0.3 | 60 | 2000 | ✓ | ClusterResponse |
-| seo-article-writer (p1) | gpt-4o | **0.7** | 180 | 2500 | ✓ | ArticlePhase1Response |
-| seo-article-writer (p2) | gpt-4o | **0.7** | 180 | 2500 | ✓ | ArticlePhase2Response |
-| seo-article-writer (p3) | gpt-4o | **0.7** | 180 | 2500 | ✓ | ArticlePhase3Response |
-| humanizer | gpt-4o-mini | **0.7** | 60 | 3000 | ✓ | HumanizerResponse |
-| seo-schema | gpt-4o-mini | 0.3 | 60 | 1000 | ✓ | SchemaResponse |
-| feedback-distiller | gpt-4o-mini | 0.3 | 45 | 500 | ✓ | PreferencesResponse |
-| seo-plan | gpt-4o | 0.65 | 180 | 4000 | ✗ | None (Markdown) |
-| content-strategy | gpt-4o | 0.65 | 180 | 4000 | ✗ | None (Markdown) |
-| site-architecture | gpt-4o | 0.65 | 180 | 4000 | ✗ | None (Markdown) |
-| seo-flow | gpt-4o | 0.65 | 180 | 4000 | ✗ | None (Markdown) |
-| seo-page | gpt-4o | 0.65 | 180 | 4000 | ✗ | None (Markdown) |
+| seo-analyzer | gpt-4o-mini | 0.3 | 60 | 1200 | structured | AnalyzerResponse |
+| seo-editor | gpt-4o | 0.55 | 120 | 4000 | structured | EditorResponse |
+| seo-meta | gpt-4o-mini | 0.3 | 45 | 600 | structured | MetaResponse ✓ |
+| seo-cluster | gpt-4o-mini | 0.3 | 60 | 2000 | structured | ClusterResponse |
+| seo-article-writer (p1) | gpt-4o | **0.7** | 180 | 2500 | structured | ArticlePhase1Response |
+| seo-article-writer (p2) | gpt-4o | **0.7** | 180 | 2500 | structured | ArticlePhase2Response |
+| seo-article-writer (p3) | gpt-4o | **0.7** | 180 | 2500 | structured | ArticlePhase3Response |
+| humanizer | gpt-4o-mini | **0.7** | 60 | 3000 | structured | HumanizerResponse |
+| seo-schema | gpt-4o-mini | 0.3 | 60 | 1000 | structured | SchemaResponse |
+| feedback-distiller | gpt-4o-mini | 0.3 | 45 | 500 | structured | PreferencesResponse |
+| seo-plan | gpt-4o | 0.65 | 180 | 4000 | markdown | None |
+| content-strategy | gpt-4o | 0.65 | 180 | 4000 | markdown | None |
+| site-architecture | gpt-4o | 0.65 | 180 | 4000 | markdown | None |
+| seo-flow | gpt-4o | 0.65 | 180 | 4000 | markdown | None |
+| seo-page | gpt-4o | 0.65 | 180 | 4000 | markdown | None |
 
 ---
 

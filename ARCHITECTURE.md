@@ -95,7 +95,8 @@ BaseAgent is **transport infrastructure**. It knows *how* to call GPT — never 
 
 | Responsibility | Detail |
 |---|---|
-| OpenAI API call | Model, temperature, json_mode, max_tokens, timeout — all passed in by the caller |
+| OpenAI API call | Model, temperature, output_mode, max_tokens, timeout — all passed by the caller |
+| Structured Outputs transmission | For `output_mode: "structured"`: passes `contract.model_json_schema()` as `response_format` with `strict: True`. For `output_mode: "json_mode"`: passes `response_format: {"type": "json_object"}`. |
 | Transport retry | Exponential backoff on rate limits and transient network errors **only**; max 3 retries |
 | Token counting | Input and output tokens extracted from every API response |
 | Cost calculation | `input_tokens × input_rate + output_tokens × output_rate` per model |
@@ -217,7 +218,7 @@ USER MESSAGE:
 - **Adding a new agent** — new `identity.md` + `SKILL.md` + registry entry. PromptComposer, BaseAgent, and all shared docs are untouched.
 - **Adding a new platform** (Webflow, Wix) — new runtime context fields in Python. No prompt file changes.
 - **Updating writing rules** — edit `skills/shared/writing-rules.md` once. Every agent that registers it receives the change on next call.
-- **Changing an output schema** — edit one Pydantic model. Pydantic raises `ValidationError` immediately if the model produces a non-conforming response. The prompt is unaffected.
+- **Changing an output schema** — edit one Pydantic model and update the contract in the registry entry. For Structured Outputs agents, OpenAI enforces the new schema at the API level before the response is returned; Pydantic re-validates as the application-level safety net. The prompt is unaffected.
 - **OpenAI prompt caching** — the system prompt (layers 0–4) is stable across calls for the same agent, maximising cache hit rate. Runtime context (layers 5–6) is in the user message and is never cached.
 
 ---
@@ -371,23 +372,55 @@ Output contracts live **exclusively in Pydantic models**. Nowhere else.
 
 One file per agent that returns structured output. See `contracts/README.md` for structure and `contracts/meta.py` for a reference implementation.
 
+### Standard path: OpenAI Structured Outputs
+
+**Structured Outputs is the standard for all JSON-output agents.**
+
+The registry entry for every JSON-output agent sets `output_mode: "structured"`. BaseAgent passes the Pydantic model's JSON schema to OpenAI using `response_format={"type": "json_schema", "json_schema": {"strict": True, "schema": contract.model_json_schema()}}`. OpenAI enforces field names, types, and required field presence at the API level before the response is returned. This eliminates structural schema validation failures entirely.
+
+**Why Structured Outputs over json_mode for SEO OS specifically:**  
+SEO OS is BYOK (Bring Your Own Key). Every subscriber uses their own OpenAI API key. A json_mode structural failure (wrong field name, missing required field) causes a retry that consumes the subscriber's own tokens and adds latency. Structured Outputs prevents these failures at the API level. The subscriber never pays for a retry caused by a preventable schema error.
+
+### Fallback path: json_mode
+
+`output_mode: "json_mode"` is the fallback for two specific cases only:
+
+1. **The target model predates Structured Outputs support** — some older GPT-4o-mini model snapshots do not support Structured Outputs.
+2. **The contract contains types incompatible with strict mode** — recursive schemas, complex unions, or dict fields with non-string values.
+
+When the fallback path is active, PromptComposer generates a **one-line field hint** from the contract's `required` fields and appends it to the system prompt. This is the **only** situation where contract field names appear in a prompt. It is explicitly not the standard approach and must never be normalized as a default.
+
+The fallback hint is derived from the Pydantic model at runtime — it is never written manually into any prompt file.
+
+### Strict mode contract design rules
+
+Pydantic models used with Structured Outputs must be compatible with OpenAI's strict mode. These four rules are mandatory:
+
+1. **Every field must be either required or nullable.** No `Field(default_factory=...)` patterns. No `Field(default=...)` patterns on non-nullable fields. If a field may be absent, use `Type | None = None`. If a field is always present, make it required with no default.
+2. **No `dict` fields with non-string values.** Strict mode maps dicts to `additionalProperties`, which does not support mixed-type values.
+3. **Constrained strings must use `Literal[...]`.** Enum-like string fields must use `Literal["a", "b", "c"]` — plain `str` passes anything through; Pydantic validates, OpenAI does not.
+4. **No recursive schemas.** Strict mode does not support `model_validator` patterns that reference the model itself.
+
+**The required-vs-nullable convention:**  
+- A field the model always returns (even when "empty") → required, no default. Example: `change_notes: list[str]` — the model returns `[]` when there are no notes.
+- A field the model may legitimately not return → nullable. Example: `redirect_url: str | None = None`.
+- An optional list with a default factory → **not allowed**. Change it to a required field and instruct the model to return an empty list when not applicable.
+
 ### What each layer contributes to output
 
 | Layer | Contributes |
 |---|---|
-| `contracts/*.py` | Field names, types, validators, range checks, required vs optional — **everything** |
+| `contracts/*.py` | Field names, types, validators, range checks, required vs nullable — **everything structural** |
+| OpenAI Structured Outputs | Enforces the contract schema at the API level; structural failures impossible when active |
 | `json-output-discipline.md` | "Your response must be valid JSON. No markdown fences." — one behavioral instruction |
 | `SKILL.md` | Semantic meaning: what a `severity: "critical"` *means* to the agent — never what its type is |
 | `identity.md` | Nothing |
-| Prompt (any layer) | Nothing beyond what json-output-discipline.md covers |
+| Prompt (any layer) | Nothing beyond what `json-output-discipline.md` covers — **no field names, no schema descriptions** |
+| Fallback hint (generated) | One-line required-field list, generated from Pydantic model at runtime; **only on the fallback path** |
 
-### Why never in SKILL.md
+### Why field names must never appear in prompt files
 
-A Pydantic model is verified at parse time. A JSON schema written in SKILL.md prose is never verified. The moment Python renames a field, the SKILL.md description becomes incorrect and GPT silently produces the old field name. `json.loads()` accepts it. It propagates. Pydantic raises `ValidationError` instantly on the wrong field name. Prose never does.
-
-### Why no field hints in the prompt
-
-Listing fields in the prompt is a schema description in prose, which violates P2. In practice, models operating under `json_mode: true` with a well-written SKILL.md and an unambiguous task instruction produce correct field structures without field hints. Any field hint in a prompt is evidence that either the SKILL.md is unclear about what the agent does, or the task instruction is ambiguous — fix those instead.
+A field name written in a prompt file is a schema description in prose, which violates P2. The moment a field is renamed in Python, the prompt description becomes a lie. Models learn from that lie. Pydantic raises `ValidationError` instantly on the wrong field name. Prose never does. With Structured Outputs, field names are transmitted at the API level — they never need to appear in any prompt file at all.
 
 ---
 
@@ -448,7 +481,7 @@ See `agents/REGISTRY_SPEC.md` for the complete field specification.
 - **The registry owns `shared_docs`.** identity.md may document the same list; the registry governs if they differ.
 - **`platform-identity.md` is never listed in shared_docs.** It loads unconditionally. Any entry that includes it is a bug.
 - **The registry owns the model assignment.** The model selection rule (gpt-4o for writing, gpt-4o-mini for analysis) is enforced here. Routers look up the agent name; they never specify a model directly.
-- **The registry owns `json_mode`.** If an agent has a Pydantic contract, `json_mode` is `true`. Markdown agents set it `false`. The router reads this from the registry.
+- **The registry owns `output_mode`.** If an agent has a Pydantic contract and can use Structured Outputs, `output_mode` is `"structured"`. If the agent requires the json_mode fallback, `output_mode` is `"json_mode"`. Markdown agents set it `"markdown"`. The router reads this from the registry — it never hard-codes a mode.
 
 ### What every agent registers
 
@@ -459,7 +492,7 @@ See `agents/REGISTRY_SPEC.md` for the complete field specification.
 | `temperature` | float | 0.0–1.0 |
 | `timeout` | int | Seconds; BaseAgent enforces this hard cutoff |
 | `max_tokens` | int | Upper bound on output length |
-| `json_mode` | bool | `true` for Pydantic contract agents; `false` for Markdown agents |
+| `output_mode` | `"structured"` \| `"json_mode"` \| `"markdown"` | `"structured"` for Pydantic + Structured Outputs (standard); `"json_mode"` for fallback path only; `"markdown"` for non-JSON agents |
 | `shared_docs` | list[str] | Ordered list of shared doc names (no `.md` extension); **does not include `platform-identity`** |
 | `contract` | class | Pydantic model class from `contracts/`; `null` for Markdown agents |
 | `capabilities` | list[str] | Required user capability flags checked by router before calling |
@@ -472,7 +505,7 @@ See `agents/REGISTRY_SPEC.md` for the complete field specification.
 | Writing, editing, rewriting, long-form generation | `gpt-4o` |
 | Analysis, classification, clustering, meta generation, scoring | `gpt-4o-mini` |
 
-**Temperature constraint for json_mode agents:** Maximum temperature is 0.7 for any agent with `json_mode: true`. Higher temperatures increase the rate of JSON structure failures in long outputs. The article writer currently uses 0.75 — cap it at 0.7 when the registry is implemented.
+**Temperature constraint for structured-output agents:** Maximum temperature is 0.7 for any agent with `output_mode: "structured"` or `"json_mode"`. Higher temperatures increase the rate of structural failures in long outputs. For `output_mode: "structured"` this is belt-and-suspenders — Structured Outputs prevents structural failures — but consistent discipline across modes avoids surprises when the fallback path is active. The article writer currently uses 0.75 — cap it at 0.7 when the registry is implemented.
 
 ---
 
@@ -539,10 +572,10 @@ seo-os/
 
 | Layer | Owns | Never Owns |
 |---|---|---|
-| **BaseAgent** | OpenAI call, transport retry (rate limits / network), token counting, cost tracking, AIHistory logging, error normalization | Prompt content, domain knowledge, schema, routing, capability checks, validation retry |
+| **BaseAgent** | OpenAI call, transport retry (rate limits / network), token counting, cost tracking, AIHistory logging, error normalization, Structured Outputs schema transmission (`response_format` assembly from contract) | Prompt content, domain knowledge, schema definition, routing, capability checks, validation retry |
 | **Router** | Agent selection, capability checks, context assembly, PromptComposer call, BaseAgent call, Pydantic validation, validation retry decision, business rule assertions, DB writes, CMS routing | AI call mechanics, domain knowledge, prompt content, schema definitions, model names |
 | **PromptComposer** | Prepending platform-identity.md unconditionally; loading shared docs from registry in registry order; assembling system prompt layers in correct sequence | Deciding which docs to load beyond what the registry specifies; any domain content; platform-identity.md routing (always first, always loaded) |
-| **Agent Registry** | Agent name → model, temperature, timeout, max_tokens, json_mode, shared_docs, contract, capabilities, description | AI call execution, domain knowledge, prompt content, validation retry policy |
+| **Agent Registry** | Agent name → model, temperature, timeout, max_tokens, output_mode, shared_docs, contract, capabilities, description | AI call execution, domain knowledge, prompt content, validation retry policy |
 | **Agent Identity** (`identity.md`) | Agent role, mission, scope, behavioral constraints; Shared Documents section as documentation-only human reference | JSON schema, output field names, writing rules, E-E-A-T text, validation checklists |
 | **SKILL.md** | Domain expertise, decision heuristics (including runtime field references), quality thresholds, edge case handling, agent-specific application of shared doc principles | Output field definitions, field types, anti-AI word lists, E-E-A-T doctrine text, validation checklists |
 | **Shared Documents** | Canonical cross-agent knowledge (writing, SEO, E-E-A-T, linking, safety); platform-identity.md as universal foundation | Agent-specific logic, runtime values, JSON schema, content for one agent only |
@@ -575,10 +608,12 @@ Follow this checklist every time a new agent is introduced. Complete every step 
 - [ ] Confirm every field SKILL.md semantically references exists in the model
 
 **Registry (`agents/registry.py`):**
-- [ ] Add entry: name, model, temperature, timeout, max_tokens, json_mode, shared_docs, contract, capabilities, description
+- [ ] Add entry: name, model, temperature, timeout, max_tokens, output_mode, shared_docs, contract, capabilities, description
 - [ ] Confirm model follows the gpt-4o / gpt-4o-mini selection rule
-- [ ] Confirm `json_mode: true` agents have temperature ≤ 0.7
+- [ ] Set `output_mode: "structured"` for Pydantic contract agents (standard); use `"json_mode"` only if the model or contract is incompatible with Structured Outputs (document why)
+- [ ] Confirm `output_mode: "structured"` or `"json_mode"` agents have temperature ≤ 0.7
 - [ ] Confirm `platform-identity` is NOT in shared_docs
+- [ ] Confirm contract fields satisfy strict mode: all fields are either required or nullable (`Type | None = None`); no `Field(default_factory=...)` on non-nullable fields
 - [ ] Update identity.md Shared Documents section to match registry entry
 
 **Router:**

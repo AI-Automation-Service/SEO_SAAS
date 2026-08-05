@@ -10,12 +10,12 @@ where full HTML editing is not possible but meta fields are writable.
 
 Usage in router:
     raw = SkillAgent("seo-meta", openai_key, model="gpt-4o-mini").run(
-        user_message, timeout=45, json_mode=True, max_tokens=600
+        user_message, timeout=45, output_mode="structured", contract=MetaResponse
     )
     response = MetaResponse.model_validate_json(raw)
-    # Access fields via attributes:
-    meta_title = response.meta_title
-    meta_description = response.meta_description
+    # Access fields via attributes — validators already stripped whitespace:
+    title = response.suggested_meta_title
+    description = response.suggested_meta_description
 """
 from __future__ import annotations
 
@@ -33,14 +33,14 @@ class MetaResponse(BaseModel):
 
     # ── Required fields ──────────────────────────────────────────────────────
 
-    meta_title: str = Field(
+    suggested_meta_title: str = Field(
         description=(
             "The optimised meta title for the page. Must contain the primary keyword, "
             "ideally near the start. Must be within Google's display range."
         )
     )
 
-    meta_description: str = Field(
+    suggested_meta_description: str = Field(
         description=(
             "The optimised meta description for the page. Must include the primary keyword "
             "naturally, have a clear call to action or value proposition, and fit within "
@@ -48,47 +48,47 @@ class MetaResponse(BaseModel):
         )
     )
 
-    # ── Optional fields ───────────────────────────────────────────────────────
+    # ── Required fields (continued) ───────────────────────────────────────────
 
     change_notes: list[str] = Field(
-        default_factory=list,
         description=(
             "Brief notes explaining what was changed and why. "
+            "Return an empty list [] when no notes are needed. "
             "Used in the subscriber-facing change summary."
-        ),
+        )
     )
 
     # ── Validators ────────────────────────────────────────────────────────────
 
-    @field_validator("meta_title")
+    @field_validator("suggested_meta_title")
     @classmethod
     def validate_meta_title(cls, v: str) -> str:
         v = v.strip()
         if not v:
-            raise ValueError("meta_title must not be empty")
+            raise ValueError("suggested_meta_title must not be empty")
         if len(v) < 30:
             raise ValueError(
-                f"meta_title is too short ({len(v)} chars) — minimum 30 characters"
+                f"suggested_meta_title is too short ({len(v)} chars) — minimum 30 characters"
             )
-        if len(v) > 65:
+        if len(v) > 60:
             raise ValueError(
-                f"meta_title is too long ({len(v)} chars) — maximum 65 characters"
+                f"suggested_meta_title is too long ({len(v)} chars) — maximum 60 characters"
             )
         return v
 
-    @field_validator("meta_description")
+    @field_validator("suggested_meta_description")
     @classmethod
     def validate_meta_description(cls, v: str) -> str:
         v = v.strip()
         if not v:
-            raise ValueError("meta_description must not be empty")
+            raise ValueError("suggested_meta_description must not be empty")
         if len(v) < 100:
             raise ValueError(
-                f"meta_description is too short ({len(v)} chars) — minimum 100 characters"
+                f"suggested_meta_description is too short ({len(v)} chars) — minimum 100 characters"
             )
         if len(v) > 165:
             raise ValueError(
-                f"meta_description is too long ({len(v)} chars) — maximum 165 characters"
+                f"suggested_meta_description is too long ({len(v)} chars) — maximum 165 characters"
             )
         return v
 
@@ -101,18 +101,22 @@ class MetaResponse(BaseModel):
 
 # ── Architecture notes (for future contract authors) ──────────────────────────
 #
-# 1. FIELD NAMES must match exactly what the agent is prompted to return.
-#    If the field name here changes, the SKILL.md must NOT be updated with
-#    the new name — update the prompt task instruction in the router instead.
+# 1. FIELD NAMES — the Pydantic model is the only place field names are defined.
+#    They must NOT appear in SKILL.md, identity.md, or any prompt file.
+#    With Structured Outputs, OpenAI enforces the schema at the API level.
 #
 # 2. VALIDATORS should check structure and constraints, not domain correctness.
 #    "Is this a 30–65 char string?" is a validator.
 #    "Is this title SEO-optimised?" is not — that is the agent's job.
 #
-# 3. OPTIONAL FIELDS should use Field(default=None) or Field(default_factory=list).
-#    Never make a field Optional without a default — Pydantic will still require it.
+# 3. STRICT MODE COMPATIBILITY — every field must be either required or nullable:
+#    - Required (always returned, empty collection when not applicable):
+#        change_notes: list[str]   # model returns [] when no notes
+#    - Nullable (may be legitimately absent):
+#        redirect_url: str | None = None
+#    - FORBIDDEN: Field(default_factory=...) on non-nullable fields (strict mode breaks)
 #
-# 4. NESTED MODELS are fine for complex structures. Example for a future contract:
+# 4. NESTED MODELS are fine for complex structures. Example:
 #
 #    class SignalScore(BaseModel):
 #        score: int = Field(ge=0, le=100)
@@ -122,13 +126,7 @@ class MetaResponse(BaseModel):
 #        keyword_signal: SignalScore
 #        readability_signal: SignalScore
 #
-# 5. ENUMS constrain string fields to known values:
+# 5. CONSTRAINED STRINGS must use Literal[...] for OpenAI-level enforcement:
 #
-#    from enum import Enum
-#    class Severity(str, Enum):
-#        LOW = "low"
-#        MEDIUM = "medium"
-#        HIGH = "high"
-#        CRITICAL = "critical"
-#
-#    severity: Severity  # Pydantic rejects any value not in the enum
+#    from typing import Literal
+#    severity: Literal["low", "medium", "high", "critical"]

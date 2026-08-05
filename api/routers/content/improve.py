@@ -10,7 +10,8 @@ import httpx
 import yaml
 
 from fastapi import APIRouter, Body, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
+from contracts.meta import MetaResponse
 from sqlalchemy.orm import Session
 
 from agents.base import SkillAgent
@@ -354,18 +355,18 @@ def _run_meta_only(
 """
     try:
         raw = SkillAgent("seo-meta", openai_key, model="gpt-4o-mini").run(
-            meta_msg, timeout=60, json_mode=True
+            meta_msg, timeout=60, output_mode="structured", contract=MetaResponse
         )
-        result = json.loads(raw)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"seo-meta agent returned invalid JSON: {e}")
+        response = MetaResponse.model_validate_json(raw)
+    except ValidationError as e:
+        raise ValueError(f"seo-meta agent returned invalid output: {e}") from e
 
-    meta_title = (result.get("suggested_meta_title") or "").strip()
-    meta_description = (result.get("suggested_meta_description") or "").strip()
+    meta_title = response.suggested_meta_title
+    meta_description = response.suggested_meta_description
     current_title = (post_data.get("current_meta_title") or "").strip()
     current_description = (post_data.get("current_meta_description") or "").strip()
-    title_changed = meta_title and meta_title != current_title
-    desc_changed = meta_description and meta_description != current_description
+    title_changed = meta_title != current_title
+    desc_changed = meta_description != current_description
 
     plugin_label = "Yoast" if profile["seo_plugin"] == "yoast" else "RankMath"
     meta_updates = None
@@ -379,7 +380,12 @@ def _run_meta_only(
             "suggested_meta_title": meta_title if title_changed else None,
             "suggested_meta_description": meta_description if desc_changed else None,
         }
-        changes_made.append(f"seo_meta: SEO title and description queued for {plugin_label} update.")
+        changed_parts = (["title"] if title_changed else []) + (["description"] if desc_changed else [])
+        changes_made.append(
+            f"seo_meta: SEO {' and '.join(changed_parts)} queued for {plugin_label} update."
+        )
+
+    changes_made.extend(response.change_notes)
 
     if meta_updates:
         if profile.get("is_posts_page"):
