@@ -6,17 +6,31 @@
   This file defines WHAT this agent knows. It is pure domain expertise.
   It is loaded after identity.md and before shared documents in the system prompt.
 
-  The test: this file should be comprehensible to a human SEO professional
-  with zero knowledge of the codebase. If a line references a JSON field name,
-  a Python variable, a database column, or a runtime value — it is in the wrong file.
+  The test (two parts):
+
+  PART 1 — FORBIDDEN:
+  If a line defines an output field name, its type, or its allowed values as part
+  of a schema contract — it is in the wrong file. Move it to contracts/*.py.
+  Examples of forbidden content:
+    ✗ "Return a field called `severity` as a string"
+    ✗ "The `score` field must be an integer between 0 and 100"
+    ✗ "Output format: { 'action': '...', 'recommendations': [...] }"
+
+  PART 2 — PERMITTED:
+  References to runtime context field names in domain heuristics are explicitly allowed.
+  The distinguishing question: does the line tell the model what to RETURN,
+  or how to REASON about what it received?
+  Examples of permitted content:
+    ✓ "When is_homepage is true, prioritize brand positioning over keyword targeting"
+    ✓ "When the page score falls below 40, treat it as a full rewrite candidate"
+    ✓ "If has_yoast is true, the editor must populate the meta fields"
 
   Rules:
-  - NO JSON field names or output schema
+  - NO output field names defined as schema
   - NO anti-AI word lists → those go in skills/shared/writing-rules.md
   - NO E-E-A-T framework text → that goes in skills/shared/eeat-framework.md
   - NO validation checklists
-  - NO platform field documentation (is_homepage, builder, etc.)
-  - NO values that change between calls
+  - Runtime field names ARE allowed in domain heuristics (see Part 2 above)
 
   Fill every section. Remove comment blocks before committing.
 -->
@@ -157,10 +171,10 @@ When given a typical, complete input:
 
 <!--
   REMINDERS BEFORE COMMITTING (delete this block):
-  ✓ No JSON field names anywhere in this file
+  ✓ No output field names defined as schema (Part 1 check)
+  ✓ Runtime field references in heuristics are fine (Part 2 is OK)
   ✓ No anti-AI word list (use skills/shared/writing-rules.md)
   ✓ No E-E-A-T framework text (use skills/shared/eeat-framework.md)
   ✓ No validation checklist
-  ✓ No platform field documentation
   ✓ File reads like a domain expert's operating manual, not a software spec
 -->

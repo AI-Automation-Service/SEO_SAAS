@@ -124,7 +124,7 @@ max_tokens: 2000
 
 #### `shared_docs` — list of strings
 
-The ordered list of shared document filenames (from `skills/shared/`) to load into the system prompt. The PromptComposer appends them in this order after the agent's SKILL.md.
+The ordered list of shared document filenames (from `skills/shared/`) to load into the system prompt. The PromptComposer loads them in this order after the agent's SKILL.md. **This field is the single authoritative source for which shared documents an agent loads.** identity.md may document the same list for human readability; the registry governs if they differ.
 
 ```
 shared_docs:
@@ -139,6 +139,7 @@ Rules:
 - `json-output-discipline` must be last for all JSON-returning agents
 - `writing-rules` must be included for all content-producing agents (article writer, editor, humanizer)
 - No agent should load shared docs it does not need — unnecessary context wastes tokens
+- **`platform-identity` must NEVER appear in this list.** PromptComposer loads `platform-identity.md` unconditionally as layer 0 for every agent. Listing it here is a bug.
 
 **Reference: which agents load which shared docs**
 
@@ -220,17 +221,7 @@ json_mode: true
 
 Must be `true` for all agents with a Pydantic contract. Must be `false` for Markdown-output agents.
 
----
-
-#### `retry_on_validation_error` — boolean (default: false)
-
-Whether BaseAgent should automatically retry the call if the Pydantic contract fails to parse the response. When `true`, the validation error message is appended to the next attempt's user message.
-
-```
-retry_on_validation_error: false
-```
-
-Use sparingly. Most validation errors indicate a prompt problem, not a transient failure.
+**Temperature constraint:** Any agent with `json_mode: true` must have `temperature ≤ 0.7`. Higher temperatures increase JSON structure failures in long outputs.
 
 ---
 
@@ -253,9 +244,10 @@ Agent: seo-analyzer
   contract:         AnalyzerResponse        # from contracts/analyzer.py
   capabilities:
     - "AI_WRITER"
-  retry_on_validation_error: false
   description:      "Analyzes page content against 9 SEO signals and outputs a structured improvement plan."
 ```
+
+Note: `retry_on_validation_error` is not a registry field. Validation retry is the router's decision, made in Python orchestration logic. BaseAgent only retries on transport failures (rate limits, network errors). See ARCHITECTURE.md Section 11.
 
 ---
 
@@ -263,16 +255,18 @@ Agent: seo-analyzer
 
 This table reflects the current state of agents before the registry is implemented. Use this as the starting point for `agents/registry.py`.
 
+**Temperature note:** Article writer phases show 0.75 in current code. When registry.py is implemented, cap all json_mode agents at 0.7. Update article writer to 0.7.
+
 | Agent | Model | Temp | Timeout | max_tokens | JSON | Contract (to create) |
 |---|---|---|---|---|---|---|
 | seo-analyzer | gpt-4o-mini | 0.3 | 60 | 1200 | ✓ | AnalyzerResponse |
 | seo-editor | gpt-4o | 0.55 | 120 | 4000 | ✓ | EditorResponse |
-| seo-meta | gpt-4o-mini | 0.3 | 45 | 600 | ✓ | MetaResponse |
+| seo-meta | gpt-4o-mini | 0.3 | 45 | 600 | ✓ | MetaResponse ✓ |
 | seo-cluster | gpt-4o-mini | 0.3 | 60 | 2000 | ✓ | ClusterResponse |
-| seo-article-writer (p1) | gpt-4o | 0.75 | 180 | 2500 | ✓ | ArticlePhase1Response |
-| seo-article-writer (p2) | gpt-4o | 0.75 | 180 | 2500 | ✓ | ArticlePhase2Response |
-| seo-article-writer (p3) | gpt-4o | 0.75 | 180 | 2500 | ✓ | ArticlePhase3Response |
-| humanizer | gpt-4o-mini | 0.75 | 60 | 3000 | ✓ | HumanizerResponse |
+| seo-article-writer (p1) | gpt-4o | **0.7** | 180 | 2500 | ✓ | ArticlePhase1Response |
+| seo-article-writer (p2) | gpt-4o | **0.7** | 180 | 2500 | ✓ | ArticlePhase2Response |
+| seo-article-writer (p3) | gpt-4o | **0.7** | 180 | 2500 | ✓ | ArticlePhase3Response |
+| humanizer | gpt-4o-mini | **0.7** | 60 | 3000 | ✓ | HumanizerResponse |
 | seo-schema | gpt-4o-mini | 0.3 | 60 | 1000 | ✓ | SchemaResponse |
 | feedback-distiller | gpt-4o-mini | 0.3 | 45 | 500 | ✓ | PreferencesResponse |
 | seo-plan | gpt-4o | 0.65 | 180 | 4000 | ✗ | None (Markdown) |

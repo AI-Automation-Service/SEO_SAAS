@@ -111,19 +111,26 @@ You are the **[Full Role Title]** for SEO OS, a production SaaS platform for SEO
 ## Shared Documents
 
 <!--
-  List the shared documents this agent loads.
-  This section is consumed by the PromptComposer and AGENTS.md.
-  Use the exact filenames from skills/shared/.
+  HUMAN REFERENCE ONLY. The Agent Registry is the authoritative source.
+  If this table and the registry entry disagree, the registry governs.
+  PromptComposer reads the registry — it never reads this file to determine
+  which shared docs to load.
+
+  platform-identity.md is NEVER listed here. It is auto-loaded by
+  PromptComposer for every agent unconditionally.
+
+  Use exact filenames from skills/shared/ without the .md extension.
+  Update this table whenever the registry entry is updated.
 -->
 
-| Document | Purpose in this agent |
+| Document | Why this agent loads it |
 |---|---|
-| `json-output-discipline.md` | Output format instruction |
-| `eeat-framework.md` | [Why this agent needs it] |
-| `writing-rules.md` | [Why this agent needs it — or remove if not applicable] |
-| `seo-standards.md` | [Why this agent needs it — or remove if not applicable] |
+| `json-output-discipline.md` | This agent returns structured JSON output |
+| `eeat-framework.md` | [Remove this row if not applicable — explain why it's needed if kept] |
+| `writing-rules.md` | [Remove this row if not applicable — explain why it's needed if kept] |
+| `seo-standards.md` | [Remove this row if not applicable — explain why it's needed if kept] |
 
 <!--
   Remove rows for shared docs this agent does NOT load.
-  Only include what this agent actually needs.
+  Do not add platform-identity.md — it loads automatically.
 -->
