@@ -563,17 +563,17 @@ def generate_article(
     # Separate the schema block before humanizing — it's code, not prose
     article_body = "\n\n".join(filter(None, [p1_content, p2_content]))
     article_body = _strip_placeholders(article_body, business_name)
+    humanizer_msg = (
+        "Humanize the following SEO article. "
+        "Keep ALL content, facts, headings (H1/H2/H3), internal links, "
+        "citation placeholders (e.g. [Citation: ...]), and image placeholders "
+        "(<!-- Image: ... -->) exactly as-is. "
+        "Only change the prose style: remove AI writing patterns per your guidelines. "
+        "Return ONLY the revised article — no preamble, no explanation.\n\n"
+        f"{article_body}"
+    )
     t0 = time.monotonic()
     try:
-        humanizer_msg = (
-            "Humanize the following SEO article. "
-            "Keep ALL content, facts, headings (H1/H2/H3), internal links, "
-            "citation placeholders (e.g. [Citation: ...]), and image placeholders "
-            "(<!-- Image: ... -->) exactly as-is. "
-            "Only change the prose style: remove AI writing patterns per your guidelines. "
-            "Return ONLY the revised article — no preamble, no explanation.\n\n"
-            f"{article_body}"
-        )
         humanized = SkillAgent("humanizer", openai_key, model="gpt-4o-mini").run(
             humanizer_msg, timeout=240, json_mode=False, max_tokens=8000
         )
@@ -626,7 +626,7 @@ def generate_article(
         changes_made=["article_writer: new draft created via two-phase pipeline"],
         statistics={
             "word_count": total_wc,
-            "phase1_words": actual_p1_wc,
+            "phase1_words": _word_count(p1_content),
             "phase2_words": _word_count(p2_content),
             "meta_title": (phase1.get("meta_title") or "").strip(),
             "meta_description": (phase1.get("meta_description") or "").strip(),
