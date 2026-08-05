@@ -13,6 +13,7 @@ import { CompetitorTab } from './tabs/CompetitorTab'
 import { PagesTab } from './tabs/PagesTab'
 import { ContentTab } from './tabs/ContentTab'
 import { SpeedTab } from './tabs/SpeedTab'
+import { AutomationTab } from './tabs/AutomationTab'
 import { projectsApi, getErrorMessage } from '@/api/client'
 import { cn } from '@/lib/utils'
 
@@ -25,6 +26,7 @@ const TABS = [
   { id: 'competitor', label: 'Competitor Pages' },
   { id: 'strategy', label: 'Strategy' },
   { id: 'content', label: 'Content' },
+  { id: 'automation', label: 'Automation' },
   { id: 'speed', label: 'Speed' },
 ] as const
 
@@ -185,6 +187,7 @@ export function ProjectDetailPage() {
         {activeTab === 'competitor' && <CompetitorTab projectName={name!} />}
         {activeTab === 'strategy' && <StrategyTab projectName={name!} />}
         {activeTab === 'content' && <ContentTab projectName={name!} />}
+        {activeTab === 'automation' && <AutomationTab projectName={name!} />}
         {activeTab === 'speed' && (
           <SpeedTab projectName={name!} websiteUrl={project.website ?? ''} />
         )}

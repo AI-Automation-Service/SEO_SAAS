@@ -269,6 +269,34 @@ export interface StrategyResult {
   output: string
 }
 
+// API Key status
+export interface KeyStatus {
+  service: string
+  connected: boolean
+}
+
+// Cron types
+export interface CronJob {
+  id: number
+  job_type: string
+  frequency_days: number
+  enabled: boolean
+  last_run_at: string | null
+  next_run_at: string | null
+}
+
+export interface CronRun {
+  id: number
+  cron_job_id: number
+  started_at: string
+  completed_at: string | null
+  changes_created: number
+  auto_applied: number
+  status: string
+  error_detail: string | null
+  retry_count: number
+}
+
 // Speed types
 export interface SpeedMetric {
   display: string

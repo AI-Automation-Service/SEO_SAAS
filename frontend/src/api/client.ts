@@ -23,6 +23,9 @@ import type {
   PageChange,
   ArticleGenerateRequest,
   ArticleOut,
+  KeyStatus,
+  CronJob,
+  CronRun,
 } from '@/types/api'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? ''
@@ -121,10 +124,13 @@ export const authApi = {
 
 // ── API Key management ────────────────────────────────────────────────────────
 export const keysApi = {
+  list: () => api.get<KeyStatus[]>('/api/keys').then((r) => r.data),
   save: (service: string, value: string) =>
     api.put(`/api/keys/${service}`, { value }).then((r) => r.data),
   test: (service: string, value: string) =>
     api.post('/api/keys/test', { service, value }).then((r) => r.data),
+  delete: (service: string) =>
+    api.delete(`/api/keys/${service}`).then((r) => r.data),
 }
 
 // ── Projects ─────────────────────────────────────────────────────────────────
@@ -280,25 +286,55 @@ export const knowledgeApi = {
 }
 
 // ── Page Improvement ──────────────────────────────────────────────────────────
-export const improveApi = {
-  analyze: (name: string, cluster_name: string) =>
-    api.post<PageChange[]>(`/api/projects/${name}/improve/analyze`, { cluster_name }).then((r) => r.data),
-
-  apply: (name: string, changeId: number) =>
-    api.post<PageChange>(`/api/projects/${name}/improve/apply/${changeId}`).then((r) => r.data),
-
-  rollback: (name: string, changeId: number) =>
-    api.post<PageChange>(`/api/projects/${name}/improve/rollback/${changeId}`).then((r) => r.data),
-
-  history: (name: string) =>
-    api.get<PageChange[]>(`/api/projects/${name}/improve/history`).then((r) => r.data),
+function makeImproveApi(segment: string) {
+  return {
+    analyze: (name: string, cluster_name: string) =>
+      api.post<PageChange[]>(`/api/projects/${name}/${segment}/analyze`, { cluster_name }).then((r) => r.data),
+    apply: (name: string, changeId: number) =>
+      api.post<PageChange>(`/api/projects/${name}/${segment}/apply/${changeId}`).then((r) => r.data),
+    rollback: (name: string, changeId: number) =>
+      api.post<PageChange>(`/api/projects/${name}/${segment}/rollback/${changeId}`).then((r) => r.data),
+    history: (name: string) =>
+      api.get<PageChange[]>(`/api/projects/${name}/${segment}/history`).then((r) => r.data),
+  }
 }
+
+export const improveApi = makeImproveApi('improve')
 
 // ── Article Writer ────────────────────────────────────────────────────────────
 export const articleApi = {
   generate: (name: string, body: ArticleGenerateRequest) =>
     api.post<ArticleOut>(`/api/projects/${name}/article/generate`, body).then((r) => r.data),
 }
+
+// ── Cron jobs ─────────────────────────────────────────────────────────────────
+export const cronApi = {
+  list: (name: string) =>
+    api.get<CronJob[]>(`/api/projects/${name}/cron`).then((r) => r.data),
+  upsert: (name: string, body: { job_type: string; frequency_days?: number; enabled: boolean }) =>
+    api.post<CronJob>(`/api/projects/${name}/cron`, body).then((r) => r.data),
+  update: (name: string, jobType: string, body: { enabled?: boolean; frequency_days?: number }) =>
+    api.put<CronJob>(`/api/projects/${name}/cron/${jobType}`, body).then((r) => r.data),
+  runs: (name: string) =>
+    api.get<CronRun[]>(`/api/projects/${name}/cron/runs`).then((r) => r.data),
+  runNow: (name: string, jobType: string) =>
+    api.post<{ message: string }>(`/api/projects/${name}/cron/${jobType}/run-now`).then((r) => r.data),
+}
+
+// ── Feedback ──────────────────────────────────────────────────────────────────
+export const feedbackApi = {
+  submit: (name: string, changeId: number, verdict: 'approve' | 'reject', comment?: string) =>
+    api
+      .post(`/api/projects/${name}/improve/feedback/${changeId}`, { verdict, comment })
+      .then((r) => r.data),
+  preferences: (name: string) =>
+    api.get<{ rules: string[]; updated_at: string | null }>(`/api/projects/${name}/improve/preferences`).then((r) => r.data),
+  refreshPreferences: (name: string) =>
+    api.post<{ rules: string[]; updated_at: string | null }>(`/api/projects/${name}/improve/preferences/refresh`).then((r) => r.data),
+}
+
+// ── Shopify Improve ───────────────────────────────────────────────────────────
+export const shopifyImproveApi = makeImproveApi('shopify/improve')
 
 // ── Health ────────────────────────────────────────────────────────────────────
 export const healthApi = {

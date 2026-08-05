@@ -4,9 +4,9 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import toast from 'react-hot-toast'
-import { ChevronDown, ChevronUp, Loader2, Pencil, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, Eye, EyeOff, Loader2, Pencil, Trash2, X } from 'lucide-react'
 import { StatusBadge } from '@/components/StatusBadge'
-import { integrationsApi, getErrorMessage } from '@/api/client'
+import { integrationsApi, keysApi, getErrorMessage } from '@/api/client'
 import type { IntegrationStatusItem } from '@/types/api'
 import { cn } from '@/lib/utils'
 
@@ -121,6 +121,287 @@ function SectionWrapper({
         </div>
       )}
     </div>
+  )
+}
+
+// ── Shared secret-input + connected-row helpers ───────────────────────────────
+
+const PasswordInput = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
+  (props, ref) => {
+    const [show, setShow] = useState(false)
+    return (
+      <div className="relative">
+        <Input ref={ref} {...props} type={show ? 'text' : 'password'} />
+        <button
+          type="button"
+          onClick={() => setShow((s) => !s)}
+          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+        >
+          {show ? <EyeOff size={14} /> : <Eye size={14} />}
+        </button>
+      </div>
+    )
+  }
+)
+PasswordInput.displayName = 'PasswordInput'
+
+function ConnectedRow({ label, editLabel = 'Update', onEdit, onDelete, deleteLoading }: {
+  label: string
+  editLabel?: string
+  onEdit: () => void
+  onDelete?: () => void
+  deleteLoading?: boolean
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <div className="flex-1 flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg">
+        <Check size={13} className="text-emerald-500 shrink-0" />
+        <span className="text-sm text-slate-600">{label}</span>
+      </div>
+      <button
+        type="button"
+        onClick={onEdit}
+        className="flex items-center gap-1.5 px-3 py-2 border border-slate-300 text-slate-600 text-sm rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
+      >
+        <Pencil size={13} /> {editLabel}
+      </button>
+      {onDelete && (
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={deleteLoading}
+          className="flex items-center gap-1.5 px-3 py-2 border border-red-200 text-red-500 text-sm rounded-lg hover:bg-red-50 transition-colors cursor-pointer disabled:opacity-50"
+        >
+          <Trash2 size={13} />
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ── OpenAI API Key ────────────────────────────────────────────────────────────
+
+function OpenAISection({ isConnected }: { isConnected: boolean }) {
+  const qc = useQueryClient()
+  const [value, setValue] = useState('')
+  const [editing, setEditing] = useState(!isConnected)
+
+  const saveMut = useMutation({
+    mutationFn: async () => {
+      await keysApi.test('openai', value)
+      await keysApi.save('openai', value)
+    },
+    onSuccess: () => {
+      toast.success('OpenAI key saved and verified')
+      setValue('')
+      setEditing(false)
+      qc.invalidateQueries({ queryKey: ['user-keys'] })
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
+
+  const deleteMut = useMutation({
+    mutationFn: () => keysApi.delete('openai'),
+    onSuccess: () => {
+      toast.success('OpenAI key removed')
+      setEditing(true)
+      qc.invalidateQueries({ queryKey: ['user-keys'] })
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
+
+  return (
+    <SectionWrapper title="OpenAI API Key" status={isConnected ? { name: 'openai', connected: true } : { name: 'openai', connected: false, error: 'Not connected' }}>
+      {!editing && isConnected ? (
+        <ConnectedRow label="Key stored securely" onEdit={() => setEditing(true)} onDelete={() => deleteMut.mutate()} deleteLoading={deleteMut.isPending} />
+      ) : (
+        <div className="space-y-3">
+          <p className="text-xs text-slate-500">
+            Required for all AI features. Get yours at{' '}
+            <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-emerald-600 underline hover:text-emerald-700">
+              platform.openai.com/api-keys
+            </a>
+          </p>
+          <Field label="API Key" error={undefined}>
+            <PasswordInput value={value} onChange={(e) => setValue(e.target.value)} placeholder="sk-proj-..." autoComplete="off" />
+          </Field>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => saveMut.mutate()}
+              disabled={!value.trim() || saveMut.isPending}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white text-sm font-medium rounded-lg hover:bg-emerald-600 disabled:opacity-50 transition-colors cursor-pointer"
+            >
+              {saveMut.isPending && <Loader2 size={14} className="animate-spin" />}
+              {saveMut.isPending ? 'Testing & Saving…' : 'Test & Save'}
+            </button>
+            {isConnected && (
+              <button
+                type="button"
+                onClick={() => { setEditing(false); setValue('') }}
+                className="flex items-center gap-1.5 px-3 py-2 text-slate-500 text-sm rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X size={13} /> Cancel
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </SectionWrapper>
+  )
+}
+
+// ── Copyscape ─────────────────────────────────────────────────────────────────
+
+const copyscapeSchema = z.object({
+  username: z.string().min(1, 'Username is required'),
+  api_key: z.string().min(1, 'API key is required'),
+})
+type CopyscapeForm = z.infer<typeof copyscapeSchema>
+
+function CopyscapeSection({ isConnected }: { isConnected: boolean }) {
+  const qc = useQueryClient()
+  const [editing, setEditing] = useState(!isConnected)
+
+  const { register, handleSubmit, reset, formState: { errors } } = useForm<CopyscapeForm>({
+    resolver: zodResolver(copyscapeSchema),
+  })
+
+  const saveMut = useMutation({
+    mutationFn: (data: CopyscapeForm) =>
+      Promise.all([keysApi.save('copyscape_user', data.username), keysApi.save('copyscape_key', data.api_key)]),
+    onSuccess: () => {
+      toast.success('Copyscape credentials saved')
+      setEditing(false)
+      reset()
+      qc.invalidateQueries({ queryKey: ['user-keys'] })
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
+
+  const deleteMut = useMutation({
+    mutationFn: () => Promise.all([keysApi.delete('copyscape_user'), keysApi.delete('copyscape_key')]),
+    onSuccess: () => {
+      toast.success('Copyscape credentials removed')
+      setEditing(true)
+      qc.invalidateQueries({ queryKey: ['user-keys'] })
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
+
+  const status: IntegrationStatusItem = { name: 'copyscape', connected: isConnected, error: isConnected ? null : 'Not connected' }
+
+  return (
+    <SectionWrapper title="Copyscape (Plagiarism Check)" status={status}>
+      <p className="text-xs text-slate-500 -mt-1">
+        Optional — used to check generated articles for plagiarism before publishing. Without this, plagiarism checks are skipped.
+      </p>
+      {!editing && isConnected ? (
+        <ConnectedRow label="Username + API key stored" onEdit={() => setEditing(true)} onDelete={() => deleteMut.mutate()} deleteLoading={deleteMut.isPending} />
+      ) : (
+        <form onSubmit={handleSubmit((d) => saveMut.mutate(d))} className="space-y-3">
+          <Field label="Copyscape Username" error={errors.username?.message}>
+            <Input {...register('username')} placeholder="your_copyscape_username" autoComplete="off" />
+          </Field>
+          <Field label="API Key" error={errors.api_key?.message}>
+            <PasswordInput {...register('api_key')} placeholder="••••••••••••••••" autoComplete="new-password" />
+            <p className="text-slate-400 text-xs mt-1">Find your API key at copyscape.com → Account Settings</p>
+          </Field>
+          <div className="flex items-center gap-2">
+            <SaveButton loading={saveMut.isPending} label="Save Credentials" />
+            {isConnected && (
+              <button type="button" onClick={() => { setEditing(false); reset() }} className="flex items-center gap-1.5 px-3 py-2 text-slate-500 text-sm rounded-lg hover:bg-slate-100 transition-colors cursor-pointer">
+                <X size={13} /> Cancel
+              </button>
+            )}
+          </div>
+        </form>
+      )}
+    </SectionWrapper>
+  )
+}
+
+// ── Shopify ───────────────────────────────────────────────────────────────────
+
+const shopifySchema = z.object({
+  store_url: z.string().url('Must be a valid URL, e.g. https://mystore.myshopify.com'),
+  access_token: z.string().min(1, 'Access token is required'),
+})
+type ShopifyForm = z.infer<typeof shopifySchema>
+
+function ShopifySection({
+  projectName,
+  status,
+}: {
+  projectName: string
+  status?: IntegrationStatusItem
+}) {
+  const isConnected = status?.connected === true
+  const [editing, setEditing] = useState(!isConnected)
+  const qc = useQueryClient()
+
+  const { register, handleSubmit, reset, formState: { errors } } = useForm<ShopifyForm>({
+    resolver: zodResolver(shopifySchema),
+  })
+
+  const saveMut = useMutation({
+    mutationFn: async (data: ShopifyForm) => {
+      const envKey = projectName.toUpperCase().replace(/-/g, '_')
+      await integrationsApi.updateConfig(projectName, {
+        shopify: {
+          enabled: true,
+          store_url: data.store_url,
+          token_env: `SHOPIFY_${envKey}_TOKEN`,
+        },
+      })
+      await integrationsApi.setSecret(projectName, {
+        key: `SHOPIFY_${envKey}_TOKEN`,
+        value: data.access_token,
+      })
+    },
+    onSuccess: () => {
+      toast.success('Shopify connected')
+      setEditing(false)
+      reset()
+      qc.invalidateQueries({ queryKey: ['integrations-status', projectName] })
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
+
+  return (
+    <SectionWrapper title="Shopify" status={status}>
+      <p className="text-xs text-slate-500 -mt-1">
+        Connect your Shopify store to enable AI-powered SEO improvements for products, collections, pages, and articles.
+      </p>
+      {!editing && isConnected ? (
+        <ConnectedRow label="Store connected" editLabel="Edit" onEdit={() => setEditing(true)} />
+      ) : (
+        <form onSubmit={handleSubmit((d) => saveMut.mutate(d))} className="space-y-3">
+          <Field label="Store URL" error={errors.store_url?.message}>
+            <Input {...register('store_url')} placeholder="https://mystore.myshopify.com" />
+            <p className="text-slate-400 text-xs mt-1">Use your .myshopify.com URL, not a custom domain</p>
+          </Field>
+          <Field label="Admin API Access Token" error={errors.access_token?.message}>
+            <PasswordInput {...register('access_token')} placeholder="shpat_..." autoComplete="new-password" />
+            <p className="text-slate-400 text-xs mt-1">
+              Create in Shopify Admin → Apps → Develop apps → Create an app → Admin API access token
+            </p>
+          </Field>
+          <div className="flex items-center gap-2">
+            <SaveButton loading={saveMut.isPending} label="Connect Shopify" />
+            {isConnected && (
+              <button
+                type="button"
+                onClick={() => { setEditing(false); reset() }}
+                className="flex items-center gap-1.5 px-3 py-2 text-slate-500 text-sm rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X size={13} /> Cancel
+              </button>
+            )}
+          </div>
+        </form>
+      )}
+    </SectionWrapper>
   )
 }
 
@@ -402,15 +683,24 @@ function GoogleSection({
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 export function IntegrationsTab({ projectName }: { projectName: string }) {
-  const { data: status, isLoading } = useQuery({
+  const { data: status, isLoading: statusLoading } = useQuery({
     queryKey: ['integrations-status', projectName],
     queryFn: () => integrationsApi.status(projectName),
+  })
+
+  const { data: userKeys = [], isLoading: keysLoading } = useQuery({
+    queryKey: ['user-keys'],
+    queryFn: () => keysApi.list(),
+    staleTime: 5 * 60_000,
   })
 
   const getStatus = (name: string) =>
     status?.integrations.find((i) => i.name === name)
 
-  if (isLoading) {
+  const keyConnected = (service: string) =>
+    userKeys.find((k) => k.service === service)?.connected ?? false
+
+  if (statusLoading || keysLoading) {
     return (
       <div className="flex items-center gap-2 text-slate-400 text-sm py-8">
         <Loader2 size={16} className="animate-spin" />
@@ -421,12 +711,25 @@ export function IntegrationsTab({ projectName }: { projectName: string }) {
 
   return (
     <div className="space-y-4">
-      <WordPressSection projectName={projectName} status={getStatus('wordpress')} />
-      <GoogleSection
-        projectName={projectName}
-        gscStatus={getStatus('google_search_console')}
-        ga4Status={getStatus('google_analytics')}
-      />
+      <div>
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Account-level Keys</h3>
+        <div className="space-y-4">
+          <OpenAISection isConnected={keyConnected('openai')} />
+          <CopyscapeSection isConnected={keyConnected('copyscape_user') && keyConnected('copyscape_key')} />
+        </div>
+      </div>
+      <div>
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Project Integrations</h3>
+        <div className="space-y-4">
+          <WordPressSection projectName={projectName} status={getStatus('wordpress')} />
+          <ShopifySection projectName={projectName} status={getStatus('shopify')} />
+          <GoogleSection
+            projectName={projectName}
+            gscStatus={getStatus('google_search_console')}
+            ga4Status={getStatus('google_analytics')}
+          />
+        </div>
+      </div>
     </div>
   )
 }

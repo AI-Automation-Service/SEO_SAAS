@@ -4,10 +4,10 @@ import {
   Tags, RefreshCw, Upload, Sparkles, Search, X, ExternalLink,
   ChevronUp, ChevronDown, Trash2, Crown, Zap, HelpCircle, RotateCcw, Info,
   Wand2, Copy, Check, ChevronRight, Wrench, RotateCcw as Rollback, CheckCircle, AlertCircle,
-  FileText, Shield, ShieldAlert,
+  FileText, Shield, ShieldAlert, ThumbsUp, ThumbsDown,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { keywordsApi, strategyApi, improveApi, getErrorMessage } from '@/api/client'
+import { keywordsApi, strategyApi, improveApi, feedbackApi, getErrorMessage } from '@/api/client'
 import type { Keyword, KeywordStatus, KeywordType, FunnelStage, PageChange, PageStatistics, ActionType, PlagiarismStatus } from '@/types/api'
 import { cn } from '@/lib/utils'
 
@@ -1289,7 +1289,87 @@ function PageChangeCard({
             Rollback to Original
           </button>
         )}
+
+        {/* Feedback buttons — only for actionable states */}
+        {(change.status === 'pending' || change.status === 'approved') && (
+          <FeedbackButtons projectName={projectName} changeId={change.id} />
+        )}
       </div>
+    </div>
+  )
+}
+
+function FeedbackButtons({ projectName, changeId }: { projectName: string; changeId: number }) {
+  const [voted, setVoted] = useState<'approve' | 'reject' | null>(null)
+  const [rejectOpen, setRejectOpen] = useState(false)
+  const [comment, setComment] = useState('')
+
+  const sendMut = useMutation({
+    mutationFn: (verdict: 'approve' | 'reject') =>
+      feedbackApi.submit(projectName, changeId, verdict, comment || undefined),
+    onSuccess: (_, verdict) => {
+      setVoted(verdict)
+      setRejectOpen(false)
+      setComment('')
+      toast.success(verdict === 'approve' ? 'Feedback: helpful' : 'Feedback: not helpful')
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
+
+  if (voted) {
+    return (
+      <div className="flex items-center gap-1.5 text-xs text-slate-400 pt-1">
+        {voted === 'approve'
+          ? <ThumbsUp size={12} className="text-emerald-500" />
+          : <ThumbsDown size={12} className="text-red-400" />}
+        Feedback recorded
+      </div>
+    )
+  }
+
+  return (
+    <div className="pt-1 space-y-2">
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] text-slate-400 uppercase tracking-wide">Was this suggestion helpful?</span>
+        <button
+          type="button"
+          onClick={() => sendMut.mutate('approve')}
+          disabled={sendMut.isPending}
+          className="flex items-center gap-1 px-2 py-1 text-[11px] rounded border border-slate-200 text-slate-500 hover:border-emerald-400 hover:text-emerald-600 transition-colors cursor-pointer disabled:opacity-40"
+        >
+          <ThumbsUp size={11} /> Yes
+        </button>
+        <button
+          type="button"
+          onClick={() => setRejectOpen((o) => !o)}
+          disabled={sendMut.isPending}
+          className="flex items-center gap-1 px-2 py-1 text-[11px] rounded border border-slate-200 text-slate-500 hover:border-red-300 hover:text-red-500 transition-colors cursor-pointer disabled:opacity-40"
+        >
+          <ThumbsDown size={11} /> No
+        </button>
+      </div>
+      {rejectOpen && (
+        <div className="flex items-start gap-2">
+          <input
+            type="text"
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="Optional: why was it unhelpful?"
+            className="flex-1 text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-red-300"
+          />
+          <button
+            type="button"
+            onClick={() => sendMut.mutate('reject')}
+            disabled={sendMut.isPending}
+            className="px-2 py-1.5 text-xs bg-red-50 border border-red-200 text-red-600 rounded-lg hover:bg-red-100 cursor-pointer disabled:opacity-40 transition-colors"
+          >
+            Send
+          </button>
+          <button type="button" onClick={() => setRejectOpen(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer py-1.5">
+            <X size={13} />
+          </button>
+        </div>
+      )}
     </div>
   )
 }
