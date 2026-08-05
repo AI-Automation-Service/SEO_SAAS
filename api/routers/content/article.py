@@ -227,10 +227,11 @@ def _phase1_message(
     ymyl: bool,
     business_block: str,
     knowledge_block: str,
+    website: str,
     target_wc: int,
 ) -> str:
     half = target_wc // 2
-    return f"""You are running PHASE 1 of a two-phase article writing task.
+    return f"""You are running PHASE 1 of a two-phase SEO article writing task.
 
 ## Primary Keyword
 {keyword}
@@ -244,35 +245,56 @@ def _phase1_message(
 {intent}
 
 ## YMYL
-{"Yes — apply extra scrutiny: every factual claim must be sourced, include disclaimers where relevant" if ymyl else "No"}
+{"Yes — extra scrutiny required: every factual claim must cite a source, include disclaimers where relevant" if ymyl else "No"}
 
 ## {_ANTI_AI_RULE}
 
 ## Your Task (Phase 1)
 Produce the FIRST HALF of a {target_wc}-word SEO article.
-HARD REQUIREMENT: content_phase1 MUST contain at least {half} words. Do not stop writing until you reach {half} words.
+HARD REQUIREMENT: content_phase1 MUST contain at least {half} words. You will not stop writing until you reach {half} words.
 
 Output a JSON object with EXACTLY these keys:
 {{
   "meta_title": "50-60 char meta title containing primary keyword",
-  "meta_description": "140-160 char meta description",
+  "meta_description": "140-160 char meta description with primary keyword and clear value proposition",
   "slug": "url-slug-lowercase-hyphens",
-  "h1": "Article headline (matches meta title closely)",
+  "h1": "Article headline (matches meta title closely, contains primary keyword)",
   "schema_type": "Article|BlogPosting|NewsArticle",
   "sections_outline": ["Section heading text", "Section heading text", ...],
-  "content_phase1": "Introduction (100-150 words) + EXACTLY 4 H2 sections each 250-300 words. Total MUST exceed {half} words.",
-  "word_count_phase1": <integer count of words in content_phase1>,
+  "content_phase1": "Full Markdown content — see writing process below",
   "sections_remaining": ["Section heading text", "Section heading text", "FAQ", "Conclusion"]
 }}
 
-Rules for content_phase1:
-- Write EXACTLY 4 H2 body sections — not 2, not 3, exactly 4
-- Each H2 section MUST be 250-300 words: write 4-5 paragraphs with specific details, examples, and actionable advice
-- Do NOT move to the next section until the current one is at least 250 words
-- H1 as # heading; H2 as ## heading — NEVER "## H2: Title", just "## Title"
-- sections_outline and sections_remaining must be plain heading text — no "H2:", "H3:", or any prefix
-- First paragraph of each section: 50-80 word direct answer (AEO/AI Overview target)
-- Self-check before submitting: count the words in content_phase1. If under {half}, expand the shortest sections until you reach {half}.
+## Mandatory Writing Process for content_phase1 (execute in order):
+
+STEP 1 — Introduction (100-150 words):
+Write a compelling introduction. End with: <!-- Image: [describe what image should show here] -->
+
+STEP 2 — H2 Section 1 (MINIMUM 300 words):
+Write 5-6 paragraphs. First paragraph: 60-80 word direct answer for AI search.
+Include at least 1 external citation link to an authoritative source (government, academic, Forbes, McKinsey, Harvard Business Review, or major industry publication). Format: [Source Name](https://url).
+Include 1 internal link to a relevant page: [{website}/relevant-path/](anchor text).
+Do NOT start Section 2 until Section 1 is at least 300 words.
+
+STEP 3 — H2 Section 2 (MINIMUM 300 words):
+Same format as Section 1. Add 1 external citation. End with: <!-- Image: [describe image] -->
+Do NOT start Section 3 until Section 2 is at least 300 words.
+
+STEP 4 — H2 Section 3 (MINIMUM 300 words):
+Same format. Add 1 external citation.
+Do NOT start Section 4 until Section 3 is at least 300 words.
+
+STEP 5 — H2 Section 4 (MINIMUM 300 words):
+Same format. Add 1 external citation.
+
+STEP 6 — Verify:
+Count words in content_phase1. If total is under {half} words, add 2 more paragraphs to the shortest section before outputting.
+
+## Additional Rules:
+- H1 as # heading; H2 as ## heading — NEVER write "## H2: Title", just "## Title"
+- sections_outline and sections_remaining: plain heading text only — no "H2:", "H3:", or any prefix
+- External citations: only government (.gov), educational (.edu), or established publications — NOT Wikipedia, Reddit, or unknown blogs
+- Internal links: use realistic URL patterns for {website} — do not invent external URLs
 - NEVER output bracket placeholders like [Author Name], [Your Business Name], [date] — use real values from Business Context
 - {_ANTI_AI_RULE}
 """
@@ -282,17 +304,16 @@ def _phase2_message(
     keyword: str,
     business_block: str,
     business_name: str,
+    website: str,
     phase1: dict,
     target_wc: int,
 ) -> str:
-    # Measure Phase 1 content directly — don't trust GPT's self-reported count
     actual_p1_wc = _word_count(phase1.get("content_phase1", ""))
     remaining_wc = max(target_wc - actual_p1_wc, target_wc // 2)
     sections = phase1.get("sections_remaining", [])
-    # Only pass the tail of Phase 1 for continuity — passing the full content burns
-    # output-token budget and results in GPT-4o producing far less Phase 2 content.
+    body_sections = [s for s in sections if s not in ("FAQ", "Conclusion")]
     p1_tail = (phase1.get("content_phase1", "") or "")[-600:]
-    return f"""You are running PHASE 2 of a two-phase article writing task.
+    return f"""You are running PHASE 2 of a two-phase SEO article writing task.
 
 ## Primary Keyword
 {keyword}
@@ -303,7 +324,7 @@ def _phase2_message(
 ## Phase 1 Summary
 - H1: {phase1.get("h1")}
 - Phase 1 covered: {", ".join(phase1.get("sections_outline", [])[:4])}
-- Word count so far: {phase1.get("word_count_phase1", 0)} words
+- Phase 1 word count (measured): {actual_p1_wc} words
 - Sections to complete now: {", ".join(sections)}
 
 ## End of Phase 1 (last lines — DO NOT repeat, continue naturally from here)
@@ -313,31 +334,37 @@ def _phase2_message(
 
 ## Your Task (Phase 2)
 Write the REMAINING content to complete the article.
-HARD REQUIREMENT: content_phase2 MUST contain at least {remaining_wc} words. Do not stop writing until you reach {remaining_wc} words.
+HARD REQUIREMENT: content_phase2 MUST contain at least {remaining_wc} words. You will not stop writing until you reach {remaining_wc} words.
 
-H2 body sections to write ({len(sections) - 2} sections):
-{chr(10).join(f"- {s}" for s in sections if s not in ("FAQ", "Conclusion"))}
+## Mandatory Writing Process for content_phase2 (execute in order):
 
-Each H2 section above MUST be 250-300 words (4-5 paragraphs). Do NOT move to the next section until the current one is at least 250 words.
+{"".join(
+    f"STEP {i+1} — H2 Section: {s} (MINIMUM 300 words):\\n"
+    f"Write 5-6 paragraphs. Include 1 external citation link (government, academic, or established publication). "
+    f"Do NOT start the next section until this one is at least 300 words.\\n\\n"
+    for i, s in enumerate(body_sections)
+)}
+STEP {len(body_sections)+1} — FAQ Section (~350 words):
+Write exactly 5 H3 questions with 60-80 word answers each. Questions must be natural reader follow-ups — do not invent facts not covered in the article.
 
-Then write:
-- FAQ section: 5 H3 questions with 60-80 word answers each (total ~350 words)
-- Conclusion: 75-100 words + CTA that mentions "{business_name}" by name (do NOT write "Your Business Name" or any placeholder)
-- JSON-LD schema snippet for {phase1.get("schema_type", "Article")}
+STEP {len(body_sections)+2} — Conclusion (100-150 words):
+Summarize key takeaways. End with a CTA that mentions "{business_name}" by name. Do NOT write "Your Business Name" or any placeholder.
+
+STEP {len(body_sections)+3} — Verify:
+Count words in content_phase2. If under {remaining_wc} words, expand the shortest section by 2 paragraphs before outputting.
 
 Output a JSON object with EXACTLY these keys:
 {{
   "content_phase2": "Full Markdown of all remaining sections. MUST exceed {remaining_wc} words.",
-  "word_count_phase2": <integer count of words in content_phase2>,
   "schema_json_ld": "<script type=\\"application/ld+json\\">...</script>"
 }}
 
 Rules:
-- Continue naturally from where Phase 1 left off — do NOT repeat any Phase 1 content
+- Continue naturally — do NOT repeat any Phase 1 content
 - NEVER write "## H2: Title" or "### H3: Title" — write "## Title" and "### Title" only
-- NEVER output bracket placeholders like [Author Name], [Your Business Name], [date] — use real values from Business Context
-- Self-check before submitting: if content_phase2 is under {remaining_wc} words, expand the shortest sections
-- FAQ: questions must be natural reader follow-ups — never invent facts not in the article
+- External citations: [Source Name](https://url) — only .gov, .edu, or established publications
+- Include 1-2 more internal links to {website} where relevant
+- NEVER output bracket placeholders — use real values from Business Context
 - {_ANTI_AI_RULE}
 """
 
@@ -357,18 +384,19 @@ def generate_article(
     article_job_id = str(uuid.uuid4())
     business_block = _project_context_block(context)
     business_name = (context.config.business_name or "").strip()
+    website = (context.config.website or "").rstrip("/")
     knowledge_block = _knowledge_block(db, current_user.id, context.name)
 
     # ── Phase 1 ────────────────────────────────────────────────────────────────
     p1_msg = _phase1_message(
         body.keyword, body.intent, body.ymyl,
-        business_block, knowledge_block, body.target_word_count,
+        business_block, knowledge_block, website, body.target_word_count,
     )
 
     t0 = time.monotonic()
     try:
         raw_p1 = SkillAgent("seo-article-writer", openai_key, model="gpt-4o").run(
-            p1_msg, timeout=240, json_mode=True, max_tokens=4096
+            p1_msg, timeout=300, json_mode=True, max_tokens=6000
         )
     except Exception as e:
         raise HTTPException(502, f"Article writer Phase 1 failed: {e}")
@@ -387,12 +415,12 @@ def generate_article(
               p1_in, p1_out, p1_cost, p1_ms, article_job_id)
 
     # ── Phase 2 ────────────────────────────────────────────────────────────────
-    p2_msg = _phase2_message(body.keyword, business_block, business_name, phase1, body.target_word_count)
+    p2_msg = _phase2_message(body.keyword, business_block, business_name, website, phase1, body.target_word_count)
 
     t0 = time.monotonic()
     try:
         raw_p2 = SkillAgent("seo-article-writer", openai_key, model="gpt-4o").run(
-            p2_msg, timeout=240, json_mode=True, max_tokens=4096
+            p2_msg, timeout=300, json_mode=True, max_tokens=6000
         )
     except Exception as e:
         raise HTTPException(502, f"Article writer Phase 2 failed: {e}")
@@ -453,8 +481,11 @@ def generate_article(
         changes_made=["article_writer: new draft created via two-phase pipeline"],
         statistics={
             "word_count": total_wc,
-            "phase1_words": phase1.get("word_count_phase1", 0),
-            "phase2_words": phase2.get("word_count_phase2", 0),
+            "phase1_words": actual_p1_wc,
+            "phase2_words": _word_count(p2_content),
+            "meta_title": (phase1.get("meta_title") or "").strip(),
+            "meta_description": (phase1.get("meta_description") or "").strip(),
+            "focus_keyword": body.keyword,
         },
         draft_title=draft_title,
         draft_slug=draft_slug,

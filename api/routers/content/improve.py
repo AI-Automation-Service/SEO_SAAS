@@ -1053,6 +1053,25 @@ def apply_change(
                 created = wp.create_post(draft)
         except IntegrationError as e:
             raise HTTPException(502, f"WordPress draft creation error: {e}")
+
+        # Push SEO plugin meta (Rank Math / Yoast) — non-fatal if plugin absent
+        stats = record.statistics or {}
+        seo_meta_title = (stats.get("meta_title") or "").strip()
+        seo_meta_desc = (stats.get("meta_description") or "").strip()
+        seo_focus_kw = (stats.get("focus_keyword") or "").strip()
+        if seo_meta_title or seo_meta_desc or seo_focus_kw:
+            try:
+                plugin = wp.detect_seo_plugin()
+                if plugin != "none":
+                    wp.update_seo_meta(
+                        int(created.id), record.wp_post_type, plugin,
+                        seo_meta_title or None,
+                        seo_meta_desc or None,
+                        seo_focus_kw or None,
+                    )
+            except Exception:
+                pass
+
         # Update record with the real WP post ID and URL
         record.wp_post_id = created.id
         record.wp_post_url = created.url

@@ -265,6 +265,7 @@ class WordPressAdapter(CMSAdapter):
         plugin: str,
         title: str | None,
         description: str | None,
+        focus_keyword: str | None = None,
     ) -> None:
         """Update Yoast or RankMath SEO meta fields via WordPress REST API."""
         meta: dict = {}
@@ -273,11 +274,15 @@ class WordPressAdapter(CMSAdapter):
                 meta["_yoast_wpseo_title"] = title
             if description:
                 meta["_yoast_wpseo_metadesc"] = description
+            if focus_keyword:
+                meta["_yoast_wpseo_focuskw"] = focus_keyword
         elif plugin == "rankmath":
             if title:
                 meta["rank_math_title"] = title
             if description:
                 meta["rank_math_description"] = description
+            if focus_keyword:
+                meta["rank_math_focus_keyword"] = focus_keyword
         if not meta:
             return
         endpoint = f"/pages/{post_id}" if post_type == "page" else f"/posts/{post_id}"
