@@ -486,7 +486,7 @@ def generate_article(
     article_job_id = str(uuid.uuid4())
     business_block = _project_context_block(context)
     business_name = (context.config.business_name or "").strip()
-    website = (context.config.website or "").rstrip("/")
+    website = str(context.config.website or "").rstrip("/")
     knowledge_block = _knowledge_block(db, current_user.id, context.name)
 
     # ── Phase 1 ────────────────────────────────────────────────────────────────
