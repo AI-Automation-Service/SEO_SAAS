@@ -265,6 +265,9 @@ def _phase2_message(
 ) -> str:
     remaining_wc = target_wc - phase1.get("word_count_phase1", 950)
     sections = phase1.get("sections_remaining", [])
+    # Only pass the tail of Phase 1 for continuity — passing the full content burns
+    # output-token budget and results in GPT-4o producing far less Phase 2 content.
+    p1_tail = (phase1.get("content_phase1", "") or "")[-600:]
     return f"""You are running PHASE 2 of a two-phase article writing task.
 
 ## Primary Keyword
@@ -275,17 +278,17 @@ def _phase2_message(
 
 ## Phase 1 Summary
 - H1: {phase1.get("h1")}
-- Phase 1 ended after covering: {", ".join(phase1.get("sections_outline", [])[:4])}
+- Phase 1 covered: {", ".join(phase1.get("sections_outline", [])[:4])}
 - Word count so far: {phase1.get("word_count_phase1", 0)} words
 - Sections to complete now: {", ".join(sections)}
 
-## Phase 1 Content (for continuity — DO NOT repeat)
-{phase1.get("content_phase1", "")}
+## End of Phase 1 (last lines — DO NOT repeat, continue naturally from here)
+...{p1_tail}
 
 ## {_ANTI_AI_RULE}
 
 ## Your Task (Phase 2)
-Write the REMAINING content to complete the article. Target: ~{remaining_wc} more words.
+Write the REMAINING content to complete the article. You MUST produce at least {remaining_wc} words of new content — this is non-negotiable. Do not stop early.
 
 Sections to write:
 {chr(10).join(f"- {s}" for s in sections)}
@@ -336,7 +339,7 @@ def generate_article(
     t0 = time.monotonic()
     try:
         raw_p1 = SkillAgent("seo-article-writer", openai_key, model="gpt-4o").run(
-            p1_msg, timeout=240, json_mode=True
+            p1_msg, timeout=240, json_mode=True, max_tokens=4096
         )
     except Exception as e:
         raise HTTPException(502, f"Article writer Phase 1 failed: {e}")
@@ -360,7 +363,7 @@ def generate_article(
     t0 = time.monotonic()
     try:
         raw_p2 = SkillAgent("seo-article-writer", openai_key, model="gpt-4o").run(
-            p2_msg, timeout=240, json_mode=True
+            p2_msg, timeout=240, json_mode=True, max_tokens=4096
         )
     except Exception as e:
         raise HTTPException(502, f"Article writer Phase 2 failed: {e}")

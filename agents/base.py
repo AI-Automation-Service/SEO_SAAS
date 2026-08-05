@@ -36,10 +36,13 @@ class SkillAgent:
         timeout: int = 180,
         json_mode: bool = False,
         temperature: float = 0.0,
+        max_tokens: int | None = None,
     ) -> str:
         kwargs: dict = {}
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}
+        if max_tokens:
+            kwargs["max_tokens"] = max_tokens
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[
