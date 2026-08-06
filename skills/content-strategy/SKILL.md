@@ -61,14 +61,13 @@ Google evaluates content on Experience, Expertise, Authoritativeness, Trustworth
 
 For YMYL topics (health, finance, legal), E-E-A-T requirements are highest — plan author credentials and citation structure before writing.
 
-## Writing Style Principles (from copywriting best practices)
+## Writing Style Principles
 
-When giving content direction, follow these principles:
-- **Clarity over cleverness**: "Use" not "utilize", "help" not "facilitate"
-- **Specific over vague**: Avoid "streamline", "optimize", "innovative" — use concrete outcomes
+When giving content direction:
 - **Benefits over features**: Connect what a feature does to what it means for the user
-- **Active voice**: "We generate reports" not "Reports are generated"
 - **One idea per section**: Each H2 should advance one argument
+
+For voice, active voice, and avoiding vague language, apply the standards in `writing-rules.md` (loaded automatically).
 
 ## Publishing Cadence Recommendation
 

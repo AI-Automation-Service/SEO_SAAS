@@ -24,38 +24,7 @@ Also check `page_type` in the analyzer output (blog_post / article / service / l
 
 ## Writing Quality Rules
 
-Apply these to ALL new text you write.
-
-### Anti-AI patterns — eliminate before inserting any text
-
-**Words to eliminate:**
-- delve/delving → "look at", "examine"
-- leverage (verb) → "use", "apply"
-- robust → "strong", "reliable"
-- seamless/seamlessly → "smooth", "easy"
-- showcase → "show", "demonstrate"
-- foster/cultivate → "build", "develop"
-- highlight (verb) → "shows", "proves"
-- testament → "proof", "evidence"
-- pivotal/crucial/vital → "key", "important"
-- underscore → "show", "confirm"
-- garner → "receive", "earn"
-- boasts → "has", "includes"
-- encompasses → "includes", "covers"
-- cutting-edge/groundbreaking → "new", "advanced"
-- transformative → use at most once per page
-- vibrant → "busy", "active", "lively"
-
-**Structural patterns to avoid:**
-- Em dash overuse (—): replace with comma, period, or parentheses
-- Opening with "In order to" → "To"
-- "It is important to note that" → delete entirely
-- "Due to the fact that" → "Because"
-- Passive voice: "Reports are generated" → "We generate reports"
-- Generic positive conclusions: "The future looks bright" → specific next step
-- Three consecutive sentences of similar length — vary rhythm
-
-**Personality**: Have opinions, not just neutral reporting. Be specific. Use "we" when it fits.
+For voice, tone, AI-overused vocabulary, and forbidden structural patterns, apply the standards in `writing-rules.md` (loaded automatically).
 
 ### Brand Voice Application
 

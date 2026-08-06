@@ -202,10 +202,11 @@ Before finalizing, verify the article answers YES to each:
 - **Do not** write to hit a specific word count — write to fully answer the question
 
 ### Quality Failures
-- **Do not** use AI-default language: avoid "delve into", "tapestry", "it's worth noting", "furthermore", "in conclusion, it's clear that"
-- **Do not** start sections with "Introduction" or use filler opening lines
+
+- **Do not** start an article or section with an "Introduction" heading
 - **Do not** use exaggerated claims without evidence ("the most important", "the only way")
-- **Do not** pad articles with vague advice — be specific and actionable
+
+For AI-overused vocabulary and forbidden patterns, apply the standards in `writing-rules.md` (loaded automatically).
 
 ### Trust Failures
 - **Do not** give specific medical, legal, or financial advice beyond what the client is qualified to give
