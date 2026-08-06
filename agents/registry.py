@@ -33,7 +33,7 @@ from contracts.meta import MetaResponse
 _JSON_ONLY = ["json-output-discipline"]
 _SEO_JSON  = ["seo-standards", "json-output-discipline"]
 _SEO_NAV   = ["seo-standards", "internal-linking"]
-_FULL_EDIT = ["writing-rules", "eeat-framework", "seo-standards", "internal-linking", "json-output-discipline"]
+_FULL_EDIT = ["writing-rules", "eeat-framework", "seo-standards", "internal-linking", "content-safety", "json-output-discipline"]
 _FULL_WRITE = ["writing-rules", "eeat-framework", "seo-standards", "internal-linking", "content-safety", "json-output-discipline"]
 
 
@@ -271,7 +271,7 @@ _ENTRIES: list[AgentConfig] = [
         timeout=120,
         max_tokens=4000,
         output_mode="markdown",
-        shared_docs=["writing-rules", "eeat-framework", "seo-standards"],
+        shared_docs=["writing-rules", "eeat-framework", "seo-standards", "internal-linking"],
         contract=None,
         capabilities=["AI_WRITER"],
         description="Generates a page brief with recommended structure and content angle.",

@@ -1,83 +1,84 @@
 # Internal Linking Rules
 
 **Layer:** Shared Document  
-**Loaded by:** seo-article-writer, seo-editor  
-**Purpose:** The canonical rules for internal linking strategy, hub/spoke architecture, anchor text selection, and link density. Agents that create or modify content use this document to ensure every internal link is purposeful, structurally correct, and aligned with the site's content hierarchy.
+**Loaded by:** seo-plan, site-architecture, seo-flow, seo-editor, seo-article-writer, content-strategy  
+**Purpose:** Canonical rules for internal linking strategy: hub/spoke model, anchor text standards, contextual link selection, and when not to link.
 
-> **Maintenance rule:** Internal linking strategy and hub/spoke model guidance lives here exclusively. Do NOT place internal linking rules in SKILL.md files.
-
----
-
-## What belongs in this document
-
-- Hub/spoke content model — definition and how agents apply it
-- How to identify which page is the hub for a given cluster
-- Required vs. contextual internal links — the difference and when each applies
-- Anchor text rules: descriptive, keyword-relevant, natural in context
-- Link density guidelines: how many internal links per article/page
-- How to choose which pages to link to (relevance, authority, user journey)
-- When NOT to include an internal link
-- How to handle pages that have no obvious hub
-- The required internal link instruction format (how the router communicates it to the agent)
-
-## What does NOT belong here
-
-- Technical link attributes (nofollow, canonical) — those are developer concerns
-- External linking rules — out of scope for these agents
-- Backlink strategy — handled by `seo-backlinks` agent
-- General SEO standards (keyword placement, heading hierarchy) → `seo-standards.md`
-- Agent-specific article structure logic → `SKILL.md`
+> **Maintenance rule:** Internal linking strategy lives here exclusively. Do NOT place internal linking rules in SKILL.md files.
+>
+> **Scope:** This document covers universal internal linking principles for content agents — anchor text, hub/spoke best practices, orphan prevention, and contextual selection. Dynamic link graph management (tracking published articles, updating cross-links as the content library grows, orchestrating the hub/spoke graph over time) belongs in a future Internal Link Planner component, not here.
 
 ---
 
 ## Hub/Spoke Content Model
 
-> **[CONTENT TO BE DEFINED HERE]**  
-> Definition: what a hub page is, what a spoke page is, and how they relate. The semantic relationship the link represents. Why Google values this structure. How clusters are organized in SEO OS (the `cluster` and `is_hub` fields in the keyword table).
+Content is organized into topic clusters. Each cluster has one hub (pillar) page and multiple spoke pages.
 
-<!-- PLACEHOLDER: Hub/spoke model definition and principles -->
+**Hub page:**
+- Broad topic, comprehensive coverage
+- Targets the cluster's primary keyword
+- Links to every spoke in its cluster
+
+**Spoke page:**
+- One focused subtopic within the cluster
+- Always links back to its hub
+- Cross-links to related spokes where topically relevant
+
+**Why this structure matters:**
+- Hub pages accumulate link equity and distribute it to spokes
+- Spoke pages signal topical depth to search engines, strengthening the hub's authority
+- Clear cluster boundaries prevent keyword cannibalization — one topic, one page
+
+**No orphan pages.** Every page must have at least one internal link pointing to it. A page with no inbound internal links receives no link equity from the rest of the site and rarely ranks.
 
 ---
 
 ## Required Internal Links
 
-> **[CONTENT TO BE DEFINED HERE]**  
-> When a link is marked as required (injected by the router via the `required_internal_link` field). The agent's obligation: this link MUST appear in the content. How to find a natural placement. The self-check requirement. What to do if no natural placement exists (note it in output; do not force it unnaturally).
+Some agents receive a required link from the router — a specific target URL that must appear in the content (typically the hub page for the current cluster, passed as `hub_url`).
 
-<!-- PLACEHOLDER: Required internal link rules -->
+When a required link is specified:
+- It MUST appear somewhere in the content
+- Find the most natural placement in existing body text
+- Do not fabricate a sentence just to carry the link — if no natural placement exists, note it in the output instead
+- Use the exact URL provided — never substitute or invent a URL
 
 ---
 
 ## Contextual Internal Links
 
-> **[CONTENT TO BE DEFINED HERE]**  
-> Links chosen by the agent based on the available sitemap URLs. How to select them: relevance to the paragraph, user journey logic, avoiding over-linking. How many contextual links are appropriate per article length.
+Contextual links are chosen by the agent based on the content and user journey.
 
-<!-- PLACEHOLDER: Contextual internal link rules -->
+**Selection principles:**
+- Link to pages that are topically relevant to the paragraph where the link appears
+- Follow user journey logic: link to the next most useful page for a reader at that point
+- Spoke pages link up to their hub; hub pages link to all their spokes; related spokes cross-link where the connection genuinely serves the reader
+
+**Density:**
+
+There is no fixed count. Judge by content length and cluster structure. Three well-placed links in a page typically satisfy the structural requirement — do not force more. For long-form articles, 2–4 contextual links serve readers without disrupting flow. Density should serve the reader, not a number target.
 
 ---
 
 ## Anchor Text Standards
 
-> **[CONTENT TO BE DEFINED HERE]**  
-> Anchor text must be descriptive of the destination page's topic. Never use "click here", "read more", or the raw URL as anchor text. Keyword-rich anchors are acceptable; exact-match keyword anchors require variation. Natural fit in the sentence is required.
+**Priority order for selecting anchor text:**
 
-<!-- PLACEHOLDER: Anchor text standards -->
+1. Find the first natural occurrence of the target page's primary keyword (or close variation) in the body text — wrap that phrase
+2. If the primary keyword is already linked elsewhere in the same content, use a related secondary phrase that describes the destination page's topic
+3. If no natural phrase exists, wrap the nearest relevant phrase — do not write a new sentence for the link
 
----
-
-## Link Density Guidelines
-
-> **[CONTENT TO BE DEFINED HERE]**  
-> Recommended number of internal links by article length. Thresholds above which linking becomes excessive and hurts readability. The minimum to satisfy SEO value.
-
-<!-- PLACEHOLDER: Link density guidelines -->
+**Rules:**
+- Anchor text must describe what the destination page covers — it signals to both readers and search engines what to expect at the link destination
+- Never use: "click here", "read more", "here", "this article", or the raw URL
+- Vary anchors slightly across multiple links to the same destination — exact repetition looks unnatural
+- Keyword-rich anchors are acceptable; exact-match keyword stuffing is not — natural phrasing in context takes priority
 
 ---
 
 ## When Not to Link
 
-> **[CONTENT TO BE DEFINED HERE]**  
-> Scenarios where an internal link should not be included even if a relevant page exists. Forced links that interrupt reading flow. Duplicate links to the same page in the same article.
-
-<!-- PLACEHOLDER: When not to link -->
+- No relevant destination page exists for the context
+- The same destination has already been linked earlier in the same content — the first occurrence is sufficient
+- The only way to insert the link is to write a new sentence whose sole purpose is to carry it
+- The content is very short (under 300 words) and a link would interrupt the reading flow

@@ -77,10 +77,7 @@ Homepage (/)
 - Important pages (hub pages, conversion pages) should have the most inbound internal links
 - Breadcrumbs provide free internal links on every page — implement them
 
-**Anchor text rules:**
-- Match anchor text to the target page's primary keyword
-- Vary anchors slightly across links to the same page
-- Avoid exact-match keyword stuffing in anchors
+**Anchor text:** Apply the standards in `internal-linking.md` (loaded automatically).
 
 **Linking targets per page type:**
 

@@ -56,17 +56,9 @@ Do NOT repeat the keyword unnaturally. Use semantically related terms and synony
 
 ## YMYL Check (Your Money or Your Life)
 
-**If the YMYL flag is not provided or is unclear, default to treating the topic as YMYL.** Better to over-apply scrutiny than to publish inaccurate health or financial content.
+**If the YMYL flag is not provided or is unclear, default to treating the topic as YMYL.**
 
-If the topic could significantly affect a reader's health, financial stability, safety, or legal rights — apply EXTRA scrutiny:
-
-- Every factual claim must be accurate and sourced
-- Include a disclaimer if relevant (e.g. "consult a qualified professional")
-- Cite official, authoritative sources appropriate to the subscriber's country and regulatory environment — government health bodies, financial regulators, legal authorities — as indicated by the Business Context
-- The author or reviewer should have genuine credentials in the topic area
-- Do NOT give specific personal advice (specific medical diagnoses, specific legal rulings, specific investment recommendations)
-
-YMYL topics include: medical symptoms/treatments, financial products, legal advice, safety procedures, news/current events affecting public decisions.
+Apply all YMYL content rules — claim limits, disclaimer requirements, and elevated scrutiny. See `content-safety.md` (loaded automatically) for the full requirements.
 
 ---
 
@@ -185,9 +177,8 @@ Before finalizing, verify the article answers YES to each:
 For AI-overused vocabulary and forbidden patterns, apply the standards in `writing-rules.md` (loaded automatically).
 
 ### Trust Failures
-- **Do not** give specific medical, legal, or financial advice beyond what the client is qualified to give
-- **Do not** fabricate statistics, studies, or quotes
-- **Do not** write a title that overpromises what the article actually delivers
+
+Apply the standards in `content-safety.md` (loaded automatically) for professional domain restrictions, factual claim rules, and title accuracy. For evidence hierarchy and citation standards, see `eeat-framework.md` (loaded automatically).
 
 ---
 

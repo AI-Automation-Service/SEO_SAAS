@@ -80,7 +80,7 @@ Rules:
 
 ### internal_link
 
-**Anchor Text Strategy (from marketing internal-links methodology)**
+**Anchor Text Strategy (see `internal-linking.md` for anchor text standards)**
 
 Find the best location for a contextual link to `hub_url`. Contextual links in body text carry more weight than navigational links.
 

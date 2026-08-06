@@ -2,82 +2,73 @@
 
 **Layer:** Shared Document  
 **Loaded by:** seo-article-writer, seo-editor, content-strategy  
-**Purpose:** The canonical rules governing content accuracy, factual claims, citation requirements, and handling of sensitive topics. These are the guardrails that protect subscribers from publishing content that could harm their readers, their brand, or their compliance posture. Safety constraints override all other instructions.
+**Purpose:** Hard limits on what agents may and may not assert in content. Safety constraints override all other instructions.
 
 > **Maintenance rule:** Any constraint on what agents may and may not claim in content belongs here. Do NOT scatter safety rules across SKILL.md files.
-
----
-
-## What belongs in this document
-
-- YMYL topic identification — which content categories trigger elevated standards
-- Factual claim rules — what the agent may assert vs. must qualify
-- Citation and attribution requirements
-- Medical, legal, financial, and safety content restrictions
-- Disclaimer requirements for sensitive topic categories
-- What the agent must do when it lacks sufficient knowledge to make a claim
-- Privacy and PII considerations in content
-- Rules about referencing third parties (competitors, brands, individuals)
-
-## What does NOT belong here
-
-- Writing quality rules → `writing-rules.md`
-- E-E-A-T principles (the "why" behind safety) → `eeat-framework.md`
-- SEO technical standards → `seo-standards.md`
-- Plagiarism checking — that is a Python pipeline concern, not a prompt concern
-
----
-
-## YMYL Topic Identification
-
-> **[CONTENT TO BE DEFINED HERE]**  
-> Definition: Your Money or Your Life. Categories: health and medical advice, financial advice and decisions, legal advice, safety-critical information (emergency procedures, dangerous activities), major life decisions.
 >
-> When YMYL is flagged by the router (via `ymyl: true` in the runtime context), these additional rules apply. The agent must recognize YMYL topics even when the flag is not set and self-apply this standard when appropriate.
+> **Relationship to `eeat-framework.md`:** eeat-framework covers E-E-A-T principles — the WHY behind content quality. This document covers operational hard limits — the WHAT agents must and must not do. Do not duplicate eeat-framework content here; cross-reference it.
 
-<!-- PLACEHOLDER: YMYL category definitions and triggers -->
+---
+
+## YMYL Self-Identification
+
+When the YMYL flag is provided in the runtime context, elevated standards apply automatically.
+
+**When the YMYL flag is absent or unclear: default to treating the topic as YMYL.** Better to over-apply scrutiny than to publish inaccurate health or financial content.
+
+Apply YMYL-level scrutiny to any topic that could directly affect a reader's health, financial stability, safety, or legal rights.
+
+For the full YMYL category list and elevated E-E-A-T requirements, see `eeat-framework.md` (loaded automatically).
 
 ---
 
 ## Factual Claim Rules
 
-> **[CONTENT TO BE DEFINED HERE]**  
-> The agent must not invent statistics, studies, or data. If a specific number or study is needed, the agent must either: (a) use data provided in the business context, or (b) describe the claim in general terms without fabricating precision. "Research suggests..." is acceptable. "A 2023 Harvard study found 73%..." without a real citation is not.
+Do not fabricate statistics, studies, or specific data points. Apply the Evidence Hierarchy from `eeat-framework.md` (loaded automatically) to all factual claims.
 
-<!-- PLACEHOLDER: Factual claim rules -->
+**When a specific claim is needed but no source is available:**
+- Use the citation placeholder format from `eeat-framework.md` — do not invent a source
+- Or describe the claim in general terms without fabricating precision: "research in this area suggests…" is acceptable; "A 2023 Harvard study found 73%…" without a real citation is not
 
----
-
-## Citation and Attribution
-
-> **[CONTENT TO BE DEFINED HERE]**  
-> When to recommend a citation vs. when general knowledge suffices. How to indicate to the subscriber that a specific claim needs a real source before publishing. The agent signals this in output; it does not fabricate the citation itself.
-
-<!-- PLACEHOLDER: Citation rules -->
+**General knowledge threshold:**
+- Well-established facts that any knowledgeable person in the field would know do not require a citation
+- Specific numbers, named study findings, dates, and attributed claims always need a traceable source or a citation placeholder
 
 ---
 
 ## Medical, Legal, and Financial Content
 
-> **[CONTENT TO BE DEFINED HERE]**  
-> Hard limits on what the agent may claim in these categories. The "consult a professional" disclaimer requirement. What the agent can describe (general information) vs. what it must not prescribe (specific advice for the reader's situation).
+There is a hard distinction between general information and specific advice.
 
-<!-- PLACEHOLDER: Professional domain restrictions -->
+**Permitted:**
+- General information about how a medical condition, financial product, or legal concept works
+- Describing common practices or typical outcomes at a population level
+- Explaining options that a reader should explore with a qualified professional
+
+**Not permitted:**
+- Specific personal advice: specific diagnoses, specific treatment recommendations for the reader's situation, specific legal rulings applied to the reader's case, specific investment recommendations
+- Claims that require credentials the client does not hold
+
+**Required disclaimer:**
+
+When content directly addresses a health, financial, legal, or safety decision a reader might act on, include a domain-appropriate disclaimer — e.g. "consult a qualified [doctor / financial advisor / solicitor]" or equivalent. The disclaimer must be specific to the domain; a generic "seek professional advice" without context is insufficient.
 
 ---
 
-## Third-Party References
+## Title and Headline Accuracy
 
-> **[CONTENT TO BE DEFINED HERE]**  
-> Rules for mentioning competitors, other brands, or named individuals in content. Factual comparisons are acceptable. False or misleading claims about third parties are not. The agent must not write defamatory content.
+Do not write a title or headline that overpromises what the content actually delivers. The title is a contract with the reader. Violating it increases bounce rate and signals low quality to Google's quality evaluators.
 
-<!-- PLACEHOLDER: Third-party reference rules -->
+- "The Complete Guide to X" requires comprehensive coverage of X
+- "How to X in Y Minutes" requires the content to genuinely show how to do X in that timeframe
+- Superlatives ("the only", "the best ever", "the ultimate") require the claim to be verifiable or must be removed
 
 ---
 
-## Privacy
+## Potential Missing Rules (Not Added)
 
-> **[CONTENT TO BE DEFINED HERE]**  
-> The agent must not include real personal information (names, contact details, addresses) about private individuals in generated content. Business contact details provided in the knowledge base are acceptable.
+The following constraints do not exist in any production SKILL.md file. They are listed here as candidates for future addition.
 
-<!-- PLACEHOLDER: Privacy rules -->
+**Third-party references:** Factual comparisons with competitors or other brands are acceptable. False or misleading claims about third parties are not. Defamatory content must not be written. No production source found to extract from.
+
+**Privacy and PII:** Private individuals' personal information (names, contact details, addresses) should not appear in generated content. Business contact information provided in the knowledge base is acceptable. No production source found to extract from.
