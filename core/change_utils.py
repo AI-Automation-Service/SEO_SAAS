@@ -71,6 +71,25 @@ def build_meta_updates(
     return {"plugin": plugin, **base}
 
 
+def build_shopify_meta_updates(
+    current_title: str | None,
+    current_desc: str | None,
+    suggested_title: str | None,
+    suggested_desc: str | None,
+    resource_type: str,
+    resource_id: int,
+) -> dict | None:
+    base = _meta_diff(current_title, current_desc, suggested_title, suggested_desc)
+    if base is None:
+        return None
+    return {
+        "platform": "shopify",
+        "resource_type": resource_type,
+        "shopify_resource_id": resource_id,
+        **base,
+    }
+
+
 # ── Verification hint ─────────────────────────────────────────────────────────
 
 def extract_verification_hint(original: str, new: str, min_len: int = 60) -> str | None:
@@ -95,6 +114,11 @@ def restore_original_meta(
 ) -> None:
     plugin = mu.get("plugin", "none")
     if plugin == "none":
+        if mu.get("platform"):
+            logger.warning(
+                "restore_original_meta: cannot restore non-WP meta for PageChange %s (platform=%s) — skipping.",
+                record.id, mu["platform"],
+            )
         return
     orig_title = mu.get("original_meta_title")
     orig_desc = mu.get("original_meta_description")

@@ -27,6 +27,7 @@ from agents.base import SkillAgent
 from api.dependencies import get_current_user, get_db, get_project_context
 from api.routers.identity.api_keys import get_user_secret
 from api.utils.knowledge import fetch_knowledge
+from core.change_utils import build_shopify_meta_updates
 from core.db.models import Keyword, PageChange, User
 from core.models.context import ProjectContext
 from core.secrets import SecretManager
@@ -96,16 +97,14 @@ def _build_meta_updates(
     resource_id: int,
 ) -> dict | None:
     """Compare agent-suggested meta against what is live and build the update payload."""
-    from core.change_utils import _meta_diff
-    base = _meta_diff(
+    return build_shopify_meta_updates(
         seo_meta.get("meta_title"),
         seo_meta.get("meta_description"),
         (agent_result.get("suggested_meta_title") or "").strip() or None,
         (agent_result.get("suggested_meta_description") or "").strip() or None,
+        resource_type,
+        resource_id,
     )
-    if base is None:
-        return None
-    return {"platform": "shopify", "resource_type": resource_type, "shopify_resource_id": resource_id, **base}
 
 
 def _resource_ref(record: PageChange) -> dict:
