@@ -37,6 +37,27 @@ def wp_push(wp: "WordPressAdapter", record: "PageChange", content: str) -> None:
 
 # ── Meta updates ──────────────────────────────────────────────────────────────
 
+def _meta_diff(
+    current_title: str | None,
+    current_desc: str | None,
+    suggested_title: str | None,
+    suggested_desc: str | None,
+) -> dict | None:
+    """Compute the shared original/suggested fields. Returns None when nothing changed."""
+    cur_title = (current_title or "").strip()
+    cur_desc = (current_desc or "").strip()
+    title_changed = bool(suggested_title) and suggested_title != cur_title
+    desc_changed = bool(suggested_desc) and suggested_desc != cur_desc
+    if not title_changed and not desc_changed:
+        return None
+    return {
+        "original_meta_title": cur_title or None,
+        "original_meta_description": cur_desc or None,
+        "suggested_meta_title": suggested_title if title_changed else None,
+        "suggested_meta_description": suggested_desc if desc_changed else None,
+    }
+
+
 def build_meta_updates(
     plugin: str,
     current_title: str | None,
@@ -44,19 +65,10 @@ def build_meta_updates(
     suggested_title: str | None,
     suggested_desc: str | None,
 ) -> dict | None:
-    cur_title = (current_title or "").strip()
-    cur_desc = (current_desc or "").strip()
-    title_changed = bool(suggested_title and suggested_title != cur_title)
-    desc_changed = bool(suggested_desc and suggested_desc != cur_desc)
-    if not title_changed and not desc_changed:
+    base = _meta_diff(current_title, current_desc, suggested_title, suggested_desc)
+    if base is None:
         return None
-    return {
-        "plugin": plugin,
-        "original_meta_title": cur_title or None,
-        "original_meta_description": cur_desc or None,
-        "suggested_meta_title": suggested_title if title_changed else None,
-        "suggested_meta_description": suggested_desc if desc_changed else None,
-    }
+    return {"plugin": plugin, **base}
 
 
 # ── Verification hint ─────────────────────────────────────────────────────────

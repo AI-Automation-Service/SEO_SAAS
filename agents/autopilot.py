@@ -118,7 +118,6 @@ def run_autopilot(
         for record in eligible:
             try:
                 action_type = record.action_type or "page_edit"
-                rolled_back = False
 
                 if action_type == "new_draft":
                     # Always publish as draft, even in full_auto
@@ -134,8 +133,12 @@ def run_autopilot(
                     created = wp.create_page(draft)
                     record.wp_post_id = created.id
                     record.wp_post_url = created.url
+                    record.status = "approved"
+                    record.approved_at = datetime.utcnow()
+                    record.applied_by = "autopilot"
 
                 elif action_type in ("page_edit", "meta_edit"):
+                    rolled_back = False
                     content_changed = record.original_content != record.new_content
                     if content_changed and action_type == "page_edit":
                         wp_push(wp, record, record.new_content)
@@ -174,10 +177,11 @@ def run_autopilot(
                             raw_description or None,
                         )
 
-                if not rolled_back:
-                    record.status = "approved"
-                    record.approved_at = datetime.utcnow()
-                    record.applied_by = "autopilot"
+                    if not rolled_back:
+                        record.status = "approved"
+                        record.approved_at = datetime.utcnow()
+                        record.applied_by = "autopilot"
+
                 db.commit()
                 applied_ids.append(record.id)
                 logger.info(f"Autopilot applied change {record.id} ({action_type}) for {project_name}")

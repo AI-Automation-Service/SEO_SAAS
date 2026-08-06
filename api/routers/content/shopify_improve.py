@@ -96,25 +96,16 @@ def _build_meta_updates(
     resource_id: int,
 ) -> dict | None:
     """Compare agent-suggested meta against what is live and build the update payload."""
-    suggested_title = (agent_result.get("suggested_meta_title") or "").strip()
-    suggested_desc = (agent_result.get("suggested_meta_description") or "").strip()
-    current_title = (seo_meta.get("meta_title") or "").strip()
-    current_desc = (seo_meta.get("meta_description") or "").strip()
-
-    title_changed = bool(suggested_title) and suggested_title != current_title
-    desc_changed = bool(suggested_desc) and suggested_desc != current_desc
-    if not (title_changed or desc_changed):
+    from core.change_utils import _meta_diff
+    base = _meta_diff(
+        seo_meta.get("meta_title"),
+        seo_meta.get("meta_description"),
+        (agent_result.get("suggested_meta_title") or "").strip() or None,
+        (agent_result.get("suggested_meta_description") or "").strip() or None,
+    )
+    if base is None:
         return None
-
-    return {
-        "platform": "shopify",
-        "resource_type": resource_type,
-        "shopify_resource_id": resource_id,
-        "original_meta_title": current_title or None,
-        "original_meta_description": current_desc or None,
-        "suggested_meta_title": suggested_title if title_changed else None,
-        "suggested_meta_description": suggested_desc if desc_changed else None,
-    }
+    return {"platform": "shopify", "resource_type": resource_type, "shopify_resource_id": resource_id, **base}
 
 
 def _resource_ref(record: PageChange) -> dict:
