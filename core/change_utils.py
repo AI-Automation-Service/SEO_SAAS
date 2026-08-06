@@ -67,7 +67,7 @@ def extract_verification_hint(original: str, new: str, min_len: int = 60) -> str
     Linear scan — no difflib, O(n) amortised. Returns None when no distinct block found.
     """
     step = 20
-    for i in range(0, max(0, len(new) - min_len), step):
+    for i in range(0, max(0, len(new) - min_len + 1), step):
         candidate = new[i : i + min_len]
         if candidate.strip() and candidate not in original:
             return candidate

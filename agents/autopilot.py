@@ -176,8 +176,8 @@ def run_autopilot(
 
                 if not rolled_back:
                     record.status = "approved"
-                record.approved_at = datetime.utcnow()
-                record.applied_by = "autopilot"
+                    record.approved_at = datetime.utcnow()
+                    record.applied_by = "autopilot"
                 db.commit()
                 applied_ids.append(record.id)
                 logger.info(f"Autopilot applied change {record.id} ({action_type}) for {project_name}")

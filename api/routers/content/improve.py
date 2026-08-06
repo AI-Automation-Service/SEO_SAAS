@@ -437,8 +437,8 @@ def _run_meta_only(
         statistics={
             "keyword_frequency": _count_keyword_frequency(post_data.get("content", ""), keyword),
             "images_missing_alt": _count_images_missing_alt(post_data.get("content", "")),
-            **({"current_meta_title": current_title} if current_title else {}),
-            **({"current_meta_description": current_description} if current_description else {}),
+            **({"current_meta_title": post_data.get("current_meta_title")} if post_data.get("current_meta_title") else {}),
+            **({"current_meta_description": post_data.get("current_meta_description")} if post_data.get("current_meta_description") else {}),
         },
         meta_updates=meta_updates,
         status="pending" if meta_updates else "no_action",
@@ -696,7 +696,8 @@ def _run_page_pipeline(
     _stats = {**analysis.statistics.model_dump(), **py_stats}
     if has_content_change:
         hint = extract_verification_hint(post_data["content"], new_content)
-        set_artifact(_stats, "verification_hint", hint)
+        if hint:
+            set_artifact(_stats, "verification_hint", hint)
     record = PageChange(
         user_id=user_id,
         project_name=project_name,
@@ -1183,7 +1184,7 @@ def apply_change(
             wp.update_seo_meta(
                 record.wp_post_id,
                 record.wp_post_type,
-                mu["plugin"],
+                mu.get("plugin", "none"),
                 raw_title or None,
                 raw_description or None,
             )
@@ -1246,18 +1247,19 @@ def rollback_change(
     # Rollback meta if it was changed
     if record.meta_updates:
         mu = record.meta_updates
-        orig_title = mu.get("original_meta_title")
-        orig_description = mu.get("original_meta_description")
-        try:
-            wp.update_seo_meta(
-                record.wp_post_id,
-                record.wp_post_type,
-                mu["plugin"],
-                orig_title,
-                orig_description,
-            )
-        except IntegrationError as e:
-            raise HTTPException(502, f"SEO meta rollback error: {e}")
+        if mu.get("plugin", "none") != "none":
+            orig_title = mu.get("original_meta_title")
+            orig_description = mu.get("original_meta_description")
+            try:
+                wp.update_seo_meta(
+                    record.wp_post_id,
+                    record.wp_post_type,
+                    mu.get("plugin"),
+                    orig_title,
+                    orig_description,
+                )
+            except IntegrationError as e:
+                raise HTTPException(502, f"SEO meta rollback error: {e}")
 
     record.status = "rolled_back"
     db.commit()
