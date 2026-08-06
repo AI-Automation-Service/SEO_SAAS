@@ -13,6 +13,10 @@ projects/*/content/
 # Google service account credentials — never commit
 projects/*/config/google-credentials.json
 
+# Google OAuth client secrets — never commit
+client_secret*.json
+*.apps.googleusercontent*.json
+
 # Keep the example project structure but ignore its generated data
 !projects/client-example/
 !projects/client-example/config/
