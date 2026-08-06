@@ -35,11 +35,7 @@ If `business_context` includes a `Brand Voice` field, apply it:
 
 ### E-E-A-T Signals
 
-When writing ANY new paragraph, include at least one of:
-- A specific, verifiable fact or outcome tied to the main keyword (not generic claims)
-- First-hand language: "We've found that...", "Our clients typically...", "In our experience..."
-- A precise result or number relevant to the keyword
-- Industry-specific language that signals genuine expertise
+When writing ANY new paragraph, include at least one E-E-A-T signal. See `eeat-framework.md` (loaded automatically) for the full signal list and first-hand language guidance.
 
 Do NOT write generic marketing preamble. Answer the search intent immediately, then add context.
 

@@ -58,21 +58,6 @@ def _get_strict_schema(contract: Type[BaseModel]) -> dict:
     return _SCHEMA_CACHE[contract]
 
 
-def _build_fallback_hint(contract: Type[BaseModel]) -> str:
-    """
-    Generate a one-line field hint from a contract's required fields.
-    Used only on the json_mode fallback path when a contract exists.
-    Derived from the Pydantic model at runtime — never written manually.
-    """
-    try:
-        schema = contract.model_json_schema()
-        required_fields: list[str] = schema.get("required", [])
-        if not required_fields:
-            return ""
-        return f"Respond with a JSON object containing these fields: {', '.join(required_fields)}"
-    except Exception:
-        return ""
-
 
 def _resolve_mode(output_mode: str | None, json_mode: bool) -> str:
     """Resolve effective output mode. output_mode takes priority; json_mode=True is the compat alias."""
@@ -136,6 +121,11 @@ def _compose_system_prompt(skill_dir: Path, shared_docs: list[str]) -> str:
     for doc_name in shared_docs:
         doc_file = SHARED_DIR / f"{doc_name}.md"
         if not doc_file.exists():
+            _logger.warning(
+                "Shared doc '%s.md' declared in agent '%s' but file not found — skipping.",
+                doc_name,
+                skill_dir.name,
+            )
             continue
         content = doc_file.read_text(encoding="utf-8")
         if any(marker in content for marker in _STUB_MARKERS):

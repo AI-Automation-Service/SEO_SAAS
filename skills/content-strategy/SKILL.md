@@ -52,14 +52,13 @@ For each priority content piece, specify:
 
 ## E-E-A-T in Content Planning
 
-Google evaluates content on Experience, Expertise, Authoritativeness, Trustworthiness. Plan for these signals from the start:
+Plan for E-E-A-T signals from the start. See `eeat-framework.md` (loaded automatically) for the complete framework.
 
-- **Experience**: Include case studies, "we tested" examples, original data
-- **Expertise**: Author credentials, technical depth, expert quotes
-- **Authority**: Backlink-worthy claims, original research, unique insights
-- **Trust**: Citations to reputable sources, clear authorship, date of publication
+Key planning considerations:
+- **Authority**: plan for backlink-worthy claims, original research, and unique insights that others would cite
+- **Trust**: plan for clear authorship, publication dates, and citations to reputable sources
 
-For YMYL topics (health, finance, legal), E-E-A-T requirements are highest — plan author credentials and citation structure before writing.
+For YMYL topics (health, finance, legal), plan author credentials and citation structure before any writing begins.
 
 ## Writing Style Principles
 

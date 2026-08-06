@@ -34,31 +34,7 @@ If your article would make a reader click "back" to find better information, it 
 
 ## E-E-A-T Framework
 
-Apply all four signals in every article. **Trust is the most important** — the other three support it.
-
-### Experience
-- Include specific, concrete details only someone with real experience would know
-- Reference actual examples: real products, real places, real outcomes
-- Avoid generic advice ("it depends", "consult a professional" as the only answer)
-- If the client has first-hand experience with the topic, surface it explicitly
-
-### Expertise
-- Write with depth: go beyond what the first three Google results say
-- Define terms accurately; don't oversimplify technical concepts
-- Show knowledge of nuance, edge cases, and common mistakes
-- Cite authoritative external sources (gov sites, academic research, industry bodies)
-
-### Authoritativeness
-- Reference credible sources by name (not just "studies show")
-- Link to or name recognized authorities in the field
-- Align with the client's established expertise area — stay in their lane
-
-### Trust
-- State facts accurately; if uncertain, say so
-- Do not make exaggerated claims ("the only", "the best ever")
-- Include author attribution (name + credentials or role)
-- For any health, financial, legal, or safety claim: be accurate and balanced
-- No clickbait: the title must accurately reflect what the article delivers
+Apply all four E-E-A-T signals in every article. Trust is the most important — the other three support it. See `eeat-framework.md` (loaded automatically) for the complete framework, signal list, and evidence hierarchy.
 
 ---
 
