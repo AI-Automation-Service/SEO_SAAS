@@ -62,7 +62,7 @@ If the topic could significantly affect a reader's health, financial stability, 
 
 - Every factual claim must be accurate and sourced
 - Include a disclaimer if relevant (e.g. "consult a qualified professional")
-- Cite official/authoritative sources (NHS, GOV.UK, FCA, etc. — appropriate to the client's country)
+- Cite official, authoritative sources appropriate to the subscriber's country and regulatory environment — government health bodies, financial regulators, legal authorities — as indicated by the Business Context
 - The author or reviewer should have genuine credentials in the topic area
 - Do NOT give specific personal advice (specific medical diagnoses, specific legal rulings, specific investment recommendations)
 
