@@ -60,6 +60,7 @@ def run_autopilot(
     from core.secrets import SecretManager
     from integrations.cms.wordpress import WordPressAdapter
     from integrations.base import IntegrationError
+    from core.change_utils import get_artifact, restore_original_meta, wp_push
 
     db = SessionLocal()
     applied_ids: list[int] = []
@@ -117,6 +118,7 @@ def run_autopilot(
         for record in eligible:
             try:
                 action_type = record.action_type or "page_edit"
+                rolled_back = False
 
                 if action_type == "new_draft":
                     # Always publish as draft, even in full_auto
@@ -136,17 +138,34 @@ def run_autopilot(
                 elif action_type in ("page_edit", "meta_edit"):
                     content_changed = record.original_content != record.new_content
                     if content_changed and action_type == "page_edit":
-                        if record.wp_post_type == "page":
-                            wp.update_page(record.wp_post_id, record.new_content)
-                        else:
-                            wp.update_post(record.wp_post_id, record.new_content)
+                        wp_push(wp, record, record.new_content)
 
-                    if record.meta_updates:
+                        hint = get_artifact(record.statistics, "verification_hint")
+                        if hint:
+                            try:
+                                verified = wp.verify_content(record.wp_post_id, record.wp_post_type, hint)
+                            except Exception as exc:
+                                logger.warning("Autopilot PageChange %s: verification failed: %s", record.id, exc)
+                                verified = True
+                            if not verified:
+                                logger.warning(
+                                    "Autopilot PageChange %s: WP readback missing content — rolling back (theme-controlled).",
+                                    record.id,
+                                )
+                                try:
+                                    wp_push(wp, record, record.original_content)
+                                except Exception as exc:
+                                    logger.warning("Autopilot PageChange %s: rollback failed: %s", record.id, exc)
+                                if record.meta_updates:
+                                    restore_original_meta(wp, record, record.meta_updates)
+                                record.status = "rolled_back"
+                                record.rejection_reason = "theme_controlled_detected"
+                                rolled_back = True
+
+                    if not rolled_back and record.meta_updates:
                         mu = record.meta_updates
                         raw_title = (mu.get("suggested_meta_title") or "").strip()
                         raw_description = (mu.get("suggested_meta_description") or "").strip()
-                        if len(raw_title) > 60:
-                            raw_title = raw_title[:60].rsplit(" ", 1)[0].rstrip(" |—-")
                         wp.update_seo_meta(
                             record.wp_post_id,
                             record.wp_post_type,
@@ -155,7 +174,8 @@ def run_autopilot(
                             raw_description or None,
                         )
 
-                record.status = "approved"
+                if not rolled_back:
+                    record.status = "approved"
                 record.approved_at = datetime.utcnow()
                 record.applied_by = "autopilot"
                 db.commit()

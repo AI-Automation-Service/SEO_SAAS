@@ -206,7 +206,6 @@ export interface PageStatistics {
 
 export interface MetaUpdates {
   plugin?: 'yoast' | 'rankmath'
-  platform?: 'shopify' | 'wordpress'
   suggested_meta_title: string | null
   suggested_meta_description: string | null
 }

@@ -26,6 +26,17 @@ from core.secrets import SecretManager
 from integrations.cms.wordpress import WordPressAdapter
 from integrations.base import IntegrationError
 from shared.exceptions import SecretNotFoundError
+from core.change_utils import (
+    build_meta_updates,
+    extract_verification_hint,
+    get_artifact,
+    restore_original_meta,
+    set_artifact,
+    wp_push,
+)
+
+import logging
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/projects/{name}/improve", tags=["improve"])
 
@@ -141,13 +152,6 @@ def _detect_page_profile(post_data: dict, is_hub: bool, hub_existing_url: str) -
         "can_improve": can_improve,
         "blocked_reason": blocked_reason,
     }
-
-
-def _wp_push(wp: WordPressAdapter, record: PageChange, content: str) -> None:
-    if record.wp_post_type == "page":
-        wp.update_page(record.wp_post_id, content)
-    else:
-        wp.update_post(record.wp_post_id, content)
 
 
 _REFRESH_CADENCE = {
@@ -365,24 +369,21 @@ def _run_meta_only(
 
     meta_title = response.suggested_meta_title
     meta_description = response.suggested_meta_description
-    current_title = (post_data.get("current_meta_title") or "").strip()
-    current_description = (post_data.get("current_meta_description") or "").strip()
-    title_changed = meta_title != current_title
-    desc_changed = meta_description != current_description
-
     plugin_label = "Yoast" if profile["seo_plugin"] == "yoast" else "RankMath"
-    meta_updates = None
     changes_made: list[str] = []
 
-    if title_changed or desc_changed:
-        meta_updates = {
-            "plugin": profile["seo_plugin"],
-            "original_meta_title": current_title or None,
-            "original_meta_description": current_description or None,
-            "suggested_meta_title": meta_title if title_changed else None,
-            "suggested_meta_description": meta_description if desc_changed else None,
-        }
-        changed_parts = (["title"] if title_changed else []) + (["description"] if desc_changed else [])
+    meta_updates = build_meta_updates(
+        profile["seo_plugin"],
+        post_data.get("current_meta_title"),
+        post_data.get("current_meta_description"),
+        meta_title,
+        meta_description,
+    )
+    if meta_updates:
+        changed_parts = (
+            (["title"] if meta_updates.get("suggested_meta_title") else []) +
+            (["description"] if meta_updates.get("suggested_meta_description") else [])
+        )
         changes_made.append(
             f"seo_meta: SEO {' and '.join(changed_parts)} queued for {plugin_label} update."
         )
@@ -670,20 +671,14 @@ def _run_page_pipeline(
 
         # Meta changes — only store when plugin is present and values actually changed
         if profile["meta_editable"]:
-            meta_title = edit_result.suggested_meta_title  # stripped by validator
-            meta_description = edit_result.suggested_meta_description  # stripped by validator
-            current_title = (post_data.get("current_meta_title") or "").strip()
-            current_description = (post_data.get("current_meta_description") or "").strip()
-            title_changed = meta_title and meta_title != current_title
-            desc_changed = meta_description and meta_description != current_description
-            if title_changed or desc_changed:
-                meta_updates = {
-                    "plugin": profile["seo_plugin"],
-                    "original_meta_title": current_title or None,
-                    "original_meta_description": current_description or None,
-                    "suggested_meta_title": meta_title if title_changed else None,
-                    "suggested_meta_description": meta_description if desc_changed else None,
-                }
+            meta_updates = build_meta_updates(
+                profile["seo_plugin"],
+                post_data.get("current_meta_title"),
+                post_data.get("current_meta_description"),
+                edit_result.suggested_meta_title,
+                edit_result.suggested_meta_description,
+            )
+            if meta_updates:
                 plugin_label = "Yoast" if profile["seo_plugin"] == "yoast" else "RankMath"
                 changes_made.append(
                     f"seo_meta: SEO title and description queued for {plugin_label} update."
@@ -698,6 +693,10 @@ def _run_page_pipeline(
     else:
         change_summary = analysis.no_action_reason or "Page is already well-optimized — no changes needed."
 
+    _stats = {**analysis.statistics.model_dump(), **py_stats}
+    if has_content_change:
+        hint = extract_verification_hint(post_data["content"], new_content)
+        set_artifact(_stats, "verification_hint", hint)
     record = PageChange(
         user_id=user_id,
         project_name=project_name,
@@ -709,7 +708,7 @@ def _run_page_pipeline(
         new_content=new_content,
         change_summary=change_summary,
         changes_made=changes_made,
-        statistics={**analysis.statistics.model_dump(), **py_stats},
+        statistics=_stats,
         meta_updates=meta_updates,
         status="pending" if (has_content_change or has_meta) else "no_action",
     )
@@ -1143,22 +1142,43 @@ def apply_change(
 
     wp = _get_wp_adapter(context)
     content_changed = record.original_content != record.new_content
+    rolled_back = False
 
     # Push content only if it actually changed
     if content_changed:
         try:
-            _wp_push(wp, record, record.new_content)
+            wp_push(wp, record, record.new_content)
         except IntegrationError as e:
             raise HTTPException(502, f"WordPress content update error: {e}")
 
-    # Push SEO meta via Yoast or RankMath if present
-    if record.meta_updates:
+        # Verify the push was accepted — catches theme-controlled/page-builder pages
+        hint = get_artifact(record.statistics, "verification_hint")
+        if hint:
+            try:
+                verified = wp.verify_content(record.wp_post_id, record.wp_post_type, hint)
+            except Exception as exc:
+                logger.warning("PageChange %s: post-push verification request failed: %s", record.id, exc)
+                verified = True
+            if not verified:
+                logger.warning(
+                    "PageChange %s: WP readback missing injected content — rolling back (theme-controlled).",
+                    record.id,
+                )
+                try:
+                    wp_push(wp, record, record.original_content)
+                except Exception as exc:
+                    logger.warning("PageChange %s: content rollback failed: %s", record.id, exc)
+                if record.meta_updates:
+                    restore_original_meta(wp, record, record.meta_updates)
+                record.status = "rolled_back"
+                record.rejection_reason = "theme_controlled_detected"
+                rolled_back = True
+
+    # Push SEO meta via Yoast or RankMath if present (skip if content was rolled back)
+    if not rolled_back and record.meta_updates:
         mu = record.meta_updates
         raw_title = (mu.get("suggested_meta_title") or "").strip()
         raw_description = (mu.get("suggested_meta_description") or "").strip()
-        # Hard-cap title at 60 chars (trim at last word boundary)
-        if len(raw_title) > 60:
-            raw_title = raw_title[:60].rsplit(" ", 1)[0].rstrip(" |—-")
         try:
             wp.update_seo_meta(
                 record.wp_post_id,
@@ -1170,9 +1190,10 @@ def apply_change(
         except IntegrationError as e:
             raise HTTPException(502, f"SEO meta update error: {e}")
 
-    record.status = "approved"
-    record.approved_at = datetime.utcnow()
-    record.applied_by = "subscriber"
+    if not rolled_back:
+        record.status = "approved"
+        record.approved_at = datetime.utcnow()
+        record.applied_by = "subscriber"
     db.commit()
     db.refresh(record)
 
@@ -1218,7 +1239,7 @@ def rollback_change(
     # Rollback content if it was changed
     if record.original_content != record.new_content:
         try:
-            _wp_push(wp, record, record.original_content)
+            wp_push(wp, record, record.original_content)
         except IntegrationError as e:
             raise HTTPException(502, f"WordPress rollback error: {e}")
 

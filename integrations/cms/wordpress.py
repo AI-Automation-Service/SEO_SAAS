@@ -201,6 +201,40 @@ class WordPressAdapter(CMSAdapter):
             "current_meta_description": current_meta_description,
         }
 
+    def get_post(self, post_id: int) -> dict:
+        response = self._request("GET", f"/posts/{post_id}", params={"context": "edit"})
+        data = response.json()
+        meta = data.get("meta") or {}
+        current_meta_title, current_meta_description = self._extract_seo_meta(data)
+        return {
+            "id": data["id"],
+            "title": data["title"]["raw"],
+            "content": data["content"]["raw"],
+            "link": data["link"],
+            "slug": data["slug"],
+            "type": "post",
+            "has_yoast": "yoast_head" in data,
+            "has_rankmath": "rank_math_title" in meta,
+            "current_meta_title": current_meta_title,
+            "current_meta_description": current_meta_description,
+        }
+
+    def get_content(self, post_id: int, post_type: str) -> dict:
+        if post_type == "page":
+            return self.get_page(post_id)
+        return self.get_post(post_id)
+
+    def verify_content(self, post_id: int, post_type: str, hint: str) -> bool:
+        """
+        Read back saved content via WP REST API and check hint is present.
+        Returns False on theme-controlled pages or read-back failure.
+        """
+        try:
+            data = self.get_content(post_id, post_type)
+            return hint in (data.get("content") or "")
+        except Exception:
+            return False
+
     def find_post_by_url(self, url: str) -> dict | None:
         slug = urlparse(url).path.rstrip("/").split("/")[-1]
 

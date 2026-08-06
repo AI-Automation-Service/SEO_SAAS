@@ -1164,6 +1164,18 @@ function PageChangeCard({
           <p className="text-slate-700 leading-relaxed text-xs">{change.change_summary}</p>
         </div>
 
+        {/* Theme-controlled detection notice */}
+        {change.status === 'rolled_back' && change.rejection_reason === 'theme_controlled_detected' && (
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <p className="font-medium">Theme-controlled page detected</p>
+            <p className="mt-1 text-amber-700">
+              This page uses a page builder or theme template that manages its own
+              content. The push was automatically rolled back. Apply changes directly
+              in your page builder instead.
+            </p>
+          </div>
+        )}
+
         {/* Statistics */}
         {change.statistics && <PageStatsCard stats={change.statistics} />}
 
